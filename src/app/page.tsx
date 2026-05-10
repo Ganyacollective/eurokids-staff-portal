@@ -1,19 +1,8 @@
 import { redirect } from "next/navigation";
-import { createServerClient } from "@/lib/supabase/server";
 
-export default async function Home() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  // Look up role
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (profile?.role === "admin") redirect("/dashboard");
-  redirect("/teacher");
+// Vestigial route — the next.config.ts `beforeFiles` rewrite resolves "/" to
+// the static cloud portal at /portal.html before this file is ever consulted.
+// This redirect is a belt-and-braces fallback in case the rewrite is bypassed.
+export default function Home() {
+  redirect("/portal.html");
 }
