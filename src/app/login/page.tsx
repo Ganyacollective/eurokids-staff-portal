@@ -52,7 +52,8 @@ export default function LoginPage({
         </form>
 
         <p className="text-xs text-gray-500 mt-6 text-center">
-          Forgot your password? Ask the admin to reset it from the Supabase dashboard.
+          Forgot your password? Ask the admin to send a recovery email from the Supabase dashboard.
+          You&rsquo;ll then be taken to <a href="/reset-password" className="text-eurokids-blue underline">reset-password</a> to set a new one.
         </p>
       </div>
     </div>
