@@ -676,6 +676,17 @@ function reconcile(rawRows, month){
       }
     }
 
+    // Sunday is a universal week-off across all departments and roles.
+    // PetPooja's status is ignored — even a stray "Absent" on a Sunday (common
+    // for newly onboarded staff whose PetPooja roster hasn't been recalibrated)
+    // must not produce an LWP. Mandatory holidays, vacations, and special days
+    // on a Sunday are handled by the earlier checks and take precedence.
+    if (dow === 0) {
+      reconciledDays.push({ employee_id:emp.id, date, dow, status:"WeekOff", note:"Sunday" });
+      ensure(emp).weekOffs++;
+      return;
+    }
+
     if (forgotPunch) {
       if (inMin != null) {
         // Forgot to punch OUT — but the IN time is reliable, so still compute late strike against it
@@ -743,11 +754,14 @@ function reconcile(rawRows, month){
   });
 
   // Pass 2: Saturday cap — first 2 absent Saturdays/month show as Week Off (not LWP) AND don't count as cuts.
-  // EXCEPTION: Support Staff (maids, didis, cooks, cleaners) work every Saturday — no refund for them.
+  // RULE: only the Teacher and Admin departments enjoy the 2-Saturday allowance.
+  // Every other department (Support Staff, plus any future categories) works every Saturday.
   for (const s of empSummary.values()) {
     s.satRefunds = 0;
-    if (s.employee.department === 'Support Staff') {
-      // No 2-Saturday allowance for Support Staff — every Saturday is a working day
+    const dept = s.employee.department;
+    const eligibleForSatAllowance = (dept === 'Teacher' || dept === 'Admin');
+    if (!eligibleForSatAllowance) {
+      // No 2-Saturday allowance — every Saturday is a working day
       s.satExcess = s.satAbsences;
       continue;
     }
