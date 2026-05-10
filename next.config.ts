@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb", // for Excel uploads
     },
   },
+  // Surface the static cloud portal (public/portal.html) at the root URL.
+  async rewrites() {
+    return [
+      { source: "/", destination: "/portal.html" },
+    ];
+  },
 };
 
 export default nextConfig;

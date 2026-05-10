@@ -1,0 +1,1957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eurokids Staff Portal — HR Console</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { eurokids: { orange: "#F58220", blue: "#1B9ED9", ink: "#1F2937", paper: "#FAFAFA" }}}}};
+</script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .nav-link { transition: background-color .12s; cursor: pointer; }
+  .nav-link:hover { background: #f3f4f6; }
+  .nav-link.active { background: #FFEFE0; color: #F58220; font-weight: 600; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  table { font-size: 14px; width: 100%; }
+  thead { background: #F9FAFB; border-bottom: 1px solid #E5E7EB; }
+  th { text-align: left; padding: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6B7280; font-weight: 600; }
+  td { padding: 12px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+  tbody tr:hover { background: #FAFAFA; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .b-active { background: #DCFCE7; color: #15803D; }
+  .b-inactive { background: #F3F4F6; color: #4B5563; }
+  .b-pending { background: #FEF3C7; color: #B45309; }
+  .b-approved { background: #DCFCE7; color: #15803D; }
+  .b-rejected { background: #FEE2E2; color: #B91C1C; }
+  .b-mandatory { background: #FFEFE0; color: #F58220; }
+  .b-optional { background: #F3F4F6; color: #4B5563; }
+  .b-fd { background: #DCFCE7; color: #15803D; }
+  .b-late { background: #FEF3C7; color: #B45309; }
+  .b-lwp { background: #FEE2E2; color: #B91C1C; }
+  .b-halflwp { background: #FED7AA; color: #C2410C; }
+  .b-cl { background: #DBEAFE; color: #1E40AF; }
+  .b-el { background: #E0E7FF; color: #3730A3; }
+  .b-vac { background: #F3E8FF; color: #6B21A8; }
+  .b-hol { background: #EDE9FE; color: #5B21B6; }
+  .b-wo { background: #F1F5F9; color: #475569; }
+  .b-forgot { background: #ECFEFF; color: #155E75; }
+  .day-cell { aspect-ratio: 1; min-height: 78px; border: 1px solid transparent; border-radius: 10px; padding: 7px; font-size: 11px; display: flex; flex-direction: column; gap: 2px; color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+  .day-cell .dow { color: rgba(255,255,255,0.75); font-weight: 600; font-size: 10px; }
+  .day-cell .num { font-size: 18px; font-weight: 800; color: white; line-height: 1; margin-bottom: 2px; }
+  .day-cell.forgiven { box-shadow: inset 0 0 0 2px white, 0 1px 2px rgba(0,0,0,0.05); }
+  .day-FullDay { background: #16A34A; }     /* green-600 */
+  .day-HalfDay { background: #CA8A04; }     /* yellow-600 */
+  .day-Late    { background: #D97706; }     /* amber-600 */
+  .day-HalfLWP { background: #EA580C; }     /* orange-600 */
+  .day-LWP     { background: #DC2626; }     /* red-600 */
+  .day-CasualLeave  { background: #2563EB; }  /* blue-600 */
+  .day-EarnedLeave  { background: #4F46E5; }  /* indigo-600 */
+  .day-Holiday      { background: #7C3AED; }  /* purple-600 */
+  .day-Vacation     { background: #9333EA; }  /* violet-600 */
+  .day-WeekOff      { background: #64748B; }  /* slate-500 */
+  .day-ForgotPunch  { background: #0891B2; }  /* cyan-600 */
+  .day-NoData       { background: #F3F4F6; color: #9CA3AF; box-shadow: none; }
+  .day-NoData .num { color: #9CA3AF; }
+  .day-NoData .dow { color: #9CA3AF; }
+  .stat { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; }
+  .stat .label { font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+  .stat .value { font-size: 28px; font-weight: 700; color: #111827; margin-top: 4px; }
+  .stat .sub { font-size: 12px; color: #6B7280; margin-top: 2px; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .modal-bg.show { display: flex; }
+  .modal { background: white; border-radius: 16px; padding: 24px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; }
+  .anomaly-card { border-left: 4px solid #F58220; }
+  .input { width: 100%; padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 14px; }
+  .input:focus { outline: none; border-color: #1B9ED9; box-shadow: 0 0 0 3px rgba(27,158,217,.15); }
+  .btn-primary { background: #F58220; color: white; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; }
+  .btn-primary:hover { background: #E5751C; }
+  .btn-secondary { background: #F3F4F6; color: #1F2937; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; }
+  .btn-secondary:hover { background: #E5E7EB; }
+  .btn-danger { color: #DC2626; padding: 6px 10px; font-size: 12px; }
+  .btn-danger:hover { color: #991B1B; text-decoration: underline; }
+  .btn-link { color: #1B9ED9; font-size: 13px; }
+  .btn-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body class="bg-eurokids-paper text-eurokids-ink">
+
+<!-- Login overlay — gates the entire portal. Hidden once a Supabase session is established. -->
+<div id="login-overlay" style="display:flex;" class="fixed inset-0 z-[100] bg-eurokids-paper items-center justify-center p-4">
+  <div class="w-full max-w-sm bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-10 h-10 rounded-xl bg-eurokids-orange flex items-center justify-center text-white font-bold">E</div>
+      <div>
+        <h1 class="text-lg font-semibold text-eurokids-ink">Staff Portal</h1>
+        <p class="text-xs text-gray-500">Eurokids JM Enclave · HR Console</p>
+      </div>
+    </div>
+    <form onsubmit="return doLogin(event)" class="space-y-4">
+      <div>
+        <label class="text-sm font-medium text-gray-700 block mb-1">Email</label>
+        <input id="login-email" type="email" required autocomplete="username" placeholder="hr@eurokidsjmdenclave.org" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-eurokids-blue/40 focus:border-eurokids-blue text-sm" />
+      </div>
+      <div>
+        <label class="text-sm font-medium text-gray-700 block mb-1">Password</label>
+        <input id="login-password" type="password" required autocomplete="current-password" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-eurokids-blue/40 focus:border-eurokids-blue text-sm" />
+      </div>
+      <div id="login-error" class="text-sm text-red-600 hidden bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+      <button id="login-btn" type="submit" class="w-full bg-eurokids-orange hover:bg-eurokids-orange/90 text-white font-medium py-2.5 rounded-lg transition-colors">Sign in</button>
+    </form>
+    <p class="text-xs text-gray-500 mt-6 text-center leading-relaxed">
+      One shared HR account. Multiple staff can be signed in simultaneously — the most recent edit wins.
+    </p>
+  </div>
+</div>
+
+<!-- Loading curtain — shown while we hydrate state from Supabase. -->
+<div id="boot-overlay" style="display:none;" class="fixed inset-0 z-[90] bg-eurokids-paper items-center justify-center">
+  <div class="text-sm text-gray-500">Fetching latest data…</div>
+</div>
+
+<div class="flex min-h-screen">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white border-r border-gray-200 flex flex-col fixed h-screen">
+    <div class="p-5 border-b border-gray-200">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-eurokids-orange flex items-center justify-center text-white font-bold">E</div>
+        <div>
+          <div class="text-sm font-semibold">Staff Portal</div>
+          <div class="text-xs text-gray-500">JM Enclave · HR Console</div>
+        </div>
+      </div>
+    </div>
+    <nav class="flex-1 p-3 space-y-1 overflow-y-auto" id="nav">
+      <a class="nav-link active flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="dashboard">📊 Dashboard</a>
+      <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="reports">📋 Monthly Reports</a>
+      <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="leaves">🏖️ Leave Applications <span id="nav-pending" class="ml-auto text-xs bg-amber-100 text-amber-700 px-2 rounded-full hidden"></span></a>
+      <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="balances">📈 Leave Balances</a>
+      <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="attendance">📤 Attendance Import</a>
+      <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="anomalies">⚠️ Anomalies <span id="nav-anom" class="ml-auto text-xs bg-orange-100 text-orange-700 px-2 rounded-full hidden"></span></a>
+      <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="salary">🧾 Salary Sheet</a>
+      <div class="pt-3 mt-3 border-t border-gray-200">
+        <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="employees">👥 Employees</a>
+        <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="holidays">📅 Holidays & Vacations</a>
+      </div>
+    </nav>
+    <div class="p-3 border-t border-gray-200 text-xs text-gray-500 space-y-1.5">
+      <div>Active month: <span id="active-month" class="font-semibold text-eurokids-ink"></span></div>
+      <div id="save-indicator" class="text-xs text-gray-400">☁ Cloud-synced</div>
+      <div class="flex items-center gap-3 pt-1">
+        <button onclick="doLogout()" class="text-gray-500 hover:text-eurokids-blue">Sign out</button>
+        <span class="text-gray-300">·</span>
+        <button onclick="resetAllData()" class="text-gray-500 hover:text-red-600">Reset</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 ml-64 overflow-auto">
+    <div class="max-w-6xl mx-auto p-8">
+
+      <!-- DASHBOARD -->
+      <section id="panel-dashboard" class="panel active">
+        <h1 class="text-2xl font-semibold mb-1">Dashboard</h1>
+        <p class="text-sm text-gray-500 mb-8">What needs your attention right now.</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="stats"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-white border border-gray-200 rounded-2xl p-6">
+            <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Pending leave approvals</h2>
+            <div id="pending-leaves-preview" class="text-sm text-gray-600"></div>
+          </div>
+          <div class="bg-white border border-gray-200 rounded-2xl p-6">
+            <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Recent anomalies</h2>
+            <div id="anomalies-preview" class="text-sm text-gray-600"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MONTHLY REPORTS -->
+      <section id="panel-reports" class="panel">
+        <div class="flex items-end justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-semibold">Monthly Reports</h1>
+            <p class="text-sm text-gray-500 mt-1">Per-employee day-by-day attendance, late times, leaves taken, total cuts.</p>
+          </div>
+          <div class="flex gap-2 items-end">
+            <div>
+              <label class="text-xs text-gray-500 block mb-1">Month</label>
+              <select id="report-month" onchange="renderReports()" class="input"></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Either employee list (when no employee selected) or detail view -->
+        <div id="reports-list"></div>
+        <div id="report-detail" class="hidden"></div>
+      </section>
+
+      <!-- LEAVE APPLICATIONS -->
+      <section id="panel-leaves" class="panel">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-semibold">Leave Applications</h1>
+            <p class="text-sm text-gray-500 mt-1">Approve, reject, or correct dates. Approved leaves override absences during reconciliation.</p>
+          </div>
+          <button onclick="openLeaveForm()" class="btn-primary">+ Add leave</button>
+        </div>
+
+        <div class="flex gap-2 mb-4">
+          <button class="btn-secondary tab-btn active" data-tab="Pending">Pending <span id="leaves-tab-pending" class="ml-1 text-xs"></span></button>
+          <button class="btn-secondary tab-btn" data-tab="Approved">Approved</button>
+          <button class="btn-secondary tab-btn" data-tab="Rejected">Rejected</button>
+          <button class="btn-secondary tab-btn" data-tab="all">All</button>
+        </div>
+
+        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <table>
+            <thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+            <tbody id="leaves-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- LEAVE BALANCES -->
+      <section id="panel-balances" class="panel">
+        <h1 class="text-2xl font-semibold mb-1">Leave Balances · AY 2026-27</h1>
+        <p class="text-sm text-gray-500 mb-8">Each teacher gets <b>7 CL</b> and <b>8 EL</b> per academic year. Used = sum of approved leaves within AY.</p>
+        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <table>
+            <thead><tr><th>Employee</th><th>CL Used</th><th>CL Left</th><th>EL Used</th><th>EL Left</th><th>LWP Days (this AY)</th></tr></thead>
+            <tbody id="balances-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ATTENDANCE IMPORT -->
+      <section id="panel-attendance" class="panel">
+        <h1 class="text-2xl font-semibold mb-1">Attendance Import</h1>
+        <p class="text-sm text-gray-500 mb-8">Upload PetPooja's monthly Excel/CSV. Each import is saved per-month — you can revisit any past month.</p>
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 mb-8">
+          <div class="grid grid-cols-2 gap-6 mb-5">
+            <div><label class="text-sm font-medium text-gray-700 block mb-1">Month</label><input id="att-month" type="month" value="2026-04" class="input" /></div>
+            <div><label class="text-sm font-medium text-gray-700 block mb-1">File</label><input id="att-file" type="file" accept=".xlsx,.xls,.csv,.json" class="block w-full text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-eurokids-blue/10 file:text-eurokids-blue file:font-medium" /></div>
+          </div>
+          <button onclick="runReconciliation()" class="btn-primary">📤 Upload & reconcile</button>
+          <div id="att-result" class="mt-4"></div>
+        </div>
+        <h2 class="text-lg font-semibold mb-3">Saved imports</h2>
+        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <table><thead><tr><th>Month</th><th>Rows</th><th>Anomalies</th><th>Imported</th><th></th></tr></thead><tbody id="imports-tbody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- ANOMALIES -->
+      <section id="panel-anomalies" class="panel">
+        <h1 class="text-2xl font-semibold mb-1">Anomalies</h1>
+        <p class="text-sm text-gray-500 mb-8">Flagged issues from the active month. Resolve before locking the salary sheet.</p>
+        <div id="anomalies-list" class="space-y-3"></div>
+      </section>
+
+      <!-- SALARY -->
+      <section id="panel-salary" class="panel">
+        <div class="flex items-end justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-semibold">Salary Sheet</h1>
+            <p class="text-sm text-gray-500 mt-1">Net payable per employee for the active month.</p>
+          </div>
+          <button onclick="exportSalaryCsv()" class="btn-secondary">⬇ Export CSV</button>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden overflow-x-auto">
+          <table><thead><tr><th>Name</th><th>Salary</th><th>Per day</th><th>FD</th><th>Cuts</th><th>Cut amount</th><th>Net payable</th></tr></thead><tbody id="salary-tbody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- EMPLOYEES -->
+      <section id="panel-employees" class="panel">
+        <div class="flex items-center justify-between mb-6">
+          <div><h1 class="text-2xl font-semibold">Employees</h1><p class="text-sm text-gray-500 mt-1">Schedule, salary, phone, and email for every staff member. Archive when someone leaves — their data stays for historical reports.</p></div>
+          <button onclick="openEmployeeForm()" class="btn-primary">+ Add employee</button>
+        </div>
+        <div class="flex gap-2 mb-4">
+          <button class="btn-secondary emp-filter-btn" data-filter="active" onclick="setEmployeeFilter('active')">Active <span id="emp-count-active" class="ml-1 text-xs opacity-75"></span></button>
+          <button class="btn-secondary emp-filter-btn" data-filter="archived" onclick="setEmployeeFilter('archived')">Archived <span id="emp-count-archived" class="ml-1 text-xs opacity-75"></span></button>
+          <button class="btn-secondary emp-filter-btn" data-filter="all" onclick="setEmployeeFilter('all')">All <span id="emp-count-all" class="ml-1 text-xs opacity-75"></span></button>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <table><thead><tr><th>Name</th><th>Department</th><th>Designation</th><th>Reporting</th><th>Phone</th><th>Email</th><th>Salary</th><th></th></tr></thead><tbody id="employees-tbody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- HOLIDAYS -->
+      <section id="panel-holidays" class="panel">
+        <h1 class="text-2xl font-semibold mb-1">Holidays & Vacations</h1>
+        <p class="text-sm text-gray-500 mb-8">Seeded for AY 2026-27 from your PDF.</p>
+        <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-8">
+          <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between"><h2 class="text-sm font-semibold">Holidays</h2><button onclick="addHoliday()" class="btn-link">+ Add</button></header>
+          <table><thead><tr><th>Date</th><th>Holiday</th><th>Type</th><th></th></tr></thead><tbody id="holidays-tbody"></tbody></table>
+        </section>
+        <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-8">
+          <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between"><h2 class="text-sm font-semibold">Vacation blocks</h2><button onclick="addVacation()" class="btn-link">+ Add</button></header>
+          <table><thead><tr><th>From</th><th>To</th><th>Description</th><th></th></tr></thead><tbody id="vacations-tbody"></tbody></table>
+        </section>
+
+        <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-8">
+          <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold">Student-only holidays</h2>
+              <p class="text-xs text-gray-500 mt-1">Days when students are off but teachers come at <b>9:00 AM</b> uniform (like Saturday timing). Late strikes computed against 9:11 AM.</p>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="seedStudentHolidaysFromPdf()" class="btn-link">Seed from PDF</button>
+              <button onclick="openBulkAddModal()" class="btn-link">Bulk paste</button>
+              <button onclick="addStudentHoliday()" class="btn-link">+ Add</button>
+            </div>
+          </header>
+          <table><thead><tr><th>Date</th><th>Name</th><th>Notes</th><th></th></tr></thead><tbody id="student-holidays-tbody"></tbody></table>
+        </section>
+
+        <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold">Special event days</h2>
+              <p class="text-xs text-gray-500 mt-1">Sports day, annual function, off-site events. <b>Late strikes don't apply.</b> For absentees, the engine flags an anomaly so you can mark them as Present / Excused / Leave / LWP individually.</p>
+            </div>
+            <button onclick="addSpecialDay()" class="btn-link">+ Add</button>
+          </header>
+          <table><thead><tr><th>Date</th><th>Event</th><th>Late strikes</th><th>Notes</th><th></th></tr></thead><tbody id="special-days-tbody"></tbody></table>
+        </section>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal-bg">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="modal-title" class="text-lg font-semibold"></h2>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const STORAGE_KEY = 'eurokids_staff_portal_v2';
+const AY = { start: '2026-04-06', end: '2027-03-19', label: '2026-27', cl_per_teacher: 7, el_per_teacher: 8 };
+const DEFAULT_STATE = {
+  employees: [
+    { id:'e1',  name_petpooja: "Manisha Zurange", display_name: "Manisha Zurange", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 12000, is_active: true },
+    { id:'e2',  name_petpooja: "Aarti Yadav", display_name: "Aarti Yadav", email: "", department: "Support Staff", designation: "Cook", reporting_minutes: 660, monthly_salary: 14000, is_active: true },
+    { id:'e3',  name_petpooja: "Gudiya Yadav", display_name: "Gudiya Yadav", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, monthly_salary: 12000, is_active: true },
+    { id:'e4',  name_petpooja: "Baby Maushi", display_name: "Baby Maushi", email: "", department: "Support Staff", designation: "Daycare Didi", reporting_minutes: 600, monthly_salary: 13000, is_active: true },
+    { id:'e5',  name_petpooja: "Pooja Shrirame", display_name: "Pooja Shrirame", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
+    { id:'e6',  name_petpooja: "Malti Patil", display_name: "Malti Patil", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
+    { id:'e7',  name_petpooja: "Laxmi Palante", display_name: "Laxmi Palante", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
+    { id:'e8',  name_petpooja: "Ranjhana Nandu Ghule", display_name: "Ranjhana Ghule", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
+    { id:'e9',  name_petpooja: "Aarti Biradar", display_name: "Aarti Biradar", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, monthly_salary: 12000, is_active: true },
+    { id:'e10', name_petpooja: "Kala Koli", display_name: "Kala Koli", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, monthly_salary: 12000, is_active: true },
+    { id:'e11', name_petpooja: "Theresa Pillay", display_name: "Theresa Pillay", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 570, monthly_salary: 13000, is_active: true },
+    { id:'e12', name_petpooja: "Anamika Singh", display_name: "Anamika Singh", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
+    { id:'e13', name_petpooja: "Deepti S", display_name: "Deepti S", email: "", department: "Admin", designation: "Coordinator", reporting_minutes: 480, monthly_salary: 28000, is_active: true },
+    { id:'e14', name_petpooja: "Sasmita Mishra", display_name: "Sasmita Mishra", email: "", department: "Teacher", designation: "Daycare Teacher", reporting_minutes: 660, monthly_salary: 18000, is_active: true },
+    { id:'e15', name_petpooja: "Diya Anuj Advani", display_name: "Diya Advani", email: "", department: "Teacher", designation: "Daycare Teacher", reporting_minutes: 630, monthly_salary: 20000, is_active: true },
+    { id:'e16', name_petpooja: "Sonia Nyayapathi", display_name: "Sonia Nyayapathi", email: "", department: "Teacher", designation: "Sr.Kg Teacher", reporting_minutes: 480, monthly_salary: 24000, is_active: true },
+    { id:'e17', name_petpooja: "Evan Lunkad", display_name: "Evan Lunkad", email: "", department: "Teacher", designation: "Jr.Kg Teacher", reporting_minutes: 480, monthly_salary: 23000, is_active: true },
+    { id:'e18', name_petpooja: "Firdousjaha Shaikh", display_name: "Firdous Shaikh", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
+    { id:'e19', name_petpooja: "Pallavi Wadmare", display_name: "Pallavi Wadmare", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
+    { id:'e20', name_petpooja: "Deepshiksha Tyagi", display_name: "Deepshiksha Tyagi", email: "", department: "Teacher", designation: "Playgroup Teacher", reporting_minutes: 540, monthly_salary: 21000, is_active: true },
+    { id:'e21', name_petpooja: "Manisha Apte", display_name: "Manisha Apte", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
+    { id:'e22', name_petpooja: "Sherebanu Patrawala", display_name: "Sherebanu Patrawala", email: "", department: "Teacher", designation: "Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
+    { id:'e23', name_petpooja: "Starr liu ", display_name: "Starr Liu", email: "", department: "Teacher", designation: "Playgroup Teacher", reporting_minutes: 540, monthly_salary: 21000, is_active: true },
+    { id:'e24', name_petpooja: "Anuja Mule", display_name: "Anuja Mule", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
+  ],
+  holidays: [
+    { id:'h1', date: "2026-05-01", name: "Maharashtra Day", is_mandatory: true },
+    { id:'h2', date: "2026-08-15", name: "Independence Day", is_mandatory: true },
+    { id:'h3', date: "2026-09-14", name: "Ganesh Chaturthi", is_mandatory: true },
+    { id:'h4', date: "2026-10-02", name: "Gandhi Jayanti", is_mandatory: true },
+    { id:'h5', date: "2027-01-26", name: "Republic Day", is_mandatory: true },
+    { id:'h6', date: "2026-04-03", name: "Good Friday", is_mandatory: false },
+    { id:'h7', date: "2026-06-26", name: "Muharram", is_mandatory: false },
+    { id:'h8', date: "2026-08-26", name: "Onam/Eid", is_mandatory: false },
+    { id:'h9', date: "2026-08-28", name: "Raksha Bandhan", is_mandatory: false },
+    { id:'h10', date: "2026-09-18", name: "Gauri Pooja", is_mandatory: false },
+    { id:'h11', date: "2026-09-24", name: "Anant Chaturdashi", is_mandatory: false },
+    { id:'h12', date: "2026-10-20", name: "Dusshera", is_mandatory: false },
+    { id:'h13', date: "2027-01-14", name: "Makar Sankranti", is_mandatory: false },
+    { id:'h14', date: "2027-02-19", name: "Chhatrapati Shivaji Jayanti", is_mandatory: false },
+    { id:'h15', date: "2027-03-10", name: "Ramzan", is_mandatory: false },
+    { id:'h16', date: "2027-03-22", name: "Holi", is_mandatory: false },
+  ],
+  vacations: [
+    { id:'v1', start_date: "2026-04-01", end_date: "2026-04-05", name: "Inter-AY break" },
+    { id:'v2', start_date: "2026-05-02", end_date: "2026-05-31", name: "Summer break May 2026" },
+    { id:'v3', start_date: "2026-11-04", end_date: "2026-11-11", name: "Diwali 2026" },
+    { id:'v4', start_date: "2026-12-24", end_date: "2027-01-01", name: "Christmas 2026-27" },
+  ],
+  student_holidays: [
+    // Pre-seeded from "Holiday List for Students 2026-27" PDF, cross-referenced against teacher calendar.
+    // Single-date student holidays where teachers come (not in teacher mandatory/vacation):
+    { id:'sh1',  date:'2026-04-14', name:'Ambedkar Jayanti', notes:'Student holiday; teachers come' },
+    { id:'sh2',  date:'2026-06-26', name:'Muharram',        notes:'Optional for teachers — assume coming' },
+    { id:'sh3',  date:'2026-08-26', name:'Onam/Eid',        notes:'Optional for teachers' },
+    { id:'sh4',  date:'2026-08-28', name:'Raksha Bandhan',   notes:'Optional for teachers' },
+    { id:'sh5',  date:'2026-09-04', name:'Janmashtami',      notes:'Student holiday; teachers come' },
+    { id:'sh6',  date:'2026-09-24', name:'Anant Chaturdashi',notes:'Optional for teachers' },
+    { id:'sh7',  date:'2026-10-20', name:'Dusshera',         notes:'Optional for teachers' },
+    { id:'sh8',  date:'2026-11-24', name:'Guru Nanak Jayanti',notes:'Student holiday; teachers come' },
+    { id:'sh9',  date:'2027-01-14', name:'Makar Sankranti',  notes:'Optional for teachers' },
+    { id:'sh10', date:'2027-02-19', name:'Shivaji Jayanti',  notes:'Optional for teachers' },
+    { id:'sh11', date:'2027-03-10', name:'Ramzan',           notes:'Optional for teachers' },
+    // Vacation gap days (students vacation, teachers working):
+    { id:'sh12', date:'2026-09-15', name:'Ganesh Chaturthi vacation gap', notes:'Students vacation, teachers come' },
+    { id:'sh13', date:'2026-09-16', name:'Ganesh Chaturthi vacation gap', notes:'Students vacation, teachers come' },
+    { id:'sh14', date:'2026-09-17', name:'Ganesh Chaturthi vacation gap', notes:'Students vacation, teachers come' },
+    { id:'sh15', date:'2026-09-18', name:'Gauri Pooja / vacation gap',    notes:'Students vacation; teacher-optional' },
+    { id:'sh16', date:'2026-11-02', name:'Diwali vacation gap (pre)',     notes:'Students vacation, teachers come' },
+    { id:'sh17', date:'2026-11-03', name:'Diwali vacation gap (pre)',     notes:'Students vacation, teachers come' },
+    { id:'sh18', date:'2026-11-12', name:'Diwali vacation gap (post)',    notes:'Teachers back, students vacation' },
+    { id:'sh19', date:'2026-11-13', name:'Diwali vacation gap (post)',    notes:'Teachers back, students vacation' },
+    { id:'sh20', date:'2026-12-23', name:'Christmas vacation gap (pre)',  notes:'Students vacation, teachers come' },
+    { id:'sh21', date:'2027-01-02', name:'Christmas vacation gap (post)', notes:'Teachers back, students vacation' },
+  ],
+  leaves: [
+    { id:'l1', employee_id:'e18', leave_type: "EL", start_date: "2026-04-07", end_date: "2026-04-10", total_days: 4, reason: "kidney stone surgery", status: "Approved", applied_at: "2026-04-05T10:00:00Z", reviewed_at: "2026-04-06T14:00:00Z" },
+    { id:'l2', employee_id:'e19', leave_type: "CL", start_date: "2026-04-21", end_date: "2026-04-21", total_days: 1, reason: "daughter's birthday", status: "Approved", applied_at: "2026-04-20T08:00:00Z", reviewed_at: "2026-04-20T10:00:00Z" },
+    { id:'l3', employee_id:'e19', leave_type: "CL", start_date: "2026-04-24", end_date: "2026-04-24", total_days: 1, reason: "daughter hospitalized", status: "Approved", applied_at: "2026-04-23T20:00:00Z", reviewed_at: "2026-04-23T22:00:00Z" },
+    { id:'l4', employee_id:'e17', leave_type: "CL", start_date: "2026-04-08", end_date: "2026-04-08", total_days: 1, reason: "son ill", status: "Approved", applied_at: "2026-04-07T18:00:00Z", reviewed_at: "2026-04-07T22:00:00Z" },
+    { id:'l5', employee_id:'e20', leave_type: "CL", start_date: "2026-04-02", end_date: "2026-04-02", total_days: 1, reason: "urgency at home", status: "Approved", applied_at: "2026-04-01T20:00:00Z", reviewed_at: "2026-04-02T08:00:00Z" },
+  ],
+  attendanceMonths: {},  // keyed by 'YYYY-MM'
+  adjustments: [],  // forgiveness audit trail: {id, month, employee_id, date, kind: 'forgive_late'|'forgive_lwp'|'forgive_halflwp', reason, decided_at}
+  special_days: [],  // {id, date, name, skip_late_strikes, notes} — sports day, annual function, etc.
+  special_day_overrides: [],  // {id, special_day_id, employee_id, status: 'Present'|'CasualLeave'|'EarnedLeave'|'LWP'|'Excused', note}
+  activeMonth: "2026-04",
+};
+// ============================================================
+// Cloud persistence — Supabase
+// ------------------------------------------------------------
+// State is hydrated from a single row in `portal_state` (id='main', data jsonb).
+// Writes are debounced + serialised so a burst of UI mutations coalesces into
+// one upsert, and concurrent HR sessions follow last-write-wins semantics.
+// ============================================================
+const SUPABASE_URL = 'https://saqefzgnvznuurupqpsw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_u8v_dh1zMGdbrIQPMcxrFg_HCPJeUP9';
+const PORTAL_ROW_ID = 'main';
+
+let state = JSON.parse(JSON.stringify(DEFAULT_STATE));   // safe placeholder until hydration completes
+let _sb = null;
+let _stateLoaded = false;
+let _saveTimer = null;
+let _savePending = false;
+let _saveInflight = false;
+
+function getSb(){
+  if (_sb) return _sb;
+  if (typeof supabase === 'undefined' || !supabase.createClient) {
+    throw new Error('Supabase JS SDK failed to load. Check your network connection.');
+  }
+  _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eurokids-staff-portal-auth' }
+  });
+  return _sb;
+}
+
+async function loadState(){
+  const sb = getSb();
+  const { data, error } = await sb.from('portal_state').select('data, updated_at').eq('id', PORTAL_ROW_ID).maybeSingle();
+  if (error && error.code !== 'PGRST116') {  // PGRST116 = no row found, which is fine on first run
+    console.error('[loadState]', error);
+    alert('Could not fetch portal data: ' + error.message);
+    return;
+  }
+  if (data && data.data) {
+    state = data.data;
+  } else {
+    // First-ever run on a fresh database — seed with defaults and persist immediately
+    state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+  }
+  _stateLoaded = true;
+}
+
+function saveState(){
+  // Debounced fire-and-forget — call sites stay synchronous.
+  if (!_stateLoaded) return;  // ignore phantom writes before hydration
+  _savePending = true;
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(_flushSave, 350);
+}
+
+async function _flushSave(){
+  if (_saveInflight) { _saveTimer = setTimeout(_flushSave, 200); return; }
+  if (!_savePending) return;
+  _savePending = false;
+  _saveInflight = true;
+  const indicator = document.getElementById('save-indicator');
+  if (indicator) { indicator.textContent = '⟳ Saving…'; indicator.className = 'text-xs text-gray-500'; }
+  try {
+    const sb = getSb();
+    const { error } = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+    if (error) {
+      console.error('[saveState]', error);
+      if (indicator) { indicator.textContent = '⚠ Save failed'; indicator.className = 'text-xs text-red-600'; }
+    } else {
+      if (indicator) { indicator.textContent = '✓ Saved'; indicator.className = 'text-xs text-green-600'; }
+    }
+  } finally {
+    _saveInflight = false;
+    if (_savePending) _flushSave();
+  }
+}
+
+async function resetAllData(){
+  if (!confirm("Reset all data? This wipes the cloud state for everyone — there is no undo.")) return;
+  state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+  try {
+    const sb = getSb();
+    const { error } = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+    if (error) return alert('Reset failed: ' + error.message);
+  } catch (e) { return alert('Reset failed: ' + e.message); }
+  renderAll();
+}
+
+// ============================================================
+// Auth gate
+// ============================================================
+async function doLogin(ev){
+  ev.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const sb = getSb();
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      errEl.textContent = error.message;
+      errEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Sign in';
+      return false;
+    }
+    await initApp();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Sign in';
+  }
+  return false;
+}
+
+async function doLogout(){
+  if (!confirm('Sign out of the staff portal?')) return;
+  try { await getSb().auth.signOut(); } catch (e) { /* ignore */ }
+  location.reload();
+}
+
+async function initApp(){
+  document.getElementById('login-overlay').style.display = 'none';
+  const boot = document.getElementById('boot-overlay');
+  boot.style.display = 'flex';
+  try {
+    await loadState();
+    runMigrations();
+    renderAll();
+  } catch (e) {
+    alert('Failed to load: ' + e.message);
+    console.error(e);
+  } finally {
+    boot.style.display = 'none';
+  }
+}
+
+function runMigrations(){
+  // One-time migration: fix any historical adjustments where `month` doesn't
+  // match the actual date being forgiven. (Older versions used activeMonth at
+  // the moment of forgiving instead of deriving from the date.)
+  if (!state.adjustments || state.adjustments.length === 0) return;
+  const affectedMonths = new Set();
+  let changed = 0;
+  for (const adj of state.adjustments) {
+    const correct = adj.date && adj.date.slice(0, 7);
+    if (correct && adj.month !== correct) {
+      if (adj.month) affectedMonths.add(adj.month);
+      affectedMonths.add(correct);
+      adj.month = correct;
+      changed++;
+    }
+  }
+  if (changed > 0) {
+    saveState();
+    affectedMonths.forEach(m => { if (state.attendanceMonths[m]) rerunReconciliation(m); });
+    console.log(`[migration] Corrected month on ${changed} adjustment(s); re-ran reconciliation for ${affectedMonths.size} month(s).`);
+  }
+}
+
+const uid = () => 'x' + Math.random().toString(36).slice(2, 10);
+
+// ============================================================
+// Helpers
+// ============================================================
+function timeToMin(t){ if(!t) return null; const m = String(t).match(/(\d+):(\d+)\s*(AM|PM)/i); if(!m) return null; let h = parseInt(m[1])%12; if(/pm/i.test(m[3])) h += 12; return h*60 + parseInt(m[2]); }
+function minToTime(min){ if(min==null) return "—"; const h24 = Math.floor(min/60), m=min%60, ap = h24>=12?"PM":"AM", h12 = ((h24+11)%12)+1; return `${String(h12).padStart(2,"0")}:${String(m).padStart(2,"0")} ${ap}`; }
+function fmtDate(iso){ if(!iso) return ""; const d = new Date(iso+"T00:00:00Z"); return d.toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}); }
+function fmtDateShort(iso){ const d = new Date(iso+"T00:00:00Z"); return d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",timeZone:"UTC"}); }
+function inr(n){ if(n==null) return "—"; return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(n); }
+function empById(id){ return state.employees.find(e=>e.id===id); }
+function isStudentHolidayDate(date){ return (state.student_holidays||[]).some(s => s.date === date); }
+function empByName(name){ const t = name?.trim().toLowerCase(); return state.employees.find(e => e.name_petpooja.trim().toLowerCase()===t); }
+function daysInMonth(yyyymm){ const [y,m] = yyyymm.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+function dateInMonth(yyyymm, d){ const [y,m] = yyyymm.split('-').map(Number); return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function dayOfWeek(iso){ return new Date(iso+"T00:00:00Z").getUTCDay(); }
+function dowName(d){ return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]; }
+
+// ============================================================
+// Reconciliation
+// ============================================================
+const LATE_GRACE_MIN = 10, HALF_LWP_THRESHOLD = 90, STRIKE_TO_HALF_DAY = 3, SAT_FREE_PER_MONTH = 2, SAT_REPORTING_MIN = 540;
+
+function reconcile(rawRows, month){
+  const holByDate = new Map(); state.holidays.forEach(h => holByDate.set(h.date, h));
+  function inVacation(d){ for (const v of state.vacations) if (d >= v.start_date && d <= v.end_date) return v; return null; }
+  function isStudentHoliday(d){ return (state.student_holidays||[]).find(s => s.date === d) || null; }
+  function isSpecialDay(d){ return (state.special_days||[]).find(s => s.date === d) || null; }
+  function specialDayOverride(empId, specialDayId){ return (state.special_day_overrides||[]).find(o => o.employee_id === empId && o.special_day_id === specialDayId) || null; }
+  const approvedLeaves = state.leaves.filter(L => L.status === "Approved");
+  function leavesFor(empId, date){ return approvedLeaves.find(L => L.employee_id === empId && date >= L.start_date && date <= L.end_date); }
+
+  const reconciledDays = []; const anomalies = []; const empSummary = new Map();
+  function ensure(emp){
+    let s = empSummary.get(emp.id);
+    if (!s) { s = { employee_id: emp.id, employee: emp, fd:0, lateStrikes:0, halfLwp:0, lwpDays:0, clDays:0, elDays:0, weekOffs:0, holidays:0, vacationDays:0, satAbsences:0, satRefunds:0, satExcess:0, strikeHalfDays:0, totalCutDays:0, lateDetails:[] }; empSummary.set(emp.id, s); }
+    return s;
+  }
+
+  rawRows.forEach((row, idx) => {
+    const emp = empByName(row.raw_name);
+    if (!emp) { anomalies.push({ id: uid(), kind:"name_mismatch", description:`PetPooja name "${row.raw_name}" doesn't match any employee. Add them under Employees, or correct spelling.` }); return; }
+    if (!emp.is_active) return;
+
+    const date = row.attendance_date;
+    const d = new Date(date+"T00:00:00Z");
+    const dow = d.getUTCDay();
+    const isSat = dow === 6;
+
+    const vac = inVacation(date);
+    if (vac) { reconciledDays.push({ employee_id:emp.id, date, dow, status:"Vacation", note:vac.name }); ensure(emp).vacationDays++; return; }
+
+    const hol = holByDate.get(date);
+    if (hol?.is_mandatory) { reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday", note:hol.name }); ensure(emp).holidays++; return; }
+
+    const matched = leavesFor(emp.id, date);
+    const inMin = timeToMin(row.first_punch);
+    const outMin = timeToMin(row.last_punch);
+    const status = (row.petpooja_status||"").trim();
+    const stuHol = isStudentHoliday(date);
+    const specialDay = isSpecialDay(date);
+    const sched = (isSat || stuHol) ? SAT_REPORTING_MIN : emp.reporting_minutes;
+    const schedNote = stuHol ? `Student holiday "${stuHol.name||''}" — uniform 9:00 AM` : null;
+    const forgotPunch = /absent/i.test(status) && ((inMin && !outMin) || (outMin && !inMin));
+
+    // Special day with manual override — use the override status directly, regardless of PetPooja
+    if (specialDay) {
+      const override = specialDayOverride(emp.id, specialDay.id);
+      if (override) {
+        const map = { Present:'FullDay', Excused:'FullDay', CasualLeave:'CasualLeave', EarnedLeave:'EarnedLeave', LWP:'LWP' };
+        const dayStatus = map[override.status] || 'FullDay';
+        reconciledDays.push({ employee_id:emp.id, date, dow, status: dayStatus, note: `${specialDay.name}${override.note?' · '+override.note:''}` + (override.status === 'Excused' ? ' (excused)' : '') });
+        const s = ensure(emp);
+        if (dayStatus === 'FullDay') s.fd++;
+        else if (dayStatus === 'CasualLeave') s.clDays++;
+        else if (dayStatus === 'EarnedLeave') s.elDays++;
+        else if (dayStatus === 'LWP') s.lwpDays++;
+        return;
+      }
+    }
+
+    if (forgotPunch) {
+      if (inMin != null) {
+        // Forgot to punch OUT — but the IN time is reliable, so still compute late strike against it
+        const lateMin = inMin - (isSat || stuHol ? SAT_REPORTING_MIN : emp.reporting_minutes);
+        let dayStatus = "FullDay", isStrike = false;
+        if (lateMin > HALF_LWP_THRESHOLD) dayStatus = "HalfLWP";
+        else if (lateMin > LATE_GRACE_MIN) { dayStatus = "Late"; isStrike = true; }
+        anomalies.push({ id: uid(), kind:"forgot_punch", employee_id:emp.id, date, description:`${emp.display_name} on ${fmtDateShort(date)}: forgot to punch OUT (in at ${minToTime(inMin)}). Treated as Present${isStrike?` + late strike (${lateMin} min late)`:lateMin>HALF_LWP_THRESHOLD?` + ½-day LWP (${lateMin} min late)`:''}.` });
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, in:inMin, out:null, late:lateMin, isStrike, scheduledMin:sched, note:"Forgot to punch out" });
+        const s = ensure(emp);
+        if (dayStatus === "HalfLWP") { s.halfLwp++; s.fd += 0.5; s.lateDetails.push({date, in:inMin, late:lateMin, sched}); }
+        else { s.fd++; if (isStrike) { s.lateStrikes++; s.lateDetails.push({date, in:inMin, late:lateMin, sched}); } }
+      } else {
+        // Forgot to punch IN — can't determine lateness, treat as Present without late check
+        anomalies.push({ id: uid(), kind:"forgot_punch", employee_id:emp.id, date, description:`${emp.display_name} on ${fmtDateShort(date)}: forgot to punch IN (out at ${minToTime(outMin)}). Treated as Present; cannot evaluate lateness.` });
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"ForgotPunch", in:null, out:outMin, note:"Forgot to punch in — late check skipped" });
+        ensure(emp).fd++;
+      }
+      return;
+    }
+
+    if (/week\s*off/i.test(status)) { reconciledDays.push({ employee_id:emp.id, date, dow, status:"WeekOff" }); ensure(emp).weekOffs++; return; }
+
+    if (/absent/i.test(status)) {
+      if (matched) {
+        const dayStatus = matched.leave_type === "EL" ? "EarnedLeave" : matched.leave_type === "CL" ? "CasualLeave" : "LWP";
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, leave_id:matched.id, note: matched.leave_type+": "+(matched.reason||"") });
+        const s = ensure(emp);
+        if (dayStatus === "EarnedLeave") s.elDays++;
+        else if (dayStatus === "CasualLeave") s.clDays++;
+        else s.lwpDays++;
+      } else {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"No leave application for this day" });
+        const s = ensure(emp); s.lwpDays++; if (isSat) s.satAbsences++;
+      }
+      return;
+    }
+
+    if (inMin != null) {
+      // Special day with skip_late_strikes flag — treat any punch-in as FullDay regardless of time
+      if (specialDay && specialDay.skip_late_strikes) {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMin, out:outMin, scheduledMin: sched, note: `${specialDay.name} (no late strikes apply)` });
+        ensure(emp).fd++;
+      } else {
+        const lateMin = inMin - sched;
+        let dayStatus = "FullDay", isStrike = false;
+        if (lateMin > HALF_LWP_THRESHOLD) dayStatus = "HalfLWP";
+        else if (lateMin > LATE_GRACE_MIN) { dayStatus = "Late"; isStrike = true; }
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, in:inMin, out:outMin, late:lateMin, isStrike, scheduledMin: sched, note: schedNote });
+        const s = ensure(emp);
+        if (dayStatus === "HalfLWP") { s.halfLwp++; s.fd += 0.5; s.lateDetails.push({date, in:inMin, late:lateMin, sched}); }
+        else { s.fd++; if (isStrike) { s.lateStrikes++; s.lateDetails.push({date, in:inMin, late:lateMin, sched}); } }
+      }
+    } else if (/^FD$|^F\.?D\.?$|^Full\s*Day$|^Present$/i.test(status)) {
+      // PetPooja said FD but no parseable punch time — trust the label, no annotation noise
+      reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", out:outMin });
+      ensure(emp).fd++;
+    } else if (/^HD$|^H\.?D\.?$|^Half\s*Day$/i.test(status)) {
+      reconciledDays.push({ employee_id:emp.id, date, dow, status:"HalfDay" });
+      ensure(emp).fd += 0.5;
+    } else {
+      reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"Unknown PetPooja status: "+status });
+      ensure(emp).lwpDays++;
+    }
+  });
+
+  // Pass 2: Saturday cap — first 2 absent Saturdays/month show as Week Off (not LWP) AND don't count as cuts.
+  // EXCEPTION: Support Staff (maids, didis, cooks, cleaners) work every Saturday — no refund for them.
+  for (const s of empSummary.values()) {
+    s.satRefunds = 0;
+    if (s.employee.department === 'Support Staff') {
+      // No 2-Saturday allowance for Support Staff — every Saturday is a working day
+      s.satExcess = s.satAbsences;
+      continue;
+    }
+    if (s.satAbsences > 0) {
+      const satLwpDays = reconciledDays.filter(d => d.employee_id === s.employee.id && d.dow === 6 && d.status === "LWP").sort((a,b)=>a.date.localeCompare(b.date));
+      const convertCount = Math.min(SAT_FREE_PER_MONTH, satLwpDays.length);
+      for (let i = 0; i < convertCount; i++) {
+        satLwpDays[i].status = "WeekOff";
+        satLwpDays[i].note = `Free Saturday (${i+1} of ${SAT_FREE_PER_MONTH} per month)`;
+        s.lwpDays--;
+        s.weekOffs++;
+        s.satRefunds++;
+      }
+    }
+    s.satExcess = Math.max(0, s.satAbsences - SAT_FREE_PER_MONTH);
+  }
+
+  // Pass 3: Apply admin forgiveness adjustments
+  const monthStart3 = month + "-01";
+  const monthEnd3 = month + `-${String(daysInMonth(month)).padStart(2,'0')}`;
+  const adjustmentsThisMonth = (state.adjustments||[]).filter(a => a.month === month);
+  for (const adj of adjustmentsThisMonth) {
+    const s = empSummary.get(adj.employee_id);
+    if (!s) continue;
+    const day = reconciledDays.find(d => d.employee_id === adj.employee_id && d.date === adj.date);
+    if (!day) continue;
+    day.forgiven = true;
+    day.forgivenReason = adj.reason;
+    day.adjustment_id = adj.id;
+    if (adj.kind === 'forgive_late' && day.isStrike) {
+      day.isStrike = false;
+      s.lateStrikes--;
+      s.lateDetails = s.lateDetails.filter(ld => ld.date !== adj.date);
+    } else if (adj.kind === 'forgive_lwp' && day.status === "LWP") {
+      s.lwpDays--;
+    } else if (adj.kind === 'forgive_halflwp' && day.status === "HalfLWP") {
+      s.halfLwp--;
+      s.fd += 0.5; // promote half day back to full
+      s.lateDetails = s.lateDetails.filter(ld => ld.date !== adj.date);
+    }
+  }
+
+  // Pass 4: Final totals after Saturday cap + forgiveness
+  for (const s of empSummary.values()) {
+    s.strikeHalfDays = Math.floor(s.lateStrikes / STRIKE_TO_HALF_DAY);
+    s.totalCutDays = s.lwpDays + 0.5 * (s.strikeHalfDays + s.halfLwp);
+  }
+  for (const s of empSummary.values()) {
+    if (s.fd === 0 && s.clDays === 0 && s.elDays === 0 && s.vacationDays === 0)
+      anomalies.push({ id: uid(), kind:"zero_punches", employee_id:s.employee.id, description:`${s.employee.display_name}: no punches the entire month. Verify whether the employee is still active and the biometric ID is correctly mapped.` });
+    if (s.lateStrikes >= 6) anomalies.push({ id: uid(), kind:"excess_late_strikes", employee_id:s.employee.id, description:`${s.employee.display_name}: ${s.lateStrikes} late strikes — chronic tardiness.` });
+  }
+
+  // Special-day review anomalies — for each special day in this month, surface any active employee
+  // whose status needs HR's eye (absent without leave, OR no PetPooja row at all).
+  const monthStart4 = month + "-01";
+  const monthEnd4 = month + `-${String(daysInMonth(month)).padStart(2,'0')}`;
+  for (const sd of (state.special_days||[])) {
+    if (sd.date < monthStart4 || sd.date > monthEnd4) continue;
+    for (const emp of state.employees.filter(e => e.is_active)) {
+      const override = specialDayOverride(emp.id, sd.id);
+      if (override) continue; // already manually set
+      const recDay = reconciledDays.find(d => d.employee_id === emp.id && d.date === sd.date);
+      if (!recDay) {
+        // No row in PetPooja for this special day
+        anomalies.push({ id: uid(), kind:"special_day_review", employee_id: emp.id, special_day_id: sd.id, date: sd.date, description:`${sd.name} on ${fmtDateShort(sd.date)} — PetPooja has no record for ${emp.display_name}. Did they come, take leave, or skip without leave?` });
+      } else if (recDay.status === "LWP") {
+        anomalies.push({ id: uid(), kind:"special_day_review", employee_id: emp.id, special_day_id: sd.id, date: sd.date, description:`${sd.name} on ${fmtDateShort(sd.date)} — ${emp.display_name} shows as Absent in PetPooja with no leave application. Was this excused (off-site duty, training)?` });
+      }
+    }
+  }
+
+  // Suspect leave-date anomalies — the "Pallavi applied for 21st but was actually absent on 20th" case.
+  // For each approved leave in this month, check if the teacher actually punched in on the leave dates.
+  // If yes (i.e. they were Present on a day they claimed leave), AND there's an unmatched LWP within ±3 days,
+  // flag as a probable date-entry error.
+  const monthStart = month + "-01";
+  const monthEnd = month + `-${String(daysInMonth(month)).padStart(2,'0')}`;
+  for (const L of state.leaves.filter(x => x.status === "Approved" && x.start_date <= monthEnd && x.end_date >= monthStart)) {
+    const empReconciled = reconciledDays.filter(d => d.employee_id === L.employee_id);
+    // Walk leave's date range
+    const start = new Date(L.start_date+"T00:00:00Z").getTime();
+    const end = new Date(L.end_date+"T00:00:00Z").getTime();
+    for (let t = start; t <= end; t += 86400000) {
+      const dStr = new Date(t).toISOString().slice(0,10);
+      if (dStr < monthStart || dStr > monthEnd) continue;
+      const recDay = empReconciled.find(d => d.date === dStr);
+      if (recDay && (recDay.status === "FullDay" || recDay.status === "Late" || recDay.status === "HalfLWP" || recDay.status === "ForgotPunch")) {
+        // Teacher was Present on a day they took leave — suspicious.
+        // Look for an unmatched LWP within ±3 days of this leave date
+        const dt = new Date(dStr+"T00:00:00Z").getTime();
+        const nearbyLwp = empReconciled.find(d => d.status === "LWP" && Math.abs(new Date(d.date+"T00:00:00Z").getTime() - dt) <= 3*86400000);
+        const e = empById(L.employee_id);
+        if (nearbyLwp) {
+          anomalies.push({ id: uid(), kind:"suspect_leave_date", employee_id:L.employee_id, leave_id:L.id, description:`${e?.display_name||'Employee'} applied for ${L.leave_type} on ${fmtDateShort(L.start_date)} but was Present that day. There's an unexplained LWP on ${fmtDateShort(nearbyLwp.date)} (${Math.round(Math.abs(new Date(nearbyLwp.date+"T00:00:00Z").getTime() - dt)/86400000)} day(s) ${nearbyLwp.date < dStr ? 'before':'after'}). Possible date entry error — should the leave be moved to ${fmtDateShort(nearbyLwp.date)}?` });
+        } else {
+          anomalies.push({ id: uid(), kind:"suspect_leave_date", employee_id:L.employee_id, leave_id:L.id, description:`${e?.display_name||'Employee'} was Present (punched in) on ${fmtDateShort(dStr)} but has an approved ${L.leave_type} leave for that date. Worth checking whether the leave is needed — if not, reject it to free up the balance.` });
+        }
+      }
+    }
+  }
+
+  return { reconciledDays, anomalies, summaries: Array.from(empSummary.values()) };
+}
+
+// ============================================================
+// Import
+// ============================================================
+async function runReconciliation(){
+  const file = document.getElementById('att-file').files[0];
+  const month = document.getElementById('att-month').value;
+  if (!file) return showResult("Pick a file first.", "err");
+  let rawRows = [];
+  try {
+    const buf = await file.arrayBuffer();
+    if (file.name.endsWith('.json')) {
+      const data = JSON.parse(new TextDecoder().decode(buf));
+      const arr = data.data || data;
+      rawRows = arr.map(r => ({ raw_name: String(r.name||""), attendance_date: String(r.attandance_date || r.attendance_date || r.date || "").slice(0,10), first_punch: r.first_punch || null, last_punch: r.last_punch || null, petpooja_status: r.status || null }));
+    } else {
+      const wb = XLSX.read(buf, { type:"array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      rawRows = json.map(r => ({ raw_name: String(r["Employee Name"] || r["Name"] || r["name"] || ""), attendance_date: normalizeDate(r["Date"] || r["date"]), first_punch: nilOrStr(r["Punch In"] || r["First Punch"] || r["first_punch"]), last_punch: nilOrStr(r["Punch Out"] || r["Last Punch"] || r["last_punch"]), petpooja_status: nilOrStr(r["Status"] || r["status"]) })).filter(r => r.raw_name && r.attendance_date);
+    }
+  } catch (e) { return showResult("Failed to parse: " + e.message, "err"); }
+  if (rawRows.length === 0) return showResult("No rows parsed.", "err");
+
+  const result = reconcile(rawRows, month);
+  state.attendanceMonths[month] = { rawRows, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, importedAt: new Date().toISOString() };
+  state.activeMonth = month;
+  saveState();
+  showResult(`✓ Imported ${rawRows.length} rows · ${result.summaries.length} per-employee summaries · ${result.anomalies.length} anomalies flagged`, "ok");
+  renderAll();
+}
+function rerunReconciliation(month){
+  const m = state.attendanceMonths[month]; if (!m) return;
+  const result = reconcile(m.rawRows, month);
+  state.attendanceMonths[month] = { ...m, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, importedAt: new Date().toISOString() };
+  saveState(); renderAll();
+}
+function nilOrStr(v){ if (v==null) return null; const s = String(v).trim(); if (!s || s==="-") return null; return s; }
+function normalizeDate(v){ if (!v) return ""; const s = String(v); const dmy = s.match(/^(\d{2})-(\d{2})-(\d{4})$/); if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`; const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (ymd) return ymd[0]; if (typeof v === "number") { const d = XLSX.SSF.parse_date_code(v); if (d) return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`; } return s.slice(0,10); }
+function showResult(msg, kind){ const el = document.getElementById('att-result'); const c = kind==="ok" ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"; el.innerHTML = `<div class="text-sm border rounded-lg p-3 ${c}">${msg}</div>`; }
+
+// ============================================================
+// Renderers
+// ============================================================
+function renderAll(){
+  document.getElementById('active-month').textContent = state.activeMonth || "—";
+  renderDashboard();
+  renderEmployees();
+  renderHolidays();
+  renderVacations();
+  renderStudentHolidays();
+  renderSpecialDays();
+  renderLeaves();
+  renderBalances();
+  renderImports();
+  renderReportMonthDropdown();
+  renderReports();
+  renderAnomalies();
+  renderSalary();
+  updateNavBadges();
+}
+
+function updateNavBadges(){
+  const pending = state.leaves.filter(L => L.status === "Pending").length;
+  const navP = document.getElementById('nav-pending');
+  navP.textContent = pending; navP.classList.toggle('hidden', pending===0);
+  const m = state.attendanceMonths[state.activeMonth];
+  const a = m?.anomalies?.length || 0;
+  const navA = document.getElementById('nav-anom');
+  navA.textContent = a; navA.classList.toggle('hidden', a===0);
+}
+
+function renderDashboard(){
+  const pending = state.leaves.filter(L => L.status === "Pending").length;
+  const approved = state.leaves.filter(L => L.status === "Approved").length;
+  const m = state.attendanceMonths[state.activeMonth];
+  const anomCount = m?.anomalies?.length || 0;
+  const sumCount = m?.summaries?.length || 0;
+  const employeesCount = state.employees.filter(e => e.is_active).length;
+  document.getElementById('stats').innerHTML = [
+    { label:"Pending approvals", value:pending, sub:"leaves awaiting review", panel:"leaves" },
+    { label:"Anomalies", value:anomCount, sub:`active month: ${state.activeMonth}`, panel:"anomalies" },
+    { label:"Active employees", value:employeesCount, sub:"on the roster", panel:"employees" },
+    { label:"Latest reconciliation", value:sumCount?sumCount+" employees":"—", sub: m ? `imported ${new Date(m.importedAt).toLocaleString('en-IN')}` : "no import yet", panel:"reports" },
+  ].map(s => `<div class="stat cursor-pointer" onclick="goto('${s.panel}')"><div class="label">${s.label}</div><div class="value">${s.value}</div><div class="sub">${s.sub}</div></div>`).join('');
+
+  // Pending leaves preview
+  const pendList = state.leaves.filter(L => L.status === "Pending").slice(0, 5);
+  const pendEl = document.getElementById('pending-leaves-preview');
+  if (pendList.length === 0) pendEl.innerHTML = '<div class="text-gray-400 italic">All caught up.</div>';
+  else pendEl.innerHTML = pendList.map(L => { const e = empById(L.employee_id); return `<div class="py-2 border-b border-gray-100 last:border-0"><div class="flex items-center justify-between"><div><span class="font-medium">${e?.display_name||"?"}</span> · <span class="badge ${L.leave_type==='EL'?'b-el':L.leave_type==='CL'?'b-cl':'b-lwp'}">${L.leave_type}</span></div><div class="text-xs text-gray-500">${fmtDateShort(L.start_date)} → ${fmtDateShort(L.end_date)}</div></div><div class="text-xs text-gray-500 mt-1">${L.reason||''}</div></div>`; }).join('');
+
+  // Anomalies preview
+  const anomList = (m?.anomalies||[]).slice(0, 5);
+  const anomEl = document.getElementById('anomalies-preview');
+  if (anomList.length === 0) anomEl.innerHTML = '<div class="text-gray-400 italic">Nothing flagged.</div>';
+  else anomEl.innerHTML = anomList.map(a => `<div class="py-2 border-b border-gray-100 last:border-0"><div class="text-sm">${a.description}</div></div>`).join('');
+}
+
+let employeeFilter = 'active';
+function setEmployeeFilter(f){ employeeFilter = f; renderEmployees(); }
+function archiveEmployee(id){
+  const e = empById(id); if (!e) return;
+  if (!confirm(`Archive ${e.display_name}? They'll be hidden from the active list but all historical data (attendance, leaves, reports) stays intact. You can restore them anytime from the Archived view.`)) return;
+  e.is_active = false; e.left_date = e.left_date || new Date().toISOString().slice(0,10);
+  saveState(); renderAll();
+}
+function restoreEmployee(id){
+  const e = empById(id); if (!e) return;
+  e.is_active = true; e.left_date = null;
+  saveState(); renderAll();
+}
+function renderEmployees(){
+  const tbody = document.getElementById('employees-tbody');
+  const all = state.employees;
+  const active = all.filter(e => e.is_active);
+  const archived = all.filter(e => !e.is_active);
+  // Update counts on filter pills
+  document.getElementById('emp-count-active').textContent = `(${active.length})`;
+  document.getElementById('emp-count-archived').textContent = archived.length ? `(${archived.length})` : '';
+  document.getElementById('emp-count-all').textContent = `(${all.length})`;
+  // Highlight current filter pill
+  document.querySelectorAll('.emp-filter-btn').forEach(b => {
+    const isActive = b.dataset.filter === employeeFilter;
+    b.style.background = isActive ? '#F58220' : '';
+    b.style.color = isActive ? 'white' : '';
+  });
+  // Filter list
+  let list = employeeFilter === 'active' ? active : employeeFilter === 'archived' ? archived : all;
+  list = [...list].sort((a,b) => a.display_name.localeCompare(b.display_name));
+  if (list.length === 0) {
+    const msg = employeeFilter === 'archived' ? 'No archived employees. Archive someone from the Active view if they\'ve left.' : 'No employees in this view.';
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-gray-500 py-12">${msg}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(e => `<tr ${e.is_active ? '' : 'class="opacity-60"'}>
+    <td><div class="font-medium">${e.display_name}${e.is_active ? '' : ' <span class="badge b-inactive">archived</span>'}</div>${e.display_name !== e.name_petpooja.trim() ? `<div class="text-xs text-gray-400">PetPooja: "${e.name_petpooja}"</div>` : ''}${e.left_date ? `<div class="text-xs text-gray-400">Left ${fmtDateShort(e.left_date)}</div>` : ''}</td>
+    <td class="text-gray-600">${e.department}</td>
+    <td class="text-gray-600">${e.designation}</td>
+    <td class="text-gray-600">${minToTime(e.reporting_minutes)}</td>
+    <td class="text-gray-600 text-xs">${e.phone || '<span class="text-gray-400 italic">—</span>'}</td>
+    <td class="text-gray-600 text-xs">${e.email || '<span class="text-gray-400 italic">—</span>'}</td>
+    <td class="text-right">${inr(e.monthly_salary)}</td>
+    <td><button onclick="openEmployeeForm('${e.id}')" class="btn-link">Edit</button> · ${e.is_active ? `<button onclick="archiveEmployee('${e.id}')" class="btn-danger">Archive</button>` : `<button onclick="restoreEmployee('${e.id}')" class="btn-link" style="color:#15803D">Restore</button>`}</td>
+  </tr>`).join('');
+}
+
+function renderHolidays(){
+  document.getElementById('holidays-tbody').innerHTML = [...state.holidays].sort((a,b)=>a.date.localeCompare(b.date)).map(h => `<tr>
+    <td class="text-gray-600">${fmtDate(h.date)}</td>
+    <td class="font-medium">${h.name}</td>
+    <td><span class="badge ${h.is_mandatory?'b-mandatory':'b-optional'}">${h.is_mandatory?'Mandatory':'Optional'}</span></td>
+    <td><button onclick="removeHoliday('${h.id}')" class="btn-danger">Delete</button></td>
+  </tr>`).join('');
+}
+function renderSpecialDays(){
+  const tbody = document.getElementById('special-days-tbody');
+  const list = [...(state.special_days||[])].sort((a,b)=>a.date.localeCompare(b.date));
+  if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-12">No special event days. Add Sports Day, Annual Function, etc. so the engine knows to skip late strikes and prompt for manual review.</td></tr>`; return; }
+  tbody.innerHTML = list.map(s => `<tr>
+    <td class="text-gray-600">${fmtDate(s.date)}</td>
+    <td class="font-medium">${s.name || '—'}</td>
+    <td>${s.skip_late_strikes ? '<span class="badge b-fd">skipped</span>' : '<span class="badge b-late">applied</span>'}</td>
+    <td class="text-gray-500 text-xs">${s.notes || ''}</td>
+    <td><button onclick="removeSpecialDay('${s.id}')" class="btn-danger">Delete</button></td>
+  </tr>`).join('');
+}
+function addSpecialDay(){
+  const date = prompt("Date (YYYY-MM-DD):"); if (!date) return;
+  const name = prompt("Event name (e.g. 'Sports Day', 'Annual Function'):"); if (!name) return;
+  const skipLate = !confirm("Should late strikes still apply on this day?\n\nOK = late strikes apply normally\nCancel = skip late strikes (recommended for events with flexible timing)");
+  const notes = prompt("Notes (optional, e.g. 'Off-site at sports ground'):", "") || "";
+  if (!state.special_days) state.special_days = [];
+  state.special_days.push({ id: uid(), date, name, skip_late_strikes: skipLate, notes });
+  saveState();
+  // Re-run all months that contain this date
+  const month = date.slice(0,7);
+  if (state.attendanceMonths[month]) rerunReconciliation(month); else renderAll();
+}
+function removeSpecialDay(id){
+  if (!confirm("Delete this special day? Any per-employee overrides for it will also be cleared.")) return;
+  const sd = (state.special_days||[]).find(s => s.id === id);
+  state.special_days = state.special_days.filter(s => s.id !== id);
+  state.special_day_overrides = (state.special_day_overrides||[]).filter(o => o.special_day_id !== id);
+  saveState();
+  if (sd && state.attendanceMonths[sd.date.slice(0,7)]) rerunReconciliation(sd.date.slice(0,7));
+  else renderAll();
+}
+function setSpecialDayStatus(empId, specialDayId, statusValue){
+  if (!state.special_day_overrides) state.special_day_overrides = [];
+  state.special_day_overrides = state.special_day_overrides.filter(o => !(o.employee_id === empId && o.special_day_id === specialDayId));
+  state.special_day_overrides.push({ id: uid(), employee_id: empId, special_day_id: specialDayId, status: statusValue, note: '' });
+  saveState();
+  const sd = (state.special_days||[]).find(s => s.id === specialDayId);
+  if (sd) {
+    const month = sd.date.slice(0,7);
+    if (state.attendanceMonths[month]) rerunReconciliation(month); else renderAll();
+  } else renderAll();
+}
+
+function renderStudentHolidays(){
+  const tbody = document.getElementById('student-holidays-tbody');
+  const list = [...(state.student_holidays||[])].sort((a,b)=>a.date.localeCompare(b.date));
+  if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500 py-12">No student-only holidays yet. Add them here so reporting time on those dates becomes 9:00 AM uniform.</td></tr>`; return; }
+  tbody.innerHTML = list.map(s => `<tr>
+    <td class="text-gray-600">${fmtDate(s.date)}</td>
+    <td class="font-medium">${s.name || '—'}</td>
+    <td class="text-gray-500 text-xs">${s.notes || ''}</td>
+    <td><button onclick="removeStudentHoliday('${s.id}')" class="btn-danger">Delete</button></td>
+  </tr>`).join('');
+}
+function addStudentHoliday(){ const date = prompt("Date (YYYY-MM-DD):"); if (!date) return; const name = prompt("Name (e.g. 'Reopening prep day', 'PTM'):", "") || ""; const notes = prompt("Notes (optional):", "") || ""; if (!state.student_holidays) state.student_holidays = []; state.student_holidays.push({ id:uid(), date, name, notes }); saveState(); rerunActiveMonth(); renderAll(); }
+function openBulkAddModal(){
+  openModal("Bulk paste student holidays", `
+    <p class="text-sm text-gray-600 mb-3">One per line. Date in <code>YYYY-MM-DD</code>. Optionally a name after a comma. Duplicates are skipped automatically.</p>
+    <textarea id="bulk-text" class="input" rows="14" style="font-family: ui-monospace, monospace; font-size:13px" placeholder="2026-04-14, Ambedkar Jayanti
+2026-09-04, Janmashtami
+2026-11-24, Guru Nanak Jayanti"></textarea>
+    <div class="flex gap-2 pt-3">
+      <button onclick="bulkAddStudentHolidaysFromTextarea()" class="btn-primary flex-1">Add to list</button>
+      <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+  `);
+}
+function bulkAddStudentHolidaysFromTextarea(){
+  const text = document.getElementById('bulk-text').value;
+  if (!text) return closeModal();
+  const lines = text.split(/[\n;]+/).map(s=>s.trim()).filter(Boolean);
+  if (!state.student_holidays) state.student_holidays = [];
+  let added = 0;
+  for (const line of lines) {
+    const [datePart, ...nameParts] = line.split(',').map(s=>s.trim());
+    const date = normalizeDate(datePart);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    if (state.student_holidays.some(s => s.date === date)) continue;
+    state.student_holidays.push({ id: uid(), date, name: nameParts.join(', ') || "", notes: "" });
+    added++;
+  }
+  saveState(); rerunActiveMonth(); renderAll(); closeModal();
+  alert(`Added ${added} student holiday${added===1?'':'s'}.`);
+}
+function seedStudentHolidaysFromPdf(){
+  const seed = [
+    { date:'2026-04-14', name:'Ambedkar Jayanti',                  notes:'Student holiday; teachers come' },
+    { date:'2026-06-26', name:'Muharram',                          notes:'Optional for teachers — assume coming' },
+    { date:'2026-08-26', name:'Onam/Eid',                          notes:'Optional for teachers' },
+    { date:'2026-08-28', name:'Raksha Bandhan',                    notes:'Optional for teachers' },
+    { date:'2026-09-04', name:'Janmashtami',                       notes:'Student holiday; teachers come' },
+    { date:'2026-09-15', name:'Ganesh Chaturthi vacation gap',     notes:'Students vacation, teachers come' },
+    { date:'2026-09-16', name:'Ganesh Chaturthi vacation gap',     notes:'Students vacation, teachers come' },
+    { date:'2026-09-17', name:'Ganesh Chaturthi vacation gap',     notes:'Students vacation, teachers come' },
+    { date:'2026-09-18', name:'Gauri Pooja / vacation gap',        notes:'Students vacation; teacher-optional' },
+    { date:'2026-09-24', name:'Anant Chaturdashi',                 notes:'Optional for teachers' },
+    { date:'2026-10-20', name:'Dusshera',                          notes:'Optional for teachers' },
+    { date:'2026-11-02', name:'Diwali vacation gap (pre)',         notes:'Students vacation, teachers come' },
+    { date:'2026-11-03', name:'Diwali vacation gap (pre)',         notes:'Students vacation, teachers come' },
+    { date:'2026-11-12', name:'Diwali vacation gap (post)',        notes:'Teachers back, students vacation' },
+    { date:'2026-11-13', name:'Diwali vacation gap (post)',        notes:'Teachers back, students vacation' },
+    { date:'2026-11-24', name:'Guru Nanak Jayanti',                notes:'Student holiday; teachers come' },
+    { date:'2026-12-23', name:'Christmas vacation gap (pre)',      notes:'Students vacation, teachers come' },
+    { date:'2027-01-02', name:'Christmas vacation gap (post)',     notes:'Teachers back, students vacation' },
+    { date:'2027-01-14', name:'Makar Sankranti',                   notes:'Optional for teachers' },
+    { date:'2027-02-19', name:'Shivaji Jayanti',                   notes:'Optional for teachers' },
+    { date:'2027-03-10', name:'Ramzan',                            notes:'Optional for teachers' },
+  ];
+  if (!state.student_holidays) state.student_holidays = [];
+  let added = 0, skipped = 0;
+  for (const s of seed) {
+    if (state.student_holidays.some(x => x.date === s.date)) { skipped++; continue; }
+    state.student_holidays.push({ id: uid(), ...s });
+    added++;
+  }
+  saveState(); rerunActiveMonth(); renderAll();
+  alert(`Seeded ${added} student holiday${added===1?'':'s'}.${skipped?` Skipped ${skipped} that already existed.`:''}`);
+}
+function removeStudentHoliday(id){ if (confirm("Delete this student holiday?")) { state.student_holidays = state.student_holidays.filter(s=>s.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
+
+function renderVacations(){
+  document.getElementById('vacations-tbody').innerHTML = [...state.vacations].sort((a,b)=>a.start_date.localeCompare(b.start_date)).map(v => `<tr>
+    <td class="text-gray-600">${fmtDate(v.start_date)}</td>
+    <td class="text-gray-600">${fmtDate(v.end_date)}</td>
+    <td class="font-medium">${v.name}</td>
+    <td><button onclick="removeVacation('${v.id}')" class="btn-danger">Delete</button></td>
+  </tr>`).join('');
+}
+
+function renderImports(){
+  const tbody = document.getElementById('imports-tbody');
+  const months = Object.keys(state.attendanceMonths).sort().reverse();
+  if (months.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-12">No imports yet. Upload your first PetPooja file above.</td></tr>`; return; }
+  tbody.innerHTML = months.map(m => { const im = state.attendanceMonths[m]; return `<tr>
+    <td class="font-medium">${m}</td>
+    <td>${im.rawRows.length}</td>
+    <td>${im.anomalies.length}</td>
+    <td class="text-gray-500 text-xs">${new Date(im.importedAt).toLocaleString('en-IN')}</td>
+    <td><button onclick="setActiveMonth('${m}')" class="btn-link">Set active</button> · <button onclick="rerunReconciliation('${m}')" class="btn-link">Re-run</button> · <button onclick="deleteImport('${m}')" class="btn-danger">Delete</button></td>
+  </tr>`}).join('');
+}
+function setActiveMonth(m){ state.activeMonth = m; saveState(); renderAll(); }
+function deleteImport(m){ if (confirm(`Delete the ${m} import?`)) { delete state.attendanceMonths[m]; if (state.activeMonth === m) state.activeMonth = Object.keys(state.attendanceMonths)[0] || "2026-04"; saveState(); renderAll(); } }
+
+// ============================================================
+// LEAVES with approval workflow
+// ============================================================
+let leavesTab = "Pending";
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => { leavesTab = b.dataset.tab; document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('active', x===b)); document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('!bg-eurokids-orange', x===b && x.classList.contains('active'))); document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('!text-white', x===b)); renderLeaves(); }));
+
+function renderLeaves(){
+  const tbody = document.getElementById('leaves-tbody');
+  const tabPend = document.getElementById('leaves-tab-pending');
+  const pendingCount = state.leaves.filter(L=>L.status==='Pending').length;
+  if (pendingCount > 0) { tabPend.textContent = `(${pendingCount})`; } else tabPend.textContent = '';
+
+  let list = state.leaves.slice();
+  if (leavesTab !== "all") list = list.filter(L => L.status === leavesTab);
+  list.sort((a,b)=>b.applied_at?.localeCompare(a.applied_at||'')||0);
+
+  if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-12">No leave applications in this view.</td></tr>`; return; }
+  tbody.innerHTML = list.map(L => { const e = empById(L.employee_id);
+    return `<tr>
+      <td class="font-medium">${e?.display_name||"?"}</td>
+      <td><span class="badge ${L.leave_type==='EL'?'b-el':L.leave_type==='CL'?'b-cl':'b-lwp'}">${L.leave_type}</span></td>
+      <td class="text-gray-600">${fmtDateShort(L.start_date)} → ${fmtDateShort(L.end_date)}</td>
+      <td>${L.total_days}</td>
+      <td class="text-gray-600 text-xs max-w-xs">${L.reason||''}</td>
+      <td><span class="badge ${L.status==='Approved'?'b-approved':L.status==='Rejected'?'b-rejected':'b-pending'}">${L.status}</span></td>
+      <td><button onclick="openLeaveForm('${L.id}')" class="btn-link">Edit</button>
+        ${L.status === 'Pending' ? ` · <button onclick="approveLeave('${L.id}')" class="btn-link" style="color:#15803D">Approve</button> · <button onclick="rejectLeave('${L.id}')" class="btn-link" style="color:#B91C1C">Reject</button>` : ''}
+        · <button onclick="deleteLeave('${L.id}')" class="btn-danger">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function approveLeave(id){
+  const L = state.leaves.find(x=>x.id===id); if (!L) return;
+  L.status = "Approved"; L.reviewed_at = new Date().toISOString();
+  saveState(); rerunActiveMonth(); renderAll();
+}
+function rejectLeave(id){
+  const L = state.leaves.find(x=>x.id===id); if (!L) return;
+  const note = prompt("Rejection reason (optional):", "");
+  L.status = "Rejected"; L.reviewed_at = new Date().toISOString(); L.reviewer_note = note || "";
+  saveState(); rerunActiveMonth(); renderAll();
+}
+function deleteLeave(id){ if (confirm("Delete this leave application?")) { state.leaves = state.leaves.filter(L=>L.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
+
+// Re-runs reconciliation for the active month so leave changes propagate
+function rerunActiveMonth(){ if (state.activeMonth && state.attendanceMonths[state.activeMonth]) rerunReconciliation(state.activeMonth); }
+
+// ============================================================
+// LEAVE BALANCES
+// ============================================================
+function renderBalances(){
+  const tbody = document.getElementById('balances-tbody');
+  // Approved leaves within AY only
+  const approved = state.leaves.filter(L => L.status==="Approved" && L.start_date >= AY.start && L.end_date <= AY.end);
+  const lwpCounts = {};
+  // LWP days come from reconciled attendance across all imports within AY
+  for (const m of Object.keys(state.attendanceMonths)) {
+    const im = state.attendanceMonths[m];
+    for (const d of im.reconciledDays) if (d.status === "LWP" && d.date >= AY.start && d.date <= AY.end) lwpCounts[d.employee_id] = (lwpCounts[d.employee_id]||0) + 1;
+  }
+  const sorted = [...state.employees].filter(e=>e.is_active).sort((a,b)=>a.display_name.localeCompare(b.display_name));
+  tbody.innerHTML = sorted.map(e => {
+    const cl = approved.filter(L => L.employee_id===e.id && L.leave_type==="CL").reduce((s,L)=>s+L.total_days, 0);
+    const el = approved.filter(L => L.employee_id===e.id && L.leave_type==="EL").reduce((s,L)=>s+L.total_days, 0);
+    const lwp = lwpCounts[e.id] || 0;
+    const clLeft = AY.cl_per_teacher - cl, elLeft = AY.el_per_teacher - el;
+    return `<tr>
+      <td class="font-medium">${e.display_name}</td>
+      <td>${cl}</td>
+      <td class="${clLeft<=2?'text-red-600 font-semibold':''}">${clLeft}</td>
+      <td>${el}</td>
+      <td class="${elLeft<=2?'text-red-600 font-semibold':''}">${elLeft}</td>
+      <td class="${lwp>0?'text-orange-600':''}">${lwp}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// MONTHLY REPORTS — the big one
+// ============================================================
+function renderReportMonthDropdown(){
+  const sel = document.getElementById('report-month');
+  const months = Object.keys(state.attendanceMonths).sort().reverse();
+  // Preserve whatever month the user is currently viewing — otherwise every renderAll
+  // (forgive, leave-edit, etc.) would snap them back to state.activeMonth.
+  const currentlyViewing = sel?.value && months.includes(sel.value) ? sel.value : null;
+  const selectedMonth = currentlyViewing || state.activeMonth;
+  sel.innerHTML = months.length ? months.map(m => `<option value="${m}" ${m===selectedMonth?'selected':''}>${m}</option>`).join('') : `<option>No imports yet</option>`;
+}
+
+let viewingEmployeeId = null;
+let reportDeptFilter = 'all';
+function viewReport(empId){ viewingEmployeeId = empId; renderReports(); }
+function backToReportsList(){ viewingEmployeeId = null; renderReports(); }
+function setReportDeptFilter(d){ reportDeptFilter = d; renderReports(); }
+
+function renderReports(){
+  const month = document.getElementById('report-month').value || state.activeMonth;
+  const m = state.attendanceMonths[month];
+  const list = document.getElementById('reports-list');
+  const detail = document.getElementById('report-detail');
+
+  if (!m) { list.innerHTML = `<div class="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-500">No data for ${month}. Import an attendance file from the Attendance Import page.</div>`; detail.classList.add('hidden'); return; }
+
+  if (!viewingEmployeeId) {
+    detail.classList.add('hidden');
+    list.classList.remove('hidden');
+    let allSums = [...m.summaries].filter(s => s.employee.is_active).sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name));
+    if (reportDeptFilter && reportDeptFilter !== 'all') allSums = allSums.filter(s => s.employee.department === reportDeptFilter);
+    const sums = allSums;
+    const allDepts = [...new Set(m.summaries.filter(s=>s.employee.is_active).map(s => s.employee.department))];
+    const withEmail = sums.filter(s => s.employee.email).length;
+    const withPhone = sums.filter(s => s.employee.phone).length;
+    list.innerHTML = `
+      <div class="bg-white border border-gray-200 rounded-2xl p-5 mb-4">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <div class="text-sm font-semibold text-eurokids-ink">Bulk send (${sums.length} active teachers this month)</div>
+            <div class="text-xs text-gray-500">${withEmail} have email · ${withPhone} have phone — fill in the missing ones from the Employees page first.</div>
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <button onclick="bulkEmailAll('${month}')" class="btn-primary">✉ Open all email drafts</button>
+            <button onclick="downloadWhatsappCsv('${month}')" class="btn-secondary" style="background:#25D366;color:white">📱 WhatsApp CSV (for bulk sender)</button>
+            <button onclick="bulkWhatsappAll('${month}')" class="btn-secondary" title="Opens wa.me tabs one by one — use only if you don't have a bulk sender">📱 Open WhatsApp drafts (legacy)</button>
+            <button onclick="downloadAllReports('${month}')" class="btn-secondary">⬇ Download all reports (.txt)</button>
+          </div>
+        </div>
+        <div class="text-xs text-eurokids-blue bg-blue-50 border border-blue-200 rounded-lg p-2 mt-3">
+          <b>WhatsApp CSV format:</b> three columns — <code>phone</code> (with country code, no +), <code>name</code>, <code>message</code> (the full personalized report). Upload to AiSensy / MSG91 / WATI / your usual bulk sender, map <code>phone</code> as the recipient and <code>message</code> as the body variable, send. Email drafts open in your mail client (you click Send in each).
+        </div>
+      </div>
+      <div class="flex gap-2 mb-4 flex-wrap">
+        ${[['all','All'], ...allDepts.map(d=>[d,d])].map(([key, label]) => {
+          const isActive = (key === reportDeptFilter) || (key === 'all' && (!reportDeptFilter || reportDeptFilter === 'all'));
+          return `<button onclick="setReportDeptFilter('${key}')" class="btn-secondary text-sm" style="${isActive?'background:#F58220;color:white':''}">${label}</button>`;
+        }).join('')}
+      </div>
+      <div class="space-y-2">${sums.map(s => `
+        <div class="bg-white border border-gray-200 rounded-xl px-3 py-2 hover:border-eurokids-blue transition flex items-center gap-3">
+          <div class="flex-1 min-w-0 cursor-pointer" onclick="viewReport('${s.employee.id}')">
+            <div class="font-semibold text-sm text-eurokids-ink truncate">${s.employee.display_name}</div>
+            <div class="text-[11px] text-gray-500 truncate">${s.employee.designation} · ${s.employee.department}</div>
+          </div>
+          <div class="hidden sm:flex gap-4 text-center text-[11px] cursor-pointer" onclick="viewReport('${s.employee.id}')">
+            <div title="Full Days"><div class="font-semibold text-eurokids-ink">${s.fd}</div><div class="text-gray-400 leading-none">FD</div></div>
+            <div title="Late strikes"><div class="font-semibold ${s.lateStrikes>5?'text-amber-600':'text-eurokids-ink'}">${s.lateStrikes}</div><div class="text-gray-400 leading-none">Late</div></div>
+            <div title="LWP days"><div class="font-semibold ${s.lwpDays>0?'text-red-600':'text-eurokids-ink'}">${s.lwpDays}</div><div class="text-gray-400 leading-none">LWP</div></div>
+            <div title="CL + EL"><div class="font-semibold ${(s.clDays+s.elDays)>0?'text-blue-600':'text-eurokids-ink'}">${s.clDays + s.elDays}</div><div class="text-gray-400 leading-none">Lv</div></div>
+          </div>
+          <div class="text-right pl-3 border-l border-gray-100 cursor-pointer" onclick="viewReport('${s.employee.id}')" style="min-width:54px">
+            <div class="text-[10px] text-gray-400 uppercase font-semibold">Cuts</div>
+            <div class="text-base font-bold ${s.totalCutDays>0?'text-red-600':'text-green-600'}">${s.totalCutDays}</div>
+          </div>
+          <div class="flex gap-1 pl-2 border-l border-gray-100">
+            ${s.employee.phone ? `<button onclick="event.stopPropagation();whatsappReport('${s.employee.id}','${month}')" class="hover:bg-gray-100 rounded p-1.5 text-base" title="WhatsApp">📱</button>` : '<span class="text-base opacity-25 p-1.5" title="No phone on file">📱</span>'}
+            ${s.employee.email ? `<button onclick="event.stopPropagation();emailReport('${s.employee.id}','${month}')" class="hover:bg-gray-100 rounded p-1.5 text-base" title="Email">✉</button>` : '<span class="text-base opacity-25 p-1.5" title="No email on file">✉</span>'}
+            <button onclick="event.stopPropagation();copyReport('${s.employee.id}','${month}')" class="hover:bg-gray-100 rounded p-1.5 text-base" title="Copy report text">📋</button>
+            <button onclick="viewReport('${s.employee.id}')" class="text-eurokids-blue hover:bg-blue-50 rounded px-2 py-1 text-sm font-semibold">View →</button>
+          </div>
+        </div>
+      `).join('')}${sums.length===0 ? `<div class="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-500">No teachers in this view. Try a different department filter.</div>`:''}</div>`;
+    return;
+  }
+
+  // Detail view
+  list.classList.add('hidden');
+  detail.classList.remove('hidden');
+  const summary = m.summaries.find(s => s.employee.id === viewingEmployeeId);
+  const emp = empById(viewingEmployeeId);
+  if (!summary || !emp) { detail.innerHTML = `<div class="text-gray-500">No data.</div>`; return; }
+
+  const dim = daysInMonth(month);
+  const dayMap = new Map();
+  m.reconciledDays.filter(d => d.employee_id === viewingEmployeeId).forEach(d => dayMap.set(d.date, d));
+
+  const cutAmount = Math.round((emp.monthly_salary/26) * summary.totalCutDays);
+  const netPayable = Math.round(emp.monthly_salary - cutAmount);
+
+  // Late details sorted
+  const lateDetails = [...summary.lateDetails].sort((a,b)=>a.date.localeCompare(b.date));
+
+  detail.innerHTML = `
+    <div class="flex items-center justify-between mb-6">
+      <button onclick="backToReportsList()" class="btn-link">← Back to all reports</button>
+      <div class="flex gap-2">
+        <button onclick="whatsappReport('${viewingEmployeeId}','${month}')" class="btn-secondary" style="background:#25D366;color:white">📱 WhatsApp</button>
+        <button onclick="emailReport('${viewingEmployeeId}','${month}')" class="btn-primary">✉ Email report</button>
+        <button onclick="copyReport('${viewingEmployeeId}','${month}')" class="btn-secondary">📋 Copy text</button>
+      </div>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-2xl p-6 mb-6">
+      <div class="flex items-baseline justify-between">
+        <div>
+          <h2 class="text-2xl font-semibold">${emp.display_name}</h2>
+          <p class="text-sm text-gray-500">${emp.designation} · ${emp.department} · Reports at ${minToTime(emp.reporting_minutes)} ${emp.email?'· '+emp.email:''}</p>
+        </div>
+        <div class="text-right">
+          <div class="text-xs text-gray-500 uppercase">Month</div>
+          <div class="text-xl font-semibold">${new Date(month+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'})}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+      <div class="stat"><div class="label">Full Days</div><div class="value text-green-700">${summary.fd}</div></div>
+      <div class="stat"><div class="label">Lates</div><div class="value text-amber-700">${summary.lateStrikes}</div><div class="sub">→ ${summary.strikeHalfDays} ½-day cut${summary.strikeHalfDays!==1?'s':''}</div></div>
+      <div class="stat"><div class="label">CL · EL Taken</div><div class="value text-blue-700">${summary.clDays} · ${summary.elDays}</div></div>
+      <div class="stat"><div class="label">LWP</div><div class="value text-red-700">${summary.lwpDays}</div></div>
+      <div class="stat"><div class="label">Holidays</div><div class="value text-purple-700">${summary.holidays + summary.vacationDays}</div><div class="sub">incl. vacation</div></div>
+      <div class="stat"><div class="label">Total cuts</div><div class="value ${summary.totalCutDays>0?'text-red-700':'text-green-700'}">${summary.totalCutDays}</div><div class="sub">= ${inr(cutAmount)} → net ${inr(netPayable)}</div></div>
+    </div>
+
+    ${(() => {
+      const empAdj = (state.adjustments||[]).filter(a => a.month===month && a.employee_id===viewingEmployeeId);
+      if (!empAdj.length) return '';
+      const labelsMap = { forgive_late: "Late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP" };
+      return `<div class="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6">
+        <h3 class="text-sm font-semibold text-green-800 mb-2">✓ Forgiven this month (${empAdj.length})</h3>
+        <ul class="text-sm text-green-900 space-y-1">${empAdj.map(a => `<li>• ${labelsMap[a.kind]||'Cut'} on <b>${fmtDate(a.date)}</b> — ${a.reason} <button onclick="openForgiveModal('${viewingEmployeeId}','${a.date}','${a.kind}')" class="btn-link" style="margin-left:8px;font-size:12px">undo</button></li>`).join('')}</ul>
+      </div>`;
+    })()}
+    ${lateDetails.length ? `
+    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-6">
+      <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h2 class="text-sm font-semibold">Late strikes (${lateDetails.length})</h2>
+        <span class="text-xs text-gray-500">Reporting time: ${minToTime(emp.reporting_minutes)} · Saturdays: 9:00 AM</span>
+      </header>
+      <table>
+        <thead><tr><th>Date</th><th>Day</th><th>Reporting time</th><th>Punched in</th><th>Late by</th><th>Result</th><th></th></tr></thead>
+        <tbody>${lateDetails.map(d => { const dow = dayOfWeek(d.date); const sched = d.sched != null ? d.sched : (dow===6 ? 540 : emp.reporting_minutes); const isStu = isStudentHolidayDate(d.date); return `<tr>
+          <td class="font-medium">${fmtDateShort(d.date)}</td>
+          <td class="text-gray-600">${dowName(dow)}${dow===6?' (Sat)':''}${isStu?' <span class="badge b-hol" style="font-size:9px">student-hol</span>':''}</td>
+          <td class="text-gray-600">${minToTime(sched)}</td>
+          <td>${minToTime(d.in)}</td>
+          <td class="text-amber-700 font-semibold">${d.late} min</td>
+          <td>${d.late > 90 ? '<span class="badge b-halflwp">½-day LWP</span>' : '<span class="badge b-late">strike</span>'}</td>
+          <td><button onclick="openForgiveModal('${viewingEmployeeId}','${d.date}','${d.late > 90 ? 'forgive_halflwp' : 'forgive_late'}')" class="btn-link" style="font-size:12px">Forgive</button></td>
+        </tr>`; }).join('')}</tbody>
+      </table>
+    </div>` : ''}
+
+    <div class="bg-white border border-gray-200 rounded-2xl p-6 mb-6">
+      <h2 class="text-sm font-semibold mb-4">Daily attendance · ${month}</h2>
+      <div class="grid grid-cols-7 gap-2 mb-2 text-xs text-gray-500 font-semibold">
+        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="text-center">${d}</div>`).join('')}
+      </div>
+      <div class="grid grid-cols-7 gap-2">
+        ${(() => {
+          const firstDow = dayOfWeek(`${month}-01`);
+          const cells = [];
+          for (let i = 0; i < firstDow; i++) cells.push(`<div></div>`);
+          for (let dnum = 1; dnum <= dim; dnum++) {
+            const date = dateInMonth(month, dnum);
+            const d = dayMap.get(date);
+            const dow = dayOfWeek(date);
+            if (!d) { cells.push(`<div class="day-cell day-NoData"><div class="dow">${dowName(dow)}</div><div class="num">${dnum}</div></div>`); continue; }
+            const lateInfo = d.late ? `<div class="text-[10px] font-semibold" style="color:rgba(255,255,255,0.95)">+${d.late}m · ${minToTime(d.in)}</div>` : (d.in ? `<div class="text-[10px]" style="color:rgba(255,255,255,0.85)">${minToTime(d.in)}</div>` : '');
+            const noteHtml = d.note ? `<div class="text-[10px] leading-tight" style="color:rgba(255,255,255,0.85)">${d.note}</div>` : '';
+            const forgivenTag = d.forgiven ? `<div class="text-[9px] font-bold leading-none mt-auto self-start" style="background:rgba(255,255,255,0.25);padding:2px 5px;border-radius:4px;color:white">✓ FORGIVEN</div>` : '';
+            const clickable = (d.status === "LWP" && !d.forgiven) ? `onclick="openForgiveModal('${viewingEmployeeId}','${d.date}','forgive_lwp')" style="cursor:pointer" title="Click to forgive this LWP"` : '';
+            const statusLabel = d.status === "FullDay" ? "Full Day" : d.status === "CasualLeave" ? "CL" : d.status === "EarnedLeave" ? "EL" : d.status === "ForgotPunch" ? "Forgot Punch" : d.status === "WeekOff" ? "Week Off" : d.status === "HalfLWP" ? "Half LWP" : d.status;
+            cells.push(`<div class="day-cell day-${d.status} ${d.forgiven?'forgiven':''}" ${clickable}><div class="dow">${dowName(dow)}</div><div class="num">${dnum}</div><div class="text-[10px] font-semibold">${statusLabel}</div>${lateInfo}${noteHtml}${forgivenTag}</div>`);
+          }
+          return cells.join('');
+        })()}
+      </div>
+      <div class="mt-4 text-xs text-gray-500 flex flex-wrap gap-3">
+        <span class="badge b-fd">FullDay</span><span class="badge b-late">Late</span><span class="badge b-halflwp">HalfLWP</span><span class="badge b-lwp">LWP</span>
+        <span class="badge b-cl">CL</span><span class="badge b-el">EL</span><span class="badge b-hol">Holiday</span><span class="badge b-vac">Vacation</span><span class="badge b-wo">WeekOff</span><span class="badge b-forgot">ForgotPunch</span>
+      </div>
+    </div>
+  `;
+}
+
+// 100 warm closing messages — short, simple, dedicated to teachers who love children.
+// One is picked deterministically per (teacher × month).
+const GRATITUDE_MESSAGES = [
+  "Thank you for loving our children so much. We see it in every smile they bring home.",
+  "The way our children light up when they see you in the morning says everything. Thank you.",
+  "You love these little ones like they're your own — and they feel it. Thank you.",
+  "Our children are lucky to be loved by a teacher like you. Thank you for everything.",
+  "Thank you for the love you pour into our children every single day.",
+  "The world needs more teachers like you — patient, loving, kind. Thank you.",
+  "Our children come home smiling because of you. That's worth everything.",
+  "Thank you for being a second mother to our little ones.",
+  "You make our school feel like home for every child who walks in. Thank you.",
+  "The love you give our children stays with them. Thank you for being so kind.",
+  "Thank you for the songs, the hugs, the patience, and the love.",
+  "You have a gift with children, and we're so grateful you share it with us.",
+  "Our children are happier because of you. Thank you, dear teacher.",
+  "Thank you for treating each child like they are your own.",
+  "The way you love our children is beautiful to watch. Thank you.",
+  "You make a real difference in our children's lives. Thank you for that.",
+  "Our children love you, and so do we. Thank you for everything.",
+  "Thank you for being the warmest part of our children's day.",
+  "The world is gentler because of teachers like you. Thank you.",
+  "You bring so much love into our school. Thank you for being you.",
+  "Our children's smiles are your work. Thank you for that gift.",
+  "Thank you for showing up with so much love every single day.",
+  "You love these children deeply, and it shows. Thank you.",
+  "Our school is full of joy because of teachers like you.",
+  "Thank you for the kindness you bring to our children every day.",
+  "You are loved by little hearts every day. We hope you feel it.",
+  "Thank you for being the kind of teacher children remember forever.",
+  "Our children adore you — and that's the highest praise there is.",
+  "You give our children love, safety, and laughter. Thank you.",
+  "Thank you for being patient when they need patience and kind when they need kindness.",
+  "Our school is warmer because you're in it. Thank you.",
+  "Children can tell who really loves them. They know you do. Thank you.",
+  "You make Mondays better for our little ones. Thank you for showing up.",
+  "Thank you for the cuddles, the stories, the songs, the love.",
+  "Our children's hearts are bigger because of you. Thank you.",
+  "You are doing one of the most important jobs in the world, beautifully. Thank you.",
+  "Thank you for loving these children when they need it most.",
+  "Our school is built on the love teachers like you bring. Thank you.",
+  "You make our children feel safe, seen, and special. Thank you.",
+  "The way our children miss you when you're not there says it all. Thank you.",
+  "Thank you for being the kind of grown-up our children want to be around.",
+  "You bring so much heart to your work. Our children are blessed to have you.",
+  "Thank you for the gentle hands and kind words, every day.",
+  "Our children come home happier on the days you're at school. Thank you.",
+  "You love these little ones so well. Thank you for being a beautiful teacher.",
+  "Thank you for showing our children what love looks like.",
+  "Our school is a happier place because of you.",
+  "You give so much of yourself to these children. Thank you.",
+  "Thank you for the warmth, the patience, and the love. Always.",
+  "Our children are growing up with your kindness in them. Thank you.",
+  "You see each child as someone special. That's a beautiful thing. Thank you.",
+  "Thank you for choosing this work. Our children are lucky you did.",
+  "You make the small moments magical for our children. Thank you.",
+  "Our children laugh more because of you. Thank you for that.",
+  "Thank you for being the calm, loving voice in our children's mornings.",
+  "You love your work, and it shows in everything you do. Thank you.",
+  "Our children's first stories of school will be about you. Thank you for making them good ones.",
+  "Thank you for the way you welcome every child, every day.",
+  "You are part of the reason our school is special. Thank you.",
+  "Our children's lives are richer because you are in them. Thank you.",
+  "Thank you for caring so deeply about every little one.",
+  "You teach with love, and that's the best kind of teaching. Thank you.",
+  "Our children feel loved by you. We're so grateful for that.",
+  "Thank you for being a steady, loving presence in their lives.",
+  "You make our children's days brighter. Thank you for that gift.",
+  "Thank you for the patience that only comes from really loving children.",
+  "Our school is full of small joys because of you. Thank you.",
+  "You give these children your full heart every day. Thank you.",
+  "Thank you for being a teacher our children look forward to seeing.",
+  "The world is a better place because of teachers who love children like you do. Thank you.",
+  "Thank you for everything you give our little ones.",
+  "Our children would tell you they love you, if they could put it in words. Thank you.",
+  "You make hard things gentle for these children. Thank you.",
+  "Thank you for teaching our children that grown-ups can be kind.",
+  "Our school is lucky to have someone who loves children as much as you do.",
+  "Thank you for the songs sung, the boo-boos kissed, the hands held.",
+  "You are exactly the kind of teacher we hoped our children would have. Thank you.",
+  "Thank you for making our school a place children love.",
+  "Our children's confidence comes from feeling loved here. That's because of you.",
+  "Thank you for showing up with love, even on the hard days.",
+  "You love these children, and they know it. That's everything. Thank you.",
+  "Thank you for being kind to our little ones in all the small ways that matter.",
+  "Our school's heart is the love between teachers and children. Thank you for yours.",
+  "You give our children a beautiful start. Thank you, truly.",
+  "Thank you for the way you love every child, even the difficult ones.",
+  "Our children are growing up loved because of teachers like you. Thank you.",
+  "You bring out the best in our children. Thank you for that.",
+  "Thank you for being a teacher with so much heart.",
+  "Our children feel important when they're with you. Thank you.",
+  "You make our school a place full of love. Thank you for that.",
+  "Thank you for the smiles, the hugs, the everything.",
+  "Our children love coming to school because of you. Thank you.",
+  "You are doing beautiful work. Thank you for doing it here.",
+  "Thank you for the love that makes everything else possible.",
+  "Our children are so loved at school. That's because of you. Thank you.",
+  "You light up our school with your love for these children. Thank you.",
+  "Thank you for being patient, kind, and so very loving with our little ones.",
+  "Our children come home happier because of the love they got from you. Thank you.",
+  "You are a beautiful teacher who loves children beautifully. Thank you.",
+  "Thank you for everything you do for our little ones — and for the love you do it with."
+];
+
+function pickGratitudeMessage(empId, month){
+  // Deterministic hash so same (teacher, month) → same message; different (teacher, month) → likely different
+  const seed = String(empId) + '|' + String(month);
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  return GRATITUDE_MESSAGES[Math.abs(hash) % GRATITUDE_MESSAGES.length];
+}
+
+// Build the report body — used by email, WhatsApp, and copy actions.
+function buildReportText(empId, month, opts={}){
+  const compact = !!opts.compact; // WhatsApp likes less whitespace
+  const emp = empById(empId); if (!emp) return null;
+  const m = state.attendanceMonths[month]; if (!m) return null;
+  const s = m.summaries.find(x => x.employee.id === empId); if (!s) return null;
+
+  const cutAmount = Math.round((emp.monthly_salary/26) * s.totalCutDays);
+  const netPayable = Math.round(emp.monthly_salary - cutAmount);
+  const monthLabel = new Date(month+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
+
+  // Comparison vs previous month (if available)
+  const [y, mn] = month.split('-').map(Number);
+  const prevKey = mn === 1 ? `${y-1}-12` : `${y}-${String(mn-1).padStart(2,'0')}`;
+  const prevSummary = state.attendanceMonths[prevKey]?.summaries?.find(x => x.employee.id === empId);
+  let comparisonNote = '';
+  if (prevSummary) {
+    const lateDelta = s.lateStrikes - prevSummary.lateStrikes;
+    const cutDelta = s.totalCutDays - prevSummary.totalCutDays;
+    const prevMonthLabel = new Date(prevKey+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',timeZone:'UTC'});
+    if (lateDelta < -1 && cutDelta < 0) comparisonNote = `Wonderful improvement this month — you brought your late strikes down from ${prevSummary.lateStrikes} (in ${prevMonthLabel}) to ${s.lateStrikes}. Thank you for the extra effort.`;
+    else if (lateDelta > 2) comparisonNote = `We noticed your late strikes ticked up from ${prevSummary.lateStrikes} (in ${prevMonthLabel}) to ${s.lateStrikes} this month. Is everything okay? Please let us know if there's anything we can help with — and we'd love to see those mornings on time again.`;
+    else if (lateDelta === 0 && s.lateStrikes <= 2) comparisonNote = `You've kept your timing steady this month — much appreciated.`;
+    else if (s.totalCutDays === 0) comparisonNote = `A clean month with no cuts at all — beautifully done.`;
+  } else if (s.totalCutDays === 0 && s.lateStrikes <= 2) {
+    comparisonNote = `A clean month — thank you for being so reliable.`;
+  }
+
+  // Detect forgot-punch days for this employee
+  const forgotDays = (m.reconciledDays||[]).filter(d => d.employee_id === empId && d.note && /forgot to punch/i.test(d.note));
+  const forgotWarning = forgotDays.length ? `\nA QUICK REMINDER\nOn ${forgotDays.map(d => fmtDateShort(d.date)).join(', ')}, the biometric device only recorded one of your two punches. We've treated those as Present this time, but going forward please remember to punch BOTH in and out — single-punch days will be marked as absences. If the device wasn't working, do let HR know the same day so we can note it.\n` : '';
+
+  // Detect late leave applications — applications that arrived less than 12 hours before reporting on the leave's start date
+  const empLeaves = state.leaves.filter(L => L.employee_id === empId && L.status === 'Approved' && L.start_date >= month + '-01' && L.start_date <= month + `-${daysInMonth(month)}`);
+  const lateApplications = empLeaves.filter(L => {
+    if (!L.applied_at) return false;
+    const applied = new Date(L.applied_at);
+    const reportingDateTime = new Date(`${L.start_date}T00:00:00Z`); reportingDateTime.setUTCMinutes(emp.reporting_minutes);
+    const hoursBefore = (reportingDateTime.getTime() - applied.getTime()) / 36e5;
+    return hoursBefore < 12 && hoursBefore > -48; // applied within 12hr of reporting (or after)
+  });
+  const leaveTimingWarning = lateApplications.length ? `\nA NOTE ON LEAVE TIMING\nWe ask for at least 12 hours' notice on leave applications so we can plan classroom coverage. ${lateApplications.length} of your recent applications came in late (${lateApplications.map(L=>fmtDateShort(L.start_date)).join(', ')}). We understand emergencies happen and we're flexible — but please give us advance notice whenever you possibly can.\n` : '';
+
+  // Late days table
+  const lateLines = [...s.lateDetails].sort((a,b)=>a.date.localeCompare(b.date)).map(d => `  • ${fmtDateShort(d.date)} (${dowName(dayOfWeek(d.date))}) — punched in at ${minToTime(d.in)}, ${d.late} min late`).join('\n');
+
+  // Body
+  const greeting = `Dear ${emp.display_name},\n\nWe hope you're doing well. Here is your attendance and payroll summary for ${monthLabel}.`;
+
+  const summary = `\nAT A GLANCE\n  Full Days:        ${s.fd}\n  Late strikes:     ${s.lateStrikes}  (every 3rd strike counts as ½ day cut)\n  Casual Leave:     ${s.clDays} day(s)\n  Earned Leave:     ${s.elDays} day(s)\n  LWP:              ${s.lwpDays} day(s)\n  Holidays / Vac:   ${s.holidays + s.vacationDays} day(s)\n\n  TOTAL CUTS:       ${s.totalCutDays} day(s)\n  Cut amount:       ₹ ${cutAmount.toLocaleString('en-IN')}\n  Net payable:      ₹ ${netPayable.toLocaleString('en-IN')}\n`;
+
+  const lateSection = lateLines ? `\nLATE DAYS\n${lateLines}\n` : '';
+
+  // Forgiveness section — items the admin chose to forgive this month
+  const empAdjustments = (state.adjustments||[]).filter(a => a.month === month && a.employee_id === empId);
+  let forgivenSection = '';
+  if (empAdjustments.length) {
+    const labelsMap = { forgive_late: "Late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP" };
+    const items = empAdjustments.map(a => `  • ${labelsMap[a.kind]||'Cut'} on ${fmtDateShort(a.date)} (${dowName(dayOfWeek(a.date))}) — ${a.reason}`).join('\n');
+    forgivenSection = `\nFORGIVEN THIS MONTH\nAs a one-time consideration we've not counted the following:\n${items}\n\nWithout this allowance your cuts would have been higher. Please be mindful going forward — these items remain on record but didn't affect this month's pay.\n`;
+  }
+
+  const gratitude = pickGratitudeMessage(empId, month);
+  const closing = `\n${comparisonNote ? comparisonNote + '\n\n' : ''}${gratitude}\n\nIf anything in this report looks wrong, please reply and we'll review it together.\n\nWith warmth,\nEurokids JM Enclave\n`;
+
+  return greeting + '\n' + summary + lateSection + forgivenSection + forgotWarning + leaveTimingWarning + closing;
+}
+
+function openForgiveModal(empId, date, kind){
+  const emp = empById(empId);
+  const labels = { forgive_late: "late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP" };
+  // If already forgiven, offer to undo
+  const existing = (state.adjustments||[]).find(a => a.employee_id===empId && a.date===date);
+  if (existing) {
+    if (confirm(`This ${labels[existing.kind]||'item'} was already forgiven (reason: "${existing.reason}"). Undo the forgiveness?`)) {
+      const undoMonth = existing.month || existing.date?.slice(0,7);
+      state.adjustments = state.adjustments.filter(a => a.id !== existing.id);
+      saveState();
+      if (undoMonth && state.attendanceMonths[undoMonth]) rerunReconciliation(undoMonth);
+      else renderAll();
+    }
+    return;
+  }
+  openModal(`Forgive ${labels[kind]||'item'}`, `
+    <p class="text-sm text-gray-600 mb-3">Forgiving the ${labels[kind]||'item'} on <b>${fmtDate(date)}</b> for <b>${emp.display_name}</b>. This won't be counted in cuts. The teacher will see this as forgiven on their report.</p>
+    <div><label class="text-xs font-medium text-gray-700 block mb-1">Reason (shown to teacher) *</label><input id="fg-reason" class="input" placeholder="e.g. bus was delayed; first day back from sick leave" /></div>
+    <div class="flex gap-2 pt-3">
+      <button onclick="saveForgiveness('${empId}','${date}','${kind}')" class="btn-primary flex-1">Forgive</button>
+      <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+  `);
+  setTimeout(()=>document.getElementById('fg-reason')?.focus(), 100);
+}
+function saveForgiveness(empId, date, kind){
+  const reason = document.getElementById('fg-reason').value.trim();
+  if (!reason) return alert("Please give a reason — this gets shown to the teacher.");
+  if (!state.adjustments) state.adjustments = [];
+  // Derive month from the date being forgiven, NOT from state.activeMonth — fixes the bug where
+  // forgiving a March LWP while activeMonth was April logged the adjustment under April.
+  const month = date.slice(0, 7);
+  state.adjustments.push({ id: uid(), month, employee_id: empId, date, kind, reason, decided_at: new Date().toISOString() });
+  saveState();
+  // Re-run reconciliation for the actually-affected month, not the active month
+  if (state.attendanceMonths[month]) rerunReconciliation(month);
+  else renderAll();
+  closeModal();
+}
+
+function emailReport(empId, month){
+  const emp = empById(empId); if (!emp) return;
+  const monthLabel = new Date(month+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
+  const subject = `Your attendance & payroll report — ${monthLabel}`;
+  const body = buildReportText(empId, month);
+  const mailto = `mailto:${emp.email||''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+}
+
+function whatsappReport(empId, month){
+  const emp = empById(empId); if (!emp) return;
+  if (!emp.phone) { alert(`No phone number for ${emp.display_name}. Edit their profile under Employees and add the phone (with country code, e.g. 919876543210).`); return; }
+  const body = buildReportText(empId, month);
+  const url = `https://wa.me/${emp.phone}?text=${encodeURIComponent(body)}`;
+  window.open(url, '_blank');
+}
+
+function copyReport(empId, month){
+  const body = buildReportText(empId, month);
+  navigator.clipboard.writeText(body).then(() => alert("Report copied to clipboard.")).catch(() => alert("Couldn't copy. Selecting the text manually may be needed."));
+}
+
+// ---- Bulk send ----
+function bulkEmailAll(month){
+  const m = state.attendanceMonths[month]; if (!m) return alert("No data for this month.");
+  const recipients = state.employees.filter(e => e.is_active && e.email && m.summaries.find(s => s.employee.id === e.id));
+  const skippedNoEmail = state.employees.filter(e => e.is_active && !e.email && m.summaries.find(s => s.employee.id === e.id)).length;
+  if (recipients.length === 0) return alert("No active employees with email addresses and report data for this month.");
+  const skipMsg = skippedNoEmail ? `\n\n${skippedNoEmail} active teacher${skippedNoEmail===1?'':'s'} ha${skippedNoEmail===1?'s':'ve'} no email on file and will be skipped — add their emails on the Employees page if you want them included.` : '';
+  if (!confirm(`Open ${recipients.length} email draft${recipients.length===1?'':'s'} in your default mail client?${skipMsg}\n\nYou'll click Send manually in each one. If your browser blocks popups, allow them for this site and try again.`)) return;
+  const monthLabel = new Date(month+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
+  recipients.forEach((emp, i) => {
+    setTimeout(() => {
+      const subject = `Your attendance & payroll report — ${monthLabel}`;
+      const body = buildReportText(emp.id, month);
+      const a = document.createElement('a');
+      a.href = `mailto:${emp.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      a.style.display = 'none';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }, i * 600);
+  });
+}
+
+function bulkWhatsappAll(month){
+  const m = state.attendanceMonths[month]; if (!m) return alert("No data for this month.");
+  const recipients = state.employees.filter(e => e.is_active && e.phone && m.summaries.find(s => s.employee.id === e.id));
+  const skippedNoPhone = state.employees.filter(e => e.is_active && !e.phone && m.summaries.find(s => s.employee.id === e.id)).length;
+  if (recipients.length === 0) return alert("No active employees with phone numbers and report data for this month.");
+  const skipMsg = skippedNoPhone ? `\n\n${skippedNoPhone} active teacher${skippedNoPhone===1?'':'s'} ha${skippedNoPhone===1?'s':'ve'} no phone on file and will be skipped — add their phones on the Employees page if you want them included.` : '';
+  if (!confirm(`Open ${recipients.length} WhatsApp draft${recipients.length===1?'':'s'} in new tabs?${skipMsg}\n\nThe browser may block all but the first — if so, look for the popup-blocked icon in your address bar and allow popups from this site. You'll click Send manually in each WhatsApp tab.`)) return;
+  recipients.forEach((emp, i) => {
+    setTimeout(() => {
+      const body = buildReportText(emp.id, month);
+      const url = `https://wa.me/${emp.phone}?text=${encodeURIComponent(body)}`;
+      window.open(url, '_blank');
+    }, i * 600);
+  });
+}
+
+function downloadWhatsappCsv(month){
+  const m = state.attendanceMonths[month]; if (!m) return alert("No data for this month.");
+  const recipients = state.employees.filter(e => e.is_active && e.phone && m.summaries.find(s => s.employee.id === e.id));
+  const skippedNoPhone = state.employees.filter(e => e.is_active && !e.phone && m.summaries.find(s => s.employee.id === e.id)).length;
+  if (recipients.length === 0) return alert("No active employees with phone numbers on file for this month. Add phone numbers under Employees first (format: 919876543210, with country code, no plus).");
+  const csvEscape = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = [
+    ['phone','name','message'],
+    ...recipients.map(emp => [emp.phone, emp.display_name, buildReportText(emp.id, month)])
+  ];
+  const csv = rows.map(r => r.map(csvEscape).join(',')).join('\n');
+  // Add UTF-8 BOM so Excel + most senders correctly handle the rupee symbol and other non-ASCII
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `whatsapp-bulk-${month}.csv`;
+  a.click();
+  if (skippedNoPhone) {
+    setTimeout(() => alert(`Saved ${recipients.length} recipients to whatsapp-bulk-${month}.csv.\n\n${skippedNoPhone} active teacher${skippedNoPhone===1?'':'s'} ha${skippedNoPhone===1?'s':'ve'} no phone on file and ${skippedNoPhone===1?'was':'were'} skipped — add their phones on the Employees page if you want them included next time.`), 100);
+  } else {
+    setTimeout(() => alert(`Saved ${recipients.length} recipients to whatsapp-bulk-${month}.csv. Upload it to your bulk WhatsApp sender now.`), 100);
+  }
+}
+
+function downloadAllReports(month){
+  const m = state.attendanceMonths[month]; if (!m) return alert("No data for this month.");
+  const sums = [...m.summaries].filter(s => s.employee.is_active).sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name));
+  if (sums.length === 0) return alert("Nothing to download.");
+  const sep = '\n\n' + '='.repeat(70) + '\n\n';
+  const blob = sums.map(s => `=== ${s.employee.display_name} ===\nEmail: ${s.employee.email||'—'}    Phone: ${s.employee.phone||'—'}\n\n${buildReportText(s.employee.id, month)}`).join(sep);
+  const file = new Blob([blob], { type:'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = `staff-reports-${month}.txt`;
+  a.click();
+}
+
+// ============================================================
+// ANOMALIES
+// ============================================================
+function renderAnomalies(){
+  const el = document.getElementById('anomalies-list');
+  const m = state.attendanceMonths[state.activeMonth];
+  const list = m?.anomalies || [];
+  if (list.length === 0) { el.innerHTML = `<div class="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-500">No open anomalies for ${state.activeMonth}. Once you import an attendance month, anything ambiguous lands here.</div>`; return; }
+  const labels = { missing_schedule:"Missing schedule", zero_punches:"Zero punches", name_mismatch:"Name mismatch", forgot_punch:"Forgot punch", excess_late_strikes:"Excess late strikes", suspect_leave_date:"Possible date mismatch", special_day_review:"Special day — needs review" };
+  el.innerHTML = list.map(a => {
+    let actions = '';
+    if (a.kind === 'special_day_review' && a.special_day_id && a.employee_id) {
+      actions = `<div class="mt-2 flex gap-2 flex-wrap">
+        <span class="text-xs text-gray-500 self-center mr-2">Mark as:</span>
+        <button class="btn-secondary text-xs" style="background:#16A34A;color:white" onclick="setSpecialDayStatus('${a.employee_id}','${a.special_day_id}','Present')">✓ Present</button>
+        <button class="btn-secondary text-xs" style="background:#0891B2;color:white" onclick="setSpecialDayStatus('${a.employee_id}','${a.special_day_id}','Excused')">Excused</button>
+        <button class="btn-secondary text-xs" style="background:#2563EB;color:white" onclick="setSpecialDayStatus('${a.employee_id}','${a.special_day_id}','CasualLeave')">CL</button>
+        <button class="btn-secondary text-xs" style="background:#4F46E5;color:white" onclick="setSpecialDayStatus('${a.employee_id}','${a.special_day_id}','EarnedLeave')">EL</button>
+        <button class="btn-secondary text-xs" style="background:#DC2626;color:white" onclick="setSpecialDayStatus('${a.employee_id}','${a.special_day_id}','LWP')">LWP</button>
+      </div>`;
+    } else {
+      actions = `<div class="mt-2 flex gap-3">
+        ${a.employee_id ? `<button class="btn-link" onclick="viewReport('${a.employee_id}'); goto('reports')">View ${empById(a.employee_id)?.display_name||''} report →</button>` : ''}
+        ${a.leave_id ? `<button class="btn-link" onclick="openLeaveForm('${a.leave_id}'); goto('leaves')">Edit the leave →</button>` : ''}
+      </div>`;
+    }
+    return `<div class="anomaly-card bg-white border border-gray-200 rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-1"><span class="badge b-mandatory">${labels[a.kind] || a.kind}</span></div>
+      <p class="text-sm text-gray-700">${a.description}</p>
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// SALARY
+// ============================================================
+function renderSalary(){
+  const tbody = document.getElementById('salary-tbody');
+  const m = state.attendanceMonths[state.activeMonth];
+  if (!m) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-12">No active import. Run an attendance reconciliation first.</td></tr>`; return; }
+  tbody.innerHTML = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name)).map(s => {
+    const sal = s.employee.monthly_salary || 0; const perDay = sal/26; const cutAmt = Math.round(perDay * s.totalCutDays); const net = Math.round(sal - cutAmt);
+    return `<tr>
+      <td class="font-medium">${s.employee.display_name}</td>
+      <td>${inr(sal)}</td>
+      <td>${inr(perDay)}</td>
+      <td>${s.fd}</td>
+      <td>${s.totalCutDays}</td>
+      <td class="text-red-600">${inr(cutAmt)}</td>
+      <td class="font-semibold text-green-700">${inr(net)}</td>
+    </tr>`;
+  }).join('');
+}
+function exportSalaryCsv(){
+  const m = state.attendanceMonths[state.activeMonth]; if (!m) return alert("No active import.");
+  const headers = ["Name","Monthly Salary","Per Day","Full Days","Late Strikes","Strike Half Days","Half LWP","LWP Days","CL","EL","Total Cuts","Cut Amount","Net Payable"];
+  const rows = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name)).map(s => { const sal = s.employee.monthly_salary || 0; const perDay = sal/26; const cutAmt = Math.round(perDay*s.totalCutDays); const net = Math.round(sal-cutAmt); return [s.employee.display_name, sal, Math.round(perDay), s.fd, s.lateStrikes, s.strikeHalfDays, s.halfLwp, s.lwpDays, s.clDays, s.elDays, s.totalCutDays, cutAmt, net].join(','); });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `salary-sheet-${state.activeMonth}.csv`; a.click();
+}
+
+// ============================================================
+// MODAL forms
+// ============================================================
+function openModal(title, html){
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal(){ document.getElementById('modal').classList.remove('show'); }
+document.getElementById('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+
+function openEmployeeForm(id){
+  const e = id ? empById(id) : null;
+  const isEdit = !!e;
+  openModal(isEdit ? "Edit employee" : "Add employee", `
+    <div class="space-y-3">
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Display name *</label><input id="ef-display" class="input" value="${e?.display_name||''}" /></div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">PetPooja name (must match exactly)</label><input id="ef-pp" class="input" value="${e?.name_petpooja||''}" /></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Department</label><select id="ef-dept" class="input">${["Teacher","Support Staff","Admin","C Suite"].map(d=>`<option ${e?.department===d?'selected':''}>${d}</option>`).join('')}</select></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Designation</label><input id="ef-desg" class="input" value="${e?.designation||''}" /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Reporting (HH:MM)</label><input id="ef-rep" type="time" class="input" value="${e?String(Math.floor(e.reporting_minutes/60)).padStart(2,'0')+':'+String(e.reporting_minutes%60).padStart(2,'0'):'09:00'}" /></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Monthly salary (₹)</label><input id="ef-sal" type="number" class="input" value="${e?.monthly_salary||0}" /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Email</label><input id="ef-email" type="email" class="input" value="${e?.email||''}" /></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Phone (incl. country code, e.g. 919876543210)</label><input id="ef-phone" class="input" value="${e?.phone||''}" placeholder="919876543210" /></div>
+      </div>
+      <label class="flex items-center gap-2 text-sm"><input id="ef-active" type="checkbox" ${e?.is_active!==false?'checked':''} /> Active employee</label>
+      <div class="flex gap-2 pt-3">
+        <button onclick="saveEmployee('${id||''}')" class="btn-primary flex-1">${isEdit?'Save changes':'Create'}</button>
+        <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+function saveEmployee(id){
+  const display = document.getElementById('ef-display').value.trim();
+  const pp = document.getElementById('ef-pp').value;
+  const dept = document.getElementById('ef-dept').value;
+  const desg = document.getElementById('ef-desg').value.trim();
+  const repStr = document.getElementById('ef-rep').value;
+  const [hh, mm] = repStr.split(':').map(Number);
+  const repMin = hh*60 + (mm||0);
+  const sal = parseFloat(document.getElementById('ef-sal').value) || 0;
+  const email = document.getElementById('ef-email').value.trim();
+  const phone = document.getElementById('ef-phone').value.replace(/\D/g, '');
+  const active = document.getElementById('ef-active').checked;
+  if (!display || !pp) return alert("Display name and PetPooja name are required.");
+  if (id) { Object.assign(empById(id), { display_name:display, name_petpooja:pp, department:dept, designation:desg, reporting_minutes:repMin, monthly_salary:sal, email, phone, is_active:active }); }
+  else { state.employees.push({ id: uid(), display_name:display, name_petpooja:pp, department:dept, designation:desg, reporting_minutes:repMin, monthly_salary:sal, email, phone, is_active:active }); }
+  saveState(); rerunActiveMonth(); renderAll(); closeModal();
+}
+
+function openLeaveForm(id){
+  const L = id ? state.leaves.find(x=>x.id===id) : null;
+  const isEdit = !!L;
+  const empOptions = state.employees.filter(e=>e.is_active).sort((a,b)=>a.display_name.localeCompare(b.display_name)).map(e => `<option value="${e.id}" ${L?.employee_id===e.id?'selected':''}>${e.display_name}</option>`).join('');
+  openModal(isEdit ? "Edit leave application" : "Add leave application", `
+    <div class="space-y-3">
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Employee *</label><select id="lf-emp" class="input"><option value="">— select —</option>${empOptions}</select></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Type *</label><select id="lf-type" class="input">${["CL","EL","LWP","Other"].map(t=>`<option ${L?.leave_type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Status</label><select id="lf-status" class="input">${["Pending","Approved","Rejected"].map(s=>`<option ${L?.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Start date *</label><input id="lf-start" type="date" class="input" value="${L?.start_date||''}" /></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">End date *</label><input id="lf-end" type="date" class="input" value="${L?.end_date||''}" /></div>
+      </div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Total days</label><input id="lf-days" type="number" step="0.5" class="input" value="${L?.total_days||1}" /></div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Reason</label><input id="lf-reason" class="input" value="${L?.reason||''}" /></div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Reviewer note (for rejections)</label><input id="lf-note" class="input" value="${L?.reviewer_note||''}" /></div>
+      <div class="flex gap-2 pt-3">
+        <button onclick="saveLeave('${id||''}')" class="btn-primary flex-1">${isEdit?'Save changes':'Create'}</button>
+        <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+function saveLeave(id){
+  const empId = document.getElementById('lf-emp').value;
+  const type = document.getElementById('lf-type').value;
+  const status = document.getElementById('lf-status').value;
+  const start = document.getElementById('lf-start').value;
+  const end = document.getElementById('lf-end').value;
+  const days = parseFloat(document.getElementById('lf-days').value) || 1;
+  const reason = document.getElementById('lf-reason').value;
+  const note = document.getElementById('lf-note').value;
+  if (!empId || !start || !end) return alert("Employee, start date, end date are required.");
+  if (id) {
+    const L = state.leaves.find(x=>x.id===id);
+    Object.assign(L, { employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note });
+    if (status !== "Pending" && !L.reviewed_at) L.reviewed_at = new Date().toISOString();
+  } else {
+    state.leaves.push({ id: uid(), employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note, applied_at:new Date().toISOString(), reviewed_at: status!=="Pending" ? new Date().toISOString() : null });
+  }
+  saveState(); rerunActiveMonth(); renderAll(); closeModal();
+}
+
+function addHoliday(){ const date = prompt("Date (YYYY-MM-DD):"); if (!date) return; const name = prompt("Holiday name:"); if (!name) return; const mandatory = confirm("Mandatory? OK = yes, Cancel = optional"); state.holidays.push({ id:uid(), date, name, is_mandatory: mandatory }); saveState(); rerunActiveMonth(); renderAll(); }
+function removeHoliday(id){ if (confirm("Delete this holiday?")) { state.holidays = state.holidays.filter(h=>h.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
+function addVacation(){ const start = prompt("Start date (YYYY-MM-DD):"); if (!start) return; const end = prompt("End date (YYYY-MM-DD):", start); if (!end) return; const name = prompt("Description:"); if (!name) return; state.vacations.push({ id:uid(), start_date: start, end_date: end, name }); saveState(); rerunActiveMonth(); renderAll(); }
+function removeVacation(id){ if (confirm("Delete this vacation?")) { state.vacations = state.vacations.filter(v=>v.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
+
+// ============================================================
+// Nav
+// ============================================================
+function goto(panel){
+  document.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active', a.dataset.panel === panel));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-'+panel));
+  if (panel === 'reports' && !viewingEmployeeId) renderReports();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('.nav-link').forEach(a => a.addEventListener('click', () => { if (a.dataset.panel !== 'reports') viewingEmployeeId = null; goto(a.dataset.panel); }));
+
+// ============================================================
+// Bootstrap — wait for an authenticated session, then hydrate state and render.
+// ============================================================
+(async function bootstrap(){
+  try {
+    const sb = getSb();
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      await initApp();
+    } else {
+      // Login overlay is already visible by default — wait for the form submit.
+      document.getElementById('login-overlay').style.display = 'flex';
+    }
+    // Auto-recover if the user signs out in another tab, etc.
+    sb.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        location.reload();
+      }
+    });
+  } catch (e) {
+    console.error('[bootstrap]', e);
+    alert('Could not initialise the portal: ' + e.message);
+  }
+})();
+</script>
+</body>
+</html>
