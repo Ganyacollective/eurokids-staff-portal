@@ -27,7 +27,9 @@ export async function middleware(request: NextRequest) {
   const isPublic =
     path === "/" ||
     path === "/portal.html" ||
+    path === "/teacher.html" ||
     path.startsWith("/portal") ||
+    path.startsWith("/teacher") ||
     path.startsWith("/login") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/_next") ||

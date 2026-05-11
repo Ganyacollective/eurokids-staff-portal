@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eurokids — My Portal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { eurokids: { orange: "#F58220", blue: "#1B9ED9", ink: "#1F2937", paper: "#FAFAFA" }}}}};
+</script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .input { width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 10px; font-size: 14px; }
+  .input:focus { outline: none; border-color: #1B9ED9; box-shadow: 0 0 0 3px rgba(27,158,217,.15); }
+  .btn-primary { background: #F58220; color: white; padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+  .btn-primary:hover { background: #E5751C; }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-secondary { background: #F3F4F6; color: #1F2937; padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 500; }
+  .btn-secondary:hover { background: #E5E7EB; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .b-pending  { background: #FEF3C7; color: #B45309; }
+  .b-approved { background: #DCFCE7; color: #15803D; }
+  .b-rejected { background: #FEE2E2; color: #B91C1C; }
+  .b-cl       { background: #DBEAFE; color: #1E40AF; }
+  .b-el       { background: #E0E7FF; color: #3730A3; }
+  .b-lwp      { background: #FEE2E2; color: #B91C1C; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .modal-bg.show { display: flex; }
+  .modal { background: white; border-radius: 18px; padding: 24px; max-width: 460px; width: 100%; max-height: 90vh; overflow-y: auto; }
+</style>
+</head>
+<body class="bg-eurokids-paper text-eurokids-ink min-h-screen">
+
+<!-- Login overlay -->
+<div id="login-overlay" style="display:flex;" class="fixed inset-0 z-[100] bg-eurokids-paper items-center justify-center p-4">
+  <div class="w-full max-w-sm bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-10 h-10 rounded-xl bg-eurokids-orange flex items-center justify-center text-white font-bold">E</div>
+      <div>
+        <h1 class="text-lg font-semibold">My Portal</h1>
+        <p class="text-xs text-gray-500">Eurokids JM Enclave</p>
+      </div>
+    </div>
+    <form onsubmit="return doLogin(event)" class="space-y-4">
+      <div>
+        <label class="text-sm font-medium text-gray-700 block mb-1">Email</label>
+        <input id="login-email" type="email" required autocomplete="username" placeholder="you@eurokidsjmdenclave.org" class="input" />
+      </div>
+      <div>
+        <label class="text-sm font-medium text-gray-700 block mb-1">Password</label>
+        <input id="login-password" type="password" required autocomplete="current-password" class="input" />
+      </div>
+      <div id="login-error" class="text-sm text-red-600 hidden bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+      <button id="login-btn" type="submit" class="btn-primary w-full">Sign in</button>
+    </form>
+    <p class="text-xs text-gray-500 mt-6 text-center leading-relaxed">
+      Trouble signing in? Ask the office for a password reset.
+    </p>
+  </div>
+</div>
+
+<!-- Boot curtain -->
+<div id="boot-overlay" style="display:none;" class="fixed inset-0 z-[90] bg-eurokids-paper items-center justify-center">
+  <div class="text-sm text-gray-500">Loading your portal…</div>
+</div>
+
+<!-- Main -->
+<main id="main" style="display:none;" class="max-w-md mx-auto p-5 space-y-5">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between">
+    <div>
+      <div class="text-xs text-gray-500 uppercase tracking-wider">Welcome back</div>
+      <h1 id="greeting" class="text-2xl font-bold text-eurokids-ink">—</h1>
+      <div id="role-line" class="text-sm text-gray-500">—</div>
+    </div>
+    <button onclick="doLogout()" title="Sign out" class="text-sm text-gray-500 hover:text-eurokids-blue">Sign out</button>
+  </header>
+
+  <!-- Leave balance card -->
+  <section class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
+    <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">This academic year · 2026-27</div>
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <div class="text-xs text-gray-500">Casual leaves left</div>
+        <div class="text-3xl font-bold text-eurokids-ink"><span id="cl-left">—</span> <span class="text-base text-gray-400 font-medium">/ <span id="cl-total">—</span></span></div>
+      </div>
+      <div>
+        <div class="text-xs text-gray-500">Earned leaves left</div>
+        <div class="text-3xl font-bold text-eurokids-ink"><span id="el-left">—</span> <span class="text-base text-gray-400 font-medium">/ <span id="el-total">—</span></span></div>
+      </div>
+    </div>
+    <div class="text-xs text-gray-400 mt-3">Counts approved leaves taken between 06 Apr 2026 and 19 Mar 2027.</div>
+  </section>
+
+  <!-- Apply for leave -->
+  <button onclick="openLeaveModal()" class="btn-primary w-full">+ Apply for leave</button>
+
+  <!-- History -->
+  <section>
+    <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3">My leave applications</h2>
+    <div id="history-list" class="space-y-3">
+      <div class="text-sm text-gray-400">Loading…</div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Apply Leave modal -->
+<div id="leave-modal" class="modal-bg">
+  <div class="modal">
+    <h2 class="text-lg font-semibold mb-1">Apply for leave</h2>
+    <p class="text-sm text-gray-500 mb-5">HR will review and let you know once decided.</p>
+    <form onsubmit="return submitLeave(event)" class="space-y-4">
+      <div>
+        <label class="text-sm font-medium text-gray-700 block mb-1">Type</label>
+        <select id="lr-type" class="input">
+          <option value="CL">Casual Leave (CL)</option>
+          <option value="EL">Earned Leave (EL)</option>
+          <option value="LWP">Leave Without Pay (LWP)</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-sm font-medium text-gray-700 block mb-1">From</label>
+          <input id="lr-start" type="date" required class="input" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700 block mb-1">To</label>
+          <input id="lr-end" type="date" required class="input" />
+        </div>
+      </div>
+      <div>
+        <label class="text-sm font-medium text-gray-700 block mb-1">Reason</label>
+        <textarea id="lr-reason" rows="3" required class="input" placeholder="A short reason HR can read at a glance."></textarea>
+      </div>
+      <div id="lr-error" class="text-sm text-red-600 hidden bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" onclick="closeLeaveModal()" class="btn-secondary">Cancel</button>
+        <button id="lr-submit" type="submit" class="btn-primary">Submit</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Config & state
+// ============================================================
+const SUPABASE_URL = 'https://saqefzgnvznuurupqpsw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_u8v_dh1zMGdbrIQPMcxrFg_HCPJeUP9';
+const AY = { start: '2026-04-06', end: '2027-03-19', cl_per_teacher: 7, el_per_teacher: 8 };
+
+let _sb = null;
+let me = null;        // teacher_links row
+let myRequests = [];  // leave_requests rows (this AY)
+
+function getSb(){
+  if (_sb) return _sb;
+  _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eurokids-teacher-portal-auth' }
+  });
+  return _sb;
+}
+
+// ============================================================
+// Auth
+// ============================================================
+async function doLogin(ev){
+  ev.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.classList.add('hidden'); errEl.textContent = '';
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const sb = getSb();
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Sign in';
+    return false;
+  }
+  await initApp();
+  return false;
+}
+
+async function doLogout(){
+  if (!confirm('Sign out?')) return;
+  try { await getSb().auth.signOut(); } catch(e){}
+  location.reload();
+}
+
+// ============================================================
+// Init
+// ============================================================
+async function initApp(){
+  document.getElementById('login-overlay').style.display = 'none';
+  const boot = document.getElementById('boot-overlay');
+  boot.style.display = 'flex';
+  try {
+    const sb = getSb();
+    // 1) Find which employee this auth user is linked to
+    const { data: link, error: linkErr } = await sb.from('teacher_links').select('*').single();
+    if (linkErr || !link) {
+      alert("Your account isn't linked to an employee record yet. Ask HR to set this up.");
+      await sb.auth.signOut();
+      location.reload();
+      return;
+    }
+    me = link;
+    document.getElementById('greeting').textContent = me.display_name.split(' ')[0];
+    document.getElementById('role-line').textContent = me.designation ? `${me.designation} · ${me.department}` : (me.department || '');
+
+    // 2) Load my leave requests for the current AY
+    await loadRequests();
+    renderBalance();
+    renderHistory();
+
+    document.getElementById('main').style.display = 'block';
+  } catch (e) {
+    alert('Failed to load: ' + e.message);
+    console.error(e);
+  } finally {
+    boot.style.display = 'none';
+  }
+}
+
+async function loadRequests(){
+  const sb = getSb();
+  const { data, error } = await sb.from('leave_requests')
+    .select('*')
+    .gte('start_date', AY.start)
+    .lte('end_date', AY.end)
+    .order('applied_at', { ascending: false });
+  if (error) { console.error('[loadRequests]', error); myRequests = []; return; }
+  myRequests = data || [];
+}
+
+// ============================================================
+// Rendering
+// ============================================================
+function renderBalance(){
+  const approved = myRequests.filter(r => r.status === 'Approved');
+  const usedCL = approved.filter(r => r.leave_type === 'CL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  const usedEL = approved.filter(r => r.leave_type === 'EL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  document.getElementById('cl-total').textContent = AY.cl_per_teacher;
+  document.getElementById('el-total').textContent = AY.el_per_teacher;
+  document.getElementById('cl-left').textContent  = Math.max(0, AY.cl_per_teacher - usedCL);
+  document.getElementById('el-left').textContent  = Math.max(0, AY.el_per_teacher - usedEL);
+}
+
+function fmtDate(iso){
+  const d = new Date(iso + 'T00:00:00Z');
+  return d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' });
+}
+
+function renderHistory(){
+  const wrap = document.getElementById('history-list');
+  if (myRequests.length === 0) {
+    wrap.innerHTML = `<div class="text-sm text-gray-400 bg-white border border-gray-200 rounded-xl p-4 text-center">No leave applications yet this year.</div>`;
+    return;
+  }
+  wrap.innerHTML = myRequests.map(r => {
+    const dateText = r.start_date === r.end_date ? fmtDate(r.start_date) : `${fmtDate(r.start_date)} – ${fmtDate(r.end_date)}`;
+    const statusBadge = `<span class="badge b-${r.status.toLowerCase()}">${r.status}</span>`;
+    const typeBadge   = `<span class="badge b-${r.leave_type.toLowerCase()}">${r.leave_type}</span>`;
+    const reviewer    = r.reviewer_note ? `<div class="text-xs text-gray-500 mt-2 italic">HR note: ${escapeHtml(r.reviewer_note)}</div>` : '';
+    return `
+      <div class="bg-white border border-gray-200 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">${typeBadge}${statusBadge}</div>
+          <div class="text-xs text-gray-400">${parseFloat(r.total_days)} day${parseFloat(r.total_days)===1?'':'s'}</div>
+        </div>
+        <div class="text-sm font-medium text-eurokids-ink">${dateText}</div>
+        <div class="text-sm text-gray-600 mt-1">${escapeHtml(r.reason || '')}</div>
+        ${reviewer}
+      </div>
+    `;
+  }).join('');
+}
+
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ============================================================
+// Apply leave
+// ============================================================
+function openLeaveModal(){
+  document.getElementById('lr-type').value = 'CL';
+  document.getElementById('lr-start').value = '';
+  document.getElementById('lr-end').value = '';
+  document.getElementById('lr-reason').value = '';
+  document.getElementById('lr-error').classList.add('hidden');
+  document.getElementById('leave-modal').classList.add('show');
+}
+function closeLeaveModal(){
+  document.getElementById('leave-modal').classList.remove('show');
+}
+
+function daysBetween(start, end){
+  const a = new Date(start+'T00:00:00Z'), b = new Date(end+'T00:00:00Z');
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+async function submitLeave(ev){
+  ev.preventDefault();
+  const type = document.getElementById('lr-type').value;
+  const start = document.getElementById('lr-start').value;
+  const end = document.getElementById('lr-end').value;
+  const reason = document.getElementById('lr-reason').value.trim();
+  const errEl = document.getElementById('lr-error');
+  const btn = document.getElementById('lr-submit');
+
+  errEl.classList.add('hidden');
+  if (!start || !end) { errEl.textContent = 'Please pick both dates.'; errEl.classList.remove('hidden'); return false; }
+  if (end < start)    { errEl.textContent = 'End date can\'t be before start date.'; errEl.classList.remove('hidden'); return false; }
+  if (!reason)        { errEl.textContent = 'Please add a short reason.'; errEl.classList.remove('hidden'); return false; }
+
+  const total_days = daysBetween(start, end);
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const sb = getSb();
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from('leave_requests').insert({
+      user_id:     user.id,
+      employee_id: me.employee_id,
+      leave_type:  type,
+      start_date:  start,
+      end_date:    end,
+      total_days,
+      reason,
+      status:      'Pending',
+    });
+    if (error) {
+      errEl.textContent = error.message;
+      errEl.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = 'Submit';
+      return false;
+    }
+    closeLeaveModal();
+    await loadRequests();
+    renderHistory();
+    renderBalance();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Submit';
+  }
+  return false;
+}
+
+// ============================================================
+// Bootstrap
+// ============================================================
+(async function bootstrap(){
+  try {
+    const sb = getSb();
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      await initApp();
+    } else {
+      document.getElementById('login-overlay').style.display = 'flex';
+    }
+    sb.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') location.reload();
+    });
+  } catch (e) {
+    console.error('[bootstrap]', e);
+    alert('Could not initialise: ' + e.message);
+  }
+})();
+</script>
+</body>
+</html>

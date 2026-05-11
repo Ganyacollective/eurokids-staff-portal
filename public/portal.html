@@ -127,6 +127,7 @@
     </div>
     <nav class="flex-1 p-3 space-y-1 overflow-y-auto" id="nav">
       <a class="nav-link active flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="dashboard">📊 Dashboard</a>
+      <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="inbox">📥 Inbox <span id="nav-inbox" class="ml-auto text-xs bg-red-100 text-red-700 px-2 rounded-full hidden"></span></a>
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="reports">📋 Monthly Reports</a>
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="leaves">🏖️ Leave Applications <span id="nav-pending" class="ml-auto text-xs bg-amber-100 text-amber-700 px-2 rounded-full hidden"></span></a>
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="balances">📈 Leave Balances</a>
@@ -167,6 +168,20 @@
             <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Recent anomalies</h2>
             <div id="anomalies-preview" class="text-sm text-gray-600"></div>
           </div>
+        </div>
+      </section>
+
+      <!-- INBOX — Teacher leave-request triage -->
+      <section id="panel-inbox" class="panel">
+        <div class="flex items-end justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-semibold">Inbox</h1>
+            <p class="text-sm text-gray-500 mt-1">Leave requests submitted by staff through their portal.</p>
+          </div>
+          <button onclick="refreshInbox()" class="btn-secondary">↻ Refresh</button>
+        </div>
+        <div id="inbox-content" class="space-y-3">
+          <div class="text-sm text-gray-500">Loading inbox…</div>
         </div>
       </section>
 
@@ -562,6 +577,7 @@ async function initApp(){
   boot.style.display = 'flex';
   try {
     await loadState();
+    await loadInbox();
     runMigrations();
     renderAll();
   } catch (e) {
@@ -925,6 +941,7 @@ function renderAll(){
   renderReports();
   renderAnomalies();
   renderSalary();
+  renderInbox();
   updateNavBadges();
 }
 
@@ -936,6 +953,142 @@ function updateNavBadges(){
   const a = m?.anomalies?.length || 0;
   const navA = document.getElementById('nav-anom');
   navA.textContent = a; navA.classList.toggle('hidden', a===0);
+  const inboxCount = (_inbox || []).filter(r => r.status === 'Pending').length;
+  const navI = document.getElementById('nav-inbox');
+  navI.textContent = inboxCount; navI.classList.toggle('hidden', inboxCount === 0);
+}
+
+// ============================================================
+// Inbox — teacher leave-request triage
+// ============================================================
+let _inbox = [];
+
+async function loadInbox(){
+  try {
+    const sb = getSb();
+    const { data, error } = await sb.from('leave_requests')
+      .select('*')
+      .order('applied_at', { ascending: false })
+      .limit(500);
+    if (error) { console.error('[loadInbox]', error); _inbox = []; return; }
+    _inbox = data || [];
+  } catch (e) { console.error('[loadInbox]', e); _inbox = []; }
+}
+
+async function refreshInbox(){
+  await loadInbox();
+  renderInbox();
+  updateNavBadges();
+}
+
+function renderInbox(){
+  const wrap = document.getElementById('inbox-content');
+  if (!wrap) return;
+  const pending  = _inbox.filter(r => r.status === 'Pending');
+  const recent   = _inbox.filter(r => r.status !== 'Pending').slice(0, 20);
+
+  const section = (title, items, emptyMsg) => {
+    if (items.length === 0) return `<div class="text-sm text-gray-400 bg-white border border-gray-200 rounded-xl p-4">${emptyMsg}</div>`;
+    return items.map(r => {
+      const emp = state.employees.find(e => e.id === r.employee_id);
+      const name = emp?.display_name || `(unknown · ${r.employee_id})`;
+      const dateText = r.start_date === r.end_date ? fmtDate(r.start_date) : `${fmtDate(r.start_date)} → ${fmtDate(r.end_date)}`;
+      const statusBadge = `<span class="badge b-${r.status === 'Pending' ? 'pending' : r.status === 'Approved' ? 'approved' : 'rejected'}">${r.status}</span>`;
+      const typeBadge   = `<span class="badge b-${r.leave_type === 'CL' ? 'cl' : r.leave_type === 'EL' ? 'el' : 'lwp'}">${r.leave_type}</span>`;
+      const days = parseFloat(r.total_days);
+      const actions = r.status === 'Pending'
+        ? `<div class="flex gap-2 mt-3">
+             <button onclick="approveRequest('${r.id}')" class="btn-primary text-xs">Approve</button>
+             <button onclick="rejectRequest('${r.id}')" class="btn-secondary text-xs">Reject</button>
+           </div>`
+        : (r.reviewer_note ? `<div class="text-xs text-gray-500 mt-2 italic">Note: ${escapeHtml(r.reviewer_note)}</div>` : '');
+      return `
+        <div class="bg-white border border-gray-200 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-1">
+            <div class="font-semibold text-eurokids-ink">${name}</div>
+            <div class="flex items-center gap-2">${typeBadge}${statusBadge}</div>
+          </div>
+          <div class="text-sm text-gray-600">${dateText} <span class="text-gray-400">·</span> ${days} day${days===1?'':'s'}</div>
+          <div class="text-sm text-gray-700 mt-2">${escapeHtml(r.reason||'')}</div>
+          <div class="text-xs text-gray-400 mt-2">Applied ${new Date(r.applied_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}</div>
+          ${actions}
+        </div>
+      `;
+    }).join('');
+  };
+
+  wrap.innerHTML = `
+    <div class="mb-6">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3">Pending · ${pending.length}</h2>
+      <div class="space-y-3">${section('Pending', pending, "No pending requests. You're caught up.")}</div>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3">Recently decided</h2>
+      <div class="space-y-3">${section('Decided', recent, 'No recent decisions.')}</div>
+    </div>
+  `;
+}
+
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function approveRequest(id){
+  const r = _inbox.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`Approve ${r.leave_type} for ${parseFloat(r.total_days)} day(s) from ${fmtDateShort(r.start_date)} to ${fmtDateShort(r.end_date)}?`)) return;
+
+  try {
+    const sb = getSb();
+    const { data: { user } } = await sb.auth.getUser();
+    // 1) Update the leave_requests row
+    const { error: updErr } = await sb.from('leave_requests').update({
+      status: 'Approved',
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user.id,
+    }).eq('id', id);
+    if (updErr) return alert('Approval failed: ' + updErr.message);
+
+    // 2) Promote into the blob's leaves array so the reconciliation engine consumes it
+    state.leaves.push({
+      id: uid(),
+      employee_id: r.employee_id,
+      leave_type:  r.leave_type,
+      start_date:  r.start_date,
+      end_date:    r.end_date,
+      total_days:  parseFloat(r.total_days),
+      reason:      r.reason || '',
+      status:      'Approved',
+      applied_at:  r.applied_at,
+      reviewed_at: new Date().toISOString(),
+      source:      'teacher_portal',
+      source_id:   r.id,
+    });
+    saveState();
+    rerunActiveMonth();
+    await loadInbox();
+    renderAll();
+  } catch (e) { alert('Approval failed: ' + e.message); }
+}
+
+async function rejectRequest(id){
+  const r = _inbox.find(x => x.id === id);
+  if (!r) return;
+  const note = prompt('Reason for rejection (visible to the teacher):', '');
+  if (note === null) return;
+
+  try {
+    const sb = getSb();
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from('leave_requests').update({
+      status: 'Rejected',
+      reviewer_note: note,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user.id,
+    }).eq('id', id);
+    if (error) return alert('Rejection failed: ' + error.message);
+    await loadInbox();
+    renderInbox();
+    updateNavBadges();
+  } catch (e) { alert('Rejection failed: ' + e.message); }
 }
 
 function renderDashboard(){
@@ -1009,7 +1162,7 @@ function renderEmployees(){
     <td class="text-gray-600 text-xs">${e.phone || '<span class="text-gray-400 italic">—</span>'}</td>
     <td class="text-gray-600 text-xs">${e.email || '<span class="text-gray-400 italic">—</span>'}</td>
     <td class="text-right">${inr(e.monthly_salary)}</td>
-    <td><button onclick="openEmployeeForm('${e.id}')" class="btn-link">Edit</button> · ${e.is_active ? `<button onclick="archiveEmployee('${e.id}')" class="btn-danger">Archive</button>` : `<button onclick="restoreEmployee('${e.id}')" class="btn-link" style="color:#15803D">Restore</button>`}</td>
+    <td><button onclick="openEmployeeForm('${e.id}')" class="btn-link">Edit</button> · <button onclick="resetEmployeePassword('${e.id}')" class="btn-link" title="Reset their portal password">🔑</button> · ${e.is_active ? `<button onclick="archiveEmployee('${e.id}')" class="btn-danger">Archive</button>` : `<button onclick="restoreEmployee('${e.id}')" class="btn-link" style="color:#15803D">Restore</button>`}</td>
   </tr>`).join('');
 }
 
@@ -1839,6 +1992,18 @@ document.getElementById('modal').addEventListener('click', (e) => { if (e.target
 function openEmployeeForm(id){
   const e = id ? empById(id) : null;
   const isEdit = !!e;
+  const loginSection = isEdit ? '' : `
+      <div class="border-t border-gray-200 pt-4 mt-2">
+        <label class="flex items-center gap-2 text-sm font-medium">
+          <input id="ef-create-login" type="checkbox" onchange="document.getElementById('ef-login-fields').style.display=this.checked?'block':'none'" />
+          Create a portal login for this person
+        </label>
+        <div id="ef-login-fields" style="display:none" class="mt-3 space-y-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <div><label class="text-xs font-medium text-gray-700 block mb-1">Login email *</label><input id="ef-login-email" type="email" class="input" placeholder="firstname@eurokidsjmdenclave.org" /></div>
+          <div><label class="text-xs font-medium text-gray-700 block mb-1">Temporary password</label><input id="ef-login-pwd" class="input" value="eurokids123" /></div>
+          <div class="text-xs text-gray-500">They sign in at <span class="font-mono">/teacher</span> and can change the password later.</div>
+        </div>
+      </div>`;
   openModal(isEdit ? "Edit employee" : "Add employee", `
     <div class="space-y-3">
       <div><label class="text-xs font-medium text-gray-700 block mb-1">Display name *</label><input id="ef-display" class="input" value="${e?.display_name||''}" /></div>
@@ -1856,14 +2021,16 @@ function openEmployeeForm(id){
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Phone (incl. country code, e.g. 919876543210)</label><input id="ef-phone" class="input" value="${e?.phone||''}" placeholder="919876543210" /></div>
       </div>
       <label class="flex items-center gap-2 text-sm"><input id="ef-active" type="checkbox" ${e?.is_active!==false?'checked':''} /> Active employee</label>
+      ${loginSection}
+      <div id="ef-error" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
       <div class="flex gap-2 pt-3">
-        <button onclick="saveEmployee('${id||''}')" class="btn-primary flex-1">${isEdit?'Save changes':'Create'}</button>
+        <button id="ef-save" onclick="saveEmployee('${id||''}')" class="btn-primary flex-1">${isEdit?'Save changes':'Create'}</button>
         <button onclick="closeModal()" class="btn-secondary">Cancel</button>
       </div>
     </div>
   `);
 }
-function saveEmployee(id){
+async function saveEmployee(id){
   const display = document.getElementById('ef-display').value.trim();
   const pp = document.getElementById('ef-pp').value;
   const dept = document.getElementById('ef-dept').value;
@@ -1875,10 +2042,86 @@ function saveEmployee(id){
   const email = document.getElementById('ef-email').value.trim();
   const phone = document.getElementById('ef-phone').value.replace(/\D/g, '');
   const active = document.getElementById('ef-active').checked;
-  if (!display || !pp) return alert("Display name and PetPooja name are required.");
-  if (id) { Object.assign(empById(id), { display_name:display, name_petpooja:pp, department:dept, designation:desg, reporting_minutes:repMin, monthly_salary:sal, email, phone, is_active:active }); }
-  else { state.employees.push({ id: uid(), display_name:display, name_petpooja:pp, department:dept, designation:desg, reporting_minutes:repMin, monthly_salary:sal, email, phone, is_active:active }); }
+  const errEl = document.getElementById('ef-error');
+  const saveBtn = document.getElementById('ef-save');
+  const showErr = msg => { if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); } else { alert(msg); } };
+  if (errEl) errEl.classList.add('hidden');
+
+  if (!display || !pp) return showErr("Display name and PetPooja name are required.");
+
+  if (id) {
+    Object.assign(empById(id), { display_name:display, name_petpooja:pp, department:dept, designation:desg, reporting_minutes:repMin, monthly_salary:sal, email, phone, is_active:active });
+    saveState(); rerunActiveMonth(); renderAll(); closeModal();
+    return;
+  }
+
+  // Create flow — first add the local employee record, then (optionally) provision a portal login.
+  const newEmpId = uid();
+  state.employees.push({ id: newEmpId, display_name:display, name_petpooja:pp, department:dept, designation:desg, reporting_minutes:repMin, monthly_salary:sal, email, phone, is_active:active });
+
+  const createLogin = document.getElementById('ef-create-login')?.checked;
+  if (createLogin) {
+    const loginEmail = document.getElementById('ef-login-email').value.trim().toLowerCase();
+    const loginPwd   = document.getElementById('ef-login-pwd').value;
+    if (!loginEmail) {
+      // Roll back local push and surface error
+      state.employees = state.employees.filter(e => e.id !== newEmpId);
+      return showErr("Login email is required when creating a portal login.");
+    }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Creating login…'; }
+    try {
+      const sb = getSb();
+      const { data: { session } } = await sb.auth.getSession();
+      const resp = await fetch('/api/admin/create-teacher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          email: loginEmail,
+          password: loginPwd,
+          employee_id: newEmpId,
+          display_name: display,
+          department: dept,
+          designation: desg,
+        }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) {
+        state.employees = state.employees.filter(e => e.id !== newEmpId);
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Create'; }
+        return showErr('Login creation failed: ' + (json.error || resp.statusText));
+      }
+      // Stash the login email on the employee record so HR can see it later
+      const newEmp = empById(newEmpId);
+      if (newEmp && !newEmp.email) newEmp.email = loginEmail;
+    } catch (e) {
+      state.employees = state.employees.filter(e => e.id !== newEmpId);
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Create'; }
+      return showErr('Login creation failed: ' + e.message);
+    }
+  }
+
   saveState(); rerunActiveMonth(); renderAll(); closeModal();
+}
+
+async function resetEmployeePassword(empId){
+  const e = empById(empId);
+  if (!e) return;
+  const loginEmail = prompt(`Login email for ${e.display_name}:`, e.email || '');
+  if (!loginEmail) return;
+  const newPwd = prompt('New temporary password:', 'eurokids123');
+  if (!newPwd) return;
+  try {
+    const sb = getSb();
+    const { data: { session } } = await sb.auth.getSession();
+    const resp = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ email: loginEmail.trim().toLowerCase(), new_password: newPwd }),
+    });
+    const json = await resp.json();
+    if (!resp.ok) return alert('Reset failed: ' + (json.error || resp.statusText));
+    alert(`Password reset for ${loginEmail}.\nNew password: ${newPwd}\nShare this with them privately.`);
+  } catch (err) { alert('Reset failed: ' + err.message); }
 }
 
 function openLeaveForm(id){
