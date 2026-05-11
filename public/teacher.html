@@ -156,13 +156,17 @@ let _sb = null;
 let me = null;        // teacher_links row
 let myRequests = [];  // leave_requests rows (this AY)
 
+const HR_EMAILS = ['hr@eurokidsjmdenclave.org', 'admin@eurokidsjmdenclave.org'];
+
 function getSb(){
   if (_sb) return _sb;
   _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eurokids-teacher-portal-auth' }
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eurokids-portal-auth' }
   });
   return _sb;
 }
+
+function isHrEmail(email){ return HR_EMAILS.includes((email || '').toLowerCase()); }
 
 // ============================================================
 // Auth
@@ -176,11 +180,16 @@ async function doLogin(ev){
   errEl.classList.add('hidden'); errEl.textContent = '';
   btn.disabled = true; btn.textContent = 'Signing in…';
   const sb = getSb();
-  const { error } = await sb.auth.signInWithPassword({ email, password });
+  const { error, data } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
     errEl.textContent = error.message;
     errEl.classList.remove('hidden');
     btn.disabled = false; btn.textContent = 'Sign in';
+    return false;
+  }
+  // HR signed in here by mistake — dispatch them to the HR console
+  if (isHrEmail(data.user?.email)) {
+    location.replace('/');
     return false;
   }
   await initApp();
@@ -323,7 +332,8 @@ async function submitLeave(ev){
   try {
     const sb = getSb();
     const { data: { user } } = await sb.auth.getUser();
-    const { error } = await sb.from('leave_requests').insert({
+    const { data: { session } } = await sb.auth.getSession();
+    const { data: inserted, error } = await sb.from('leave_requests').insert({
       user_id:     user.id,
       employee_id: me.employee_id,
       leave_type:  type,
@@ -332,12 +342,20 @@ async function submitLeave(ev){
       total_days,
       reason,
       status:      'Pending',
-    });
+    }).select().single();
     if (error) {
       errEl.textContent = error.message;
       errEl.classList.remove('hidden');
       btn.disabled = false; btn.textContent = 'Submit';
       return false;
+    }
+    // Fire-and-forget notification — don't block the UI if it fails or the env isn't configured
+    if (inserted?.id && session) {
+      fetch('/api/notify-leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ request_id: inserted.id }),
+      }).catch(err => console.warn('[notify-leave]', err));
     }
     closeLeaveModal();
     await loadRequests();
@@ -359,6 +377,10 @@ async function submitLeave(ev){
     const sb = getSb();
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
+      if (isHrEmail(session.user?.email)) {
+        location.replace('/');
+        return;
+      }
       await initApp();
     } else {
       document.getElementById('login-overlay').style.display = 'flex';

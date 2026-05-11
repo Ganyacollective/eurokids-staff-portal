@@ -466,16 +466,20 @@ let _saveTimer = null;
 let _savePending = false;
 let _saveInflight = false;
 
+const HR_EMAILS = ['hr@eurokidsjmdenclave.org', 'admin@eurokidsjmdenclave.org'];
+
 function getSb(){
   if (_sb) return _sb;
   if (typeof supabase === 'undefined' || !supabase.createClient) {
     throw new Error('Supabase JS SDK failed to load. Check your network connection.');
   }
   _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eurokids-staff-portal-auth' }
+    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'eurokids-portal-auth' }
   });
   return _sb;
 }
+
+function isHrEmail(email){ return HR_EMAILS.includes((email || '').toLowerCase()); }
 
 async function loadState(){
   const sb = getSb();
@@ -549,11 +553,16 @@ async function doLogin(ev){
   btn.disabled = true; btn.textContent = 'Signing in…';
   try {
     const sb = getSb();
-    const { error } = await sb.auth.signInWithPassword({ email, password });
+    const { error, data } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
       errEl.textContent = error.message;
       errEl.classList.remove('hidden');
       btn.disabled = false; btn.textContent = 'Sign in';
+      return false;
+    }
+    // Role-based routing — teachers go to their own portal
+    if (!isHrEmail(data.user?.email)) {
+      location.replace('/teacher');
       return false;
     }
     await initApp();
@@ -850,15 +859,19 @@ function reconcile(rawRows, month){
     }
   }
 
-  // Suspect leave-date anomalies — the "Pallavi applied for 21st but was actually absent on 20th" case.
-  // For each approved leave in this month, check if the teacher actually punched in on the leave dates.
-  // If yes (i.e. they were Present on a day they claimed leave), AND there's an unmatched LWP within ±3 days,
-  // flag as a probable date-entry error.
+  // Suspect leave-date detection AND leave-credit accrual.
+  // ------------------------------------------------------------
+  // For each approved leave overlapping the month, walk every date in its range:
+  //   * If the teacher was Present that day AND there's an unexplained LWP within ±3 days
+  //     → probable date-entry error (flag as suspect_leave_date).
+  //   * If the teacher was Present that day with NO nearby LWP
+  //     → teacher applied but came in anyway. CREDIT the leave back: the day doesn't
+  //       deduct from CL/EL balance. Surface as a leave_credit anomaly so HR can see.
+  const leave_credits = [];
   const monthStart = month + "-01";
   const monthEnd = month + `-${String(daysInMonth(month)).padStart(2,'0')}`;
   for (const L of state.leaves.filter(x => x.status === "Approved" && x.start_date <= monthEnd && x.end_date >= monthStart)) {
     const empReconciled = reconciledDays.filter(d => d.employee_id === L.employee_id);
-    // Walk leave's date range
     const start = new Date(L.start_date+"T00:00:00Z").getTime();
     const end = new Date(L.end_date+"T00:00:00Z").getTime();
     for (let t = start; t <= end; t += 86400000) {
@@ -866,21 +879,24 @@ function reconcile(rawRows, month){
       if (dStr < monthStart || dStr > monthEnd) continue;
       const recDay = empReconciled.find(d => d.date === dStr);
       if (recDay && (recDay.status === "FullDay" || recDay.status === "Late" || recDay.status === "HalfLWP" || recDay.status === "ForgotPunch")) {
-        // Teacher was Present on a day they took leave — suspicious.
-        // Look for an unmatched LWP within ±3 days of this leave date
         const dt = new Date(dStr+"T00:00:00Z").getTime();
         const nearbyLwp = empReconciled.find(d => d.status === "LWP" && Math.abs(new Date(d.date+"T00:00:00Z").getTime() - dt) <= 3*86400000);
         const e = empById(L.employee_id);
         if (nearbyLwp) {
           anomalies.push({ id: uid(), kind:"suspect_leave_date", employee_id:L.employee_id, leave_id:L.id, description:`${e?.display_name||'Employee'} applied for ${L.leave_type} on ${fmtDateShort(L.start_date)} but was Present that day. There's an unexplained LWP on ${fmtDateShort(nearbyLwp.date)} (${Math.round(Math.abs(new Date(nearbyLwp.date+"T00:00:00Z").getTime() - dt)/86400000)} day(s) ${nearbyLwp.date < dStr ? 'before':'after'}). Possible date entry error — should the leave be moved to ${fmtDateShort(nearbyLwp.date)}?` });
         } else {
-          anomalies.push({ id: uid(), kind:"suspect_leave_date", employee_id:L.employee_id, leave_id:L.id, description:`${e?.display_name||'Employee'} was Present (punched in) on ${fmtDateShort(dStr)} but has an approved ${L.leave_type} leave for that date. Worth checking whether the leave is needed — if not, reject it to free up the balance.` });
+          // Came in despite applying — credit the balance back for this date.
+          leave_credits.push({ employee_id: L.employee_id, leave_id: L.id, leave_type: L.leave_type, date: dStr, days: 1 });
+          // Annotate the reconciled day so it shows visually in the calendar
+          recDay.leave_credit = { leave_type: L.leave_type, leave_id: L.id };
+          if (!recDay.note) recDay.note = `${L.leave_type} applied but came in — balance credited back`;
+          anomalies.push({ id: uid(), kind:"leave_credit", employee_id:L.employee_id, leave_id:L.id, date: dStr, leave_type: L.leave_type, description:`${e?.display_name||'Employee'} applied for ${L.leave_type} on ${fmtDateShort(dStr)} but came in anyway. Their balance has been credited back — no deduction taken for this date.` });
         }
       }
     }
   }
 
-  return { reconciledDays, anomalies, summaries: Array.from(empSummary.values()) };
+  return { reconciledDays, anomalies, summaries: Array.from(empSummary.values()), leave_credits };
 }
 
 // ============================================================
@@ -907,7 +923,7 @@ async function runReconciliation(){
   if (rawRows.length === 0) return showResult("No rows parsed.", "err");
 
   const result = reconcile(rawRows, month);
-  state.attendanceMonths[month] = { rawRows, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, importedAt: new Date().toISOString() };
+  state.attendanceMonths[month] = { rawRows, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], importedAt: new Date().toISOString() };
   state.activeMonth = month;
   saveState();
   showResult(`✓ Imported ${rawRows.length} rows · ${result.summaries.length} per-employee summaries · ${result.anomalies.length} anomalies flagged`, "ok");
@@ -916,7 +932,7 @@ async function runReconciliation(){
 function rerunReconciliation(month){
   const m = state.attendanceMonths[month]; if (!m) return;
   const result = reconcile(m.rawRows, month);
-  state.attendanceMonths[month] = { ...m, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, importedAt: new Date().toISOString() };
+  state.attendanceMonths[month] = { ...m, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], importedAt: new Date().toISOString() };
   saveState(); renderAll();
 }
 function nilOrStr(v){ if (v==null) return null; const s = String(v).trim(); if (!s || s==="-") return null; return s; }
@@ -1377,22 +1393,35 @@ function renderBalances(){
   // Approved leaves within AY only
   const approved = state.leaves.filter(L => L.status==="Approved" && L.start_date >= AY.start && L.end_date <= AY.end);
   const lwpCounts = {};
-  // LWP days come from reconciled attendance across all imports within AY
+  // CL/EL credit counts across all imports — these are dates the teacher applied for leave
+  // but came in anyway, so they shouldn't be deducted from balance.
+  const clCredits = {}, elCredits = {};
   for (const m of Object.keys(state.attendanceMonths)) {
     const im = state.attendanceMonths[m];
     for (const d of im.reconciledDays) if (d.status === "LWP" && d.date >= AY.start && d.date <= AY.end) lwpCounts[d.employee_id] = (lwpCounts[d.employee_id]||0) + 1;
+    for (const c of (im.leave_credits || [])) {
+      if (c.date < AY.start || c.date > AY.end) continue;
+      if (c.leave_type === 'CL') clCredits[c.employee_id] = (clCredits[c.employee_id]||0) + (c.days || 1);
+      else if (c.leave_type === 'EL') elCredits[c.employee_id] = (elCredits[c.employee_id]||0) + (c.days || 1);
+    }
   }
   const sorted = [...state.employees].filter(e=>e.is_active).sort((a,b)=>a.display_name.localeCompare(b.display_name));
   tbody.innerHTML = sorted.map(e => {
-    const cl = approved.filter(L => L.employee_id===e.id && L.leave_type==="CL").reduce((s,L)=>s+L.total_days, 0);
-    const el = approved.filter(L => L.employee_id===e.id && L.leave_type==="EL").reduce((s,L)=>s+L.total_days, 0);
+    const clRaw = approved.filter(L => L.employee_id===e.id && L.leave_type==="CL").reduce((s,L)=>s+L.total_days, 0);
+    const elRaw = approved.filter(L => L.employee_id===e.id && L.leave_type==="EL").reduce((s,L)=>s+L.total_days, 0);
+    const clCred = clCredits[e.id] || 0;
+    const elCred = elCredits[e.id] || 0;
+    const cl = Math.max(0, clRaw - clCred);
+    const el = Math.max(0, elRaw - elCred);
     const lwp = lwpCounts[e.id] || 0;
     const clLeft = AY.cl_per_teacher - cl, elLeft = AY.el_per_teacher - el;
+    const clDisplay = clCred > 0 ? `${cl} <span class="text-xs text-gray-400">(${clRaw}−${clCred} credited)</span>` : `${cl}`;
+    const elDisplay = elCred > 0 ? `${el} <span class="text-xs text-gray-400">(${elRaw}−${elCred} credited)</span>` : `${el}`;
     return `<tr>
       <td class="font-medium">${e.display_name}</td>
-      <td>${cl}</td>
+      <td>${clDisplay}</td>
       <td class="${clLeft<=2?'text-red-600 font-semibold':''}">${clLeft}</td>
-      <td>${el}</td>
+      <td>${elDisplay}</td>
       <td class="${elLeft<=2?'text-red-600 font-semibold':''}">${elLeft}</td>
       <td class="${lwp>0?'text-orange-600':''}">${lwp}</td>
     </tr>`;
@@ -2217,16 +2246,17 @@ document.querySelectorAll('.nav-link').forEach(a => a.addEventListener('click', 
     const sb = getSb();
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
+      // If a teacher has an active session and lands here, dispatch them to their own portal.
+      if (!isHrEmail(session.user?.email)) {
+        location.replace('/teacher');
+        return;
+      }
       await initApp();
     } else {
-      // Login overlay is already visible by default — wait for the form submit.
       document.getElementById('login-overlay').style.display = 'flex';
     }
-    // Auto-recover if the user signs out in another tab, etc.
     sb.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') {
-        location.reload();
-      }
+      if (event === 'SIGNED_OUT') location.reload();
     });
   } catch (e) {
     console.error('[bootstrap]', e);
