@@ -10,7 +10,7 @@ export default function ResetPasswordPage() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-eurokids-ink">Set a new password</h1>
-            <p className="text-xs text-gray-500">Eurokids JM Enclave</p>
+            <p className="text-xs text-gray-500">Eurokids JMD Enclave</p>
           </div>
         </div>
         <UpdatePasswordForm />

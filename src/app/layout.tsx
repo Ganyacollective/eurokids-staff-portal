@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Eurokids Staff Portal",
-  description: "Payroll, attendance, and leave management for Eurokids JM Enclave.",
+  description: "Payroll, attendance, and leave management for Eurokids JMD Enclave.",
 };
 
 export default function RootLayout({

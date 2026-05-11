@@ -1,6 +1,6 @@
 # Eurokids Staff Portal
 
-A web application for Eurokids JM Enclave to manage payroll reconciliation, attendance, leaves, and the staff registry.
+A web application for Eurokids JMD Enclave to manage payroll reconciliation, attendance, leaves, and the staff registry.
 
 ## What it replaces
 

@@ -2,7 +2,7 @@
   "name": "eurokids-staff-portal",
   "version": "0.1.0",
   "private": true,
-  "description": "Eurokids JM Enclave Staff Portal — payroll reconciliation, attendance, leave management.",
+  "description": "Eurokids JMD Enclave Staff Portal — payroll reconciliation, attendance, leave management.",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",

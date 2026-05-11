@@ -87,7 +87,7 @@
       <div class="w-10 h-10 rounded-xl bg-eurokids-orange flex items-center justify-center text-white font-bold">E</div>
       <div>
         <h1 class="text-lg font-semibold text-eurokids-ink">Staff Portal</h1>
-        <p class="text-xs text-gray-500">Eurokids JM Enclave · HR Console</p>
+        <p class="text-xs text-gray-500">Eurokids JMD Enclave · HR Console</p>
       </div>
     </div>
     <form onsubmit="return doLogin(event)" class="space-y-4">
@@ -121,7 +121,7 @@
         <div class="w-9 h-9 rounded-lg bg-eurokids-orange flex items-center justify-center text-white font-bold">E</div>
         <div>
           <div class="text-sm font-semibold">Staff Portal</div>
-          <div class="text-xs text-gray-500">JM Enclave · HR Console</div>
+          <div class="text-xs text-gray-500">JMD Enclave · HR Console</div>
         </div>
       </div>
     </div>
@@ -1802,7 +1802,7 @@ function buildReportText(empId, month, opts={}){
   }
 
   const gratitude = pickGratitudeMessage(empId, month);
-  const closing = `\n${comparisonNote ? comparisonNote + '\n\n' : ''}${gratitude}\n\nIf anything in this report looks wrong, please reply and we'll review it together.\n\nWith warmth,\nEurokids JM Enclave\n`;
+  const closing = `\n${comparisonNote ? comparisonNote + '\n\n' : ''}${gratitude}\n\nIf anything in this report looks wrong, please reply and we'll review it together.\n\nWith warmth,\nEurokids JMD Enclave\n`;
 
   return greeting + '\n' + summary + lateSection + forgivenSection + forgotWarning + leaveTimingWarning + closing;
 }

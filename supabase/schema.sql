@@ -358,7 +358,7 @@ create policy "salary_admin_write" on salary_sheet_lines
   for all using (is_admin()) with check (is_admin());
 
 -- ============================================================
--- 13. Seed data — Eurokids JM Enclave specific
+-- 13. Seed data — Eurokids JMD Enclave specific
 -- ============================================================
 -- Seed employees from current Coda SCHEDULES table
 -- (run once after schema apply; safe to re-run thanks to ON CONFLICT)

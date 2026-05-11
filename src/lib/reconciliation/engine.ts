@@ -1,5 +1,5 @@
 /**
- * Reconciliation engine — applies Eurokids JM Enclave HR policy to raw PetPooja
+ * Reconciliation engine — applies Eurokids JMD Enclave HR policy to raw PetPooja
  * attendance rows, producing per-day status, late strikes, anomalies, and
  * per-month per-employee cuts.
  *

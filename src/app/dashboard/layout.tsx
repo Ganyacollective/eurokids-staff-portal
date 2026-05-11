@@ -35,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
             <div>
               <div className="text-sm font-semibold text-eurokids-ink">Staff Portal</div>
-              <div className="text-xs text-gray-500">JM Enclave</div>
+              <div className="text-xs text-gray-500">JMD Enclave</div>
             </div>
           </div>
         </div>
