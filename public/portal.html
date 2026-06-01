@@ -307,7 +307,7 @@
         </section>
         <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-8">
           <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between"><h2 class="text-sm font-semibold">Vacation blocks</h2><button onclick="addVacation()" class="btn-link">+ Add</button></header>
-          <table><thead><tr><th>From</th><th>To</th><th>Description</th><th></th></tr></thead><tbody id="vacations-tbody"></tbody></table>
+          <table><thead><tr><th>From</th><th>To</th><th>Description</th><th>Works through this vacation</th><th></th></tr></thead><tbody id="vacations-tbody"></tbody></table>
         </section>
 
         <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-8">
@@ -682,8 +682,14 @@ function reconcile(rawRows, month){
     const ppStatusPre = (row.petpooja_status||"").trim();
     const hasPunchData = (inMinPre != null) || (outMinPre != null) || /present|^fd$|f\.?d\.?|^hd$|half\s*day|full\s*day/i.test(ppStatusPre);
 
+    // Does this vacation apply to this employee?
+    //   • Permanent opt-out: emp.works_through_vacations = true (daycare staff, didis on year-round duty)
+    //   • Per-vacation opt-out: vac.working_employee_ids includes emp.id (summer camp volunteers, one-off)
+    // If either is true, the vacation is skipped for this employee and the day is processed as a normal working day.
+    const vacationAppliesToThisEmp = vac && !emp.works_through_vacations && !(vac.working_employee_ids||[]).includes(emp.id);
+
     // Vacation — show actual attendance if the teacher came (e.g. summer camp).
-    if (vac) {
+    if (vacationAppliesToThisEmp) {
       if (hasPunchData) {
         reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMinPre, out:outMinPre, note:`Worked during ${vac.name}`, worked_during_vacation: true, vacation_name: vac.name });
         const s = ensure(emp); s.fd++; s.workedVacation = (s.workedVacation||0) + 1;
@@ -1347,12 +1353,65 @@ function seedStudentHolidaysFromPdf(){
 function removeStudentHoliday(id){ if (confirm("Delete this student holiday?")) { state.student_holidays = state.student_holidays.filter(s=>s.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
 
 function renderVacations(){
-  document.getElementById('vacations-tbody').innerHTML = [...state.vacations].sort((a,b)=>a.start_date.localeCompare(b.start_date)).map(v => `<tr>
-    <td class="text-gray-600">${fmtDate(v.start_date)}</td>
-    <td class="text-gray-600">${fmtDate(v.end_date)}</td>
-    <td class="font-medium">${v.name}</td>
-    <td><button onclick="removeVacation('${v.id}')" class="btn-danger">Delete</button></td>
-  </tr>`).join('');
+  document.getElementById('vacations-tbody').innerHTML = [...state.vacations].sort((a,b)=>a.start_date.localeCompare(b.start_date)).map(v => {
+    const workers = (v.working_employee_ids||[]).map(id => empById(id)?.display_name).filter(Boolean);
+    const workerSummary = workers.length === 0
+      ? '<span class="text-gray-400 italic">none</span>'
+      : `<span class="text-eurokids-blue font-medium">${workers.length} staff</span> <span class="text-gray-400 text-xs">— ${workers.slice(0,3).join(', ')}${workers.length>3?'…':''}</span>`;
+    return `<tr>
+      <td class="text-gray-600">${fmtDate(v.start_date)}</td>
+      <td class="text-gray-600">${fmtDate(v.end_date)}</td>
+      <td class="font-medium">${v.name}</td>
+      <td>${workerSummary}</td>
+      <td><button onclick="manageVacationWorkers('${v.id}')" class="btn-link">Manage workers</button> · <button onclick="removeVacation('${v.id}')" class="btn-danger">Delete</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function manageVacationWorkers(vacId){
+  const v = state.vacations.find(x => x.id === vacId);
+  if (!v) return;
+  const current = new Set(v.working_employee_ids || []);
+  const sorted = [...state.employees].filter(e=>e.is_active).sort((a,b)=>a.display_name.localeCompare(b.display_name));
+  const rows = sorted.map(e => {
+    const checked = current.has(e.id) ? 'checked' : '';
+    const isPermWtv = e.works_through_vacations;
+    const note = isPermWtv ? '<span class="text-xs text-eurokids-blue">always works through vacations</span>' : '<span class="text-xs text-gray-400">' + e.department + ' · ' + e.designation + '</span>';
+    return `<label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-2">
+      <input type="checkbox" class="vac-worker-cb" data-emp="${e.id}" ${checked} ${isPermWtv?'disabled':''} />
+      <div class="flex-1">
+        <div class="text-sm font-medium ${isPermWtv?'text-gray-400':''}">${e.display_name}</div>
+        <div>${note}</div>
+      </div>
+    </label>`;
+  }).join('');
+  openModal(`Who works during "${v.name}"?`, `
+    <div class="space-y-3">
+      <p class="text-sm text-gray-600">Tick the staff who <em>do</em> work during this vacation (summer camp volunteers, etc.). Their attendance will be processed as a normal working month — late strikes apply, absences without leave count as LWP, and salary is paid in full as usual.</p>
+      <p class="text-xs text-gray-500">Daycare staff marked as "Works through vacations" on their Employee profile are exempted automatically (shown disabled below — manage that flag from Employees → Edit).</p>
+      <div class="border border-gray-200 rounded-lg p-3 max-h-80 overflow-y-auto bg-gray-50">${rows}</div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="saveVacationWorkers('${vacId}')" class="btn-primary flex-1">Save</button>
+        <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+
+function saveVacationWorkers(vacId){
+  const v = state.vacations.find(x => x.id === vacId);
+  if (!v) return;
+  const selected = Array.from(document.querySelectorAll('.vac-worker-cb:checked:not(:disabled)')).map(cb => cb.dataset.emp);
+  v.working_employee_ids = selected;
+  saveState();
+  // Re-run reconciliation for any month that overlaps this vacation
+  const overlap = new Set();
+  for (const m of Object.keys(state.attendanceMonths)) {
+    if (m >= v.start_date.slice(0,7) && m <= v.end_date.slice(0,7)) overlap.add(m);
+  }
+  overlap.forEach(m => rerunReconciliation(m));
+  renderAll();
+  closeModal();
 }
 
 function renderImports(){
@@ -2077,6 +2136,7 @@ function openEmployeeForm(id){
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Phone (incl. country code)</label><input id="ef-phone" class="input" value="${e?.phone||''}" placeholder="919876543210" /></div>
       </div>
       <label class="flex items-center gap-2 text-sm"><input id="ef-active" type="checkbox" ${e?.is_active!==false?'checked':''} /> Active employee</label>
+      <label class="flex items-center gap-2 text-sm"><input id="ef-wtv" type="checkbox" ${e?.works_through_vacations?'checked':''} /> <span>Works through school vacations <span class="text-xs text-gray-500">(daycare didis &amp; teachers, year-round duty)</span></span></label>
 
       <!-- ─── Portal access ─────────────────────────────────────── -->
       <div class="border-t border-gray-200 pt-4 mt-2">
@@ -2131,6 +2191,7 @@ async function saveEmployee(id){
   const personalEmail = document.getElementById('ef-email').value.trim();
   const phone = document.getElementById('ef-phone').value.replace(/\D/g, '');
   const active = document.getElementById('ef-active').checked;
+  const wtv = document.getElementById('ef-wtv').checked;
   const loginEmail = document.getElementById('ef-login-email').value.trim().toLowerCase();
   const loginPwd   = document.getElementById('ef-login-pwd').value;
 
@@ -2150,6 +2211,7 @@ async function saveEmployee(id){
     Object.assign(empById(id), {
       display_name: display, name_petpooja: pp, department: dept, designation: desg,
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
+      works_through_vacations: wtv,
       login_email: loginEmail || empById(id).login_email || '',
     });
   } else {
@@ -2157,6 +2219,7 @@ async function saveEmployee(id){
     state.employees.push({
       id: empId, display_name: display, name_petpooja: pp, department: dept, designation: desg,
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
+      works_through_vacations: wtv,
       login_email: loginEmail || '',
     });
   }
