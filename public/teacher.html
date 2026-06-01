@@ -52,11 +52,31 @@
         <input id="login-password" type="password" required autocomplete="current-password" class="input" />
       </div>
       <div id="login-error" class="text-sm text-red-600 hidden bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
+      <div id="login-info" class="text-sm text-eurokids-blue hidden bg-blue-50 border border-blue-200 rounded-lg px-3 py-2"></div>
       <button id="login-btn" type="submit" class="btn-primary w-full">Sign in</button>
     </form>
-    <p class="text-xs text-gray-500 mt-6 text-center leading-relaxed">
-      Trouble signing in? Ask the office for a password reset.
+    <p class="text-xs text-gray-500 mt-4 text-center leading-relaxed">
+      <a href="#" onclick="openForgotPassword(event)" class="text-eurokids-blue hover:underline font-medium">Forgot your password?</a>
     </p>
+  </div>
+</div>
+
+<!-- Forgot password modal -->
+<div id="forgot-modal" class="modal-bg">
+  <div class="modal" style="max-width:400px">
+    <h2 class="text-lg font-semibold mb-1">Reset your password</h2>
+    <p class="text-sm text-gray-500 mb-4">Enter your login email. We'll send a fresh password to the personal email and WhatsApp on file with the office.</p>
+    <form onsubmit="return submitForgotPassword(event)" class="space-y-3">
+      <div>
+        <label class="text-sm font-medium text-gray-700 block mb-1">Login email</label>
+        <input id="fp-email" type="email" required autocomplete="username" placeholder="you@eurokidsjmdenclave.org" class="input" />
+      </div>
+      <div id="fp-msg" class="hidden text-sm rounded-lg p-3"></div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" onclick="closeForgotPassword()" class="btn-secondary">Cancel</button>
+        <button id="fp-submit" type="submit" class="btn-primary">Send new password</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -200,6 +220,53 @@ async function doLogout(){
   if (!confirm('Sign out?')) return;
   try { await getSb().auth.signOut(); } catch(e){}
   location.reload();
+}
+
+// ============================================================
+// Forgot password
+// ============================================================
+function openForgotPassword(ev){
+  if (ev) ev.preventDefault();
+  document.getElementById('fp-email').value = document.getElementById('login-email').value || '';
+  document.getElementById('fp-msg').classList.add('hidden');
+  document.getElementById('fp-msg').textContent = '';
+  document.getElementById('forgot-modal').classList.add('show');
+}
+function closeForgotPassword(){
+  document.getElementById('forgot-modal').classList.remove('show');
+}
+async function submitForgotPassword(ev){
+  ev.preventDefault();
+  const email = document.getElementById('fp-email').value.trim().toLowerCase();
+  const msgEl = document.getElementById('fp-msg');
+  const btn = document.getElementById('fp-submit');
+  if (!email) return false;
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const resp = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const json = await resp.json();
+    msgEl.classList.remove('hidden');
+    if (json.ok) {
+      msgEl.className = 'text-sm rounded-lg p-3 bg-green-50 border border-green-200 text-green-700';
+      msgEl.textContent = 'If this email is registered, a fresh password has been sent to your personal email (and WhatsApp, if set up). Check both — it may take a minute. You can then sign in with the new password.';
+      btn.textContent = 'Sent';
+      setTimeout(() => { closeForgotPassword(); btn.disabled = false; btn.textContent = 'Send new password'; }, 4500);
+    } else {
+      msgEl.className = 'text-sm rounded-lg p-3 bg-red-50 border border-red-200 text-red-700';
+      msgEl.textContent = json.error || 'Something went wrong. Please contact the office.';
+      btn.disabled = false; btn.textContent = 'Send new password';
+    }
+  } catch (e) {
+    msgEl.classList.remove('hidden');
+    msgEl.className = 'text-sm rounded-lg p-3 bg-red-50 border border-red-200 text-red-700';
+    msgEl.textContent = 'Network error. Please try again or contact the office.';
+    btn.disabled = false; btn.textContent = 'Send new password';
+  }
+  return false;
 }
 
 // ============================================================
