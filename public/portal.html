@@ -981,14 +981,14 @@ function reconcile(rawRows, month){
     }
   }
 
-  // Suspect leave-date detection AND leave-credit accrual.
+  // Leave-credit accrual + suspect-leave-date detection (decoupled).
   // ------------------------------------------------------------
-  // For each approved leave overlapping the month, walk every date in its range:
-  //   * If the teacher was Present that day AND there's an unexplained LWP within ±3 days
-  //     → probable date-entry error (flag as suspect_leave_date).
-  //   * If the teacher was Present that day with NO nearby LWP
-  //     → teacher applied but came in anyway. CREDIT the leave back: the day doesn't
-  //       deduct from CL/EL balance. Surface as a leave_credit anomaly so HR can see.
+  // Rule: any approved leave for a date on which the teacher actually punched in
+  // gets credited back — the day deducts neither from balance nor from salary.
+  // Separately, if there's an unexplained LWP within ±3 days of the came-in day,
+  // we ALSO surface a "suspect_leave_date" hint so HR can investigate whether
+  // the leave was misdated (i.e. should be moved to the LWP date). The two
+  // anomalies coexist and don't suppress each other.
   const leave_credits = [];
   const monthStart = month + "-01";
   const monthEnd = month + `-${String(daysInMonth(month)).padStart(2,'0')}`;
@@ -1001,18 +1001,19 @@ function reconcile(rawRows, month){
       if (dStr < monthStart || dStr > monthEnd) continue;
       const recDay = empReconciled.find(d => d.date === dStr);
       if (recDay && (recDay.status === "FullDay" || recDay.status === "Late" || recDay.status === "HalfLWP" || recDay.status === "ForgotPunch")) {
+        const e = empById(L.employee_id);
+
+        // 1) Always credit — applied for leave but came in, so balance must be restored.
+        leave_credits.push({ employee_id: L.employee_id, leave_id: L.id, leave_type: L.leave_type, date: dStr, days: 1 });
+        recDay.leave_credit = { leave_type: L.leave_type, leave_id: L.id };
+        if (!recDay.note) recDay.note = `${L.leave_type} applied but came in — balance credited back`;
+        anomalies.push({ id: uid(), kind:"leave_credit", employee_id:L.employee_id, leave_id:L.id, date: dStr, leave_type: L.leave_type, description:`${e?.display_name||'Employee'} applied for ${L.leave_type} on ${fmtDateShort(dStr)} but came in anyway. Their balance has been credited back — no deduction taken for this date.` });
+
+        // 2) Additionally flag if there's a nearby unexplained LWP — possible date-entry error.
         const dt = new Date(dStr+"T00:00:00Z").getTime();
         const nearbyLwp = empReconciled.find(d => d.status === "LWP" && Math.abs(new Date(d.date+"T00:00:00Z").getTime() - dt) <= 3*86400000);
-        const e = empById(L.employee_id);
         if (nearbyLwp) {
-          anomalies.push({ id: uid(), kind:"suspect_leave_date", employee_id:L.employee_id, leave_id:L.id, description:`${e?.display_name||'Employee'} applied for ${L.leave_type} on ${fmtDateShort(L.start_date)} but was Present that day. There's an unexplained LWP on ${fmtDateShort(nearbyLwp.date)} (${Math.round(Math.abs(new Date(nearbyLwp.date+"T00:00:00Z").getTime() - dt)/86400000)} day(s) ${nearbyLwp.date < dStr ? 'before':'after'}). Possible date entry error — should the leave be moved to ${fmtDateShort(nearbyLwp.date)}?` });
-        } else {
-          // Came in despite applying — credit the balance back for this date.
-          leave_credits.push({ employee_id: L.employee_id, leave_id: L.id, leave_type: L.leave_type, date: dStr, days: 1 });
-          // Annotate the reconciled day so it shows visually in the calendar
-          recDay.leave_credit = { leave_type: L.leave_type, leave_id: L.id };
-          if (!recDay.note) recDay.note = `${L.leave_type} applied but came in — balance credited back`;
-          anomalies.push({ id: uid(), kind:"leave_credit", employee_id:L.employee_id, leave_id:L.id, date: dStr, leave_type: L.leave_type, description:`${e?.display_name||'Employee'} applied for ${L.leave_type} on ${fmtDateShort(dStr)} but came in anyway. Their balance has been credited back — no deduction taken for this date.` });
+          anomalies.push({ id: uid(), kind:"suspect_leave_date", employee_id:L.employee_id, leave_id:L.id, description:`${e?.display_name||'Employee'} applied for ${L.leave_type} on ${fmtDateShort(L.start_date)} but was Present that day. There's an unexplained LWP on ${fmtDateShort(nearbyLwp.date)} (${Math.round(Math.abs(new Date(nearbyLwp.date+"T00:00:00Z").getTime() - dt)/86400000)} day(s) ${nearbyLwp.date < dStr ? 'before':'after'}). If the date was a typo, move the leave to ${fmtDateShort(nearbyLwp.date)} — otherwise the credit above stands and the LWP is a separate absence.` });
         }
       }
     }

@@ -174,7 +174,8 @@ const AY = { start: '2026-04-06', end: '2027-03-19', cl_per_teacher: 7, el_per_t
 
 let _sb = null;
 let me = null;        // teacher_links row
-let myRequests = [];  // leave_requests rows (this AY)
+let myRequests = [];  // merged leaves (request + blob)
+let myCredits = [];   // leave_credits across reconciled months
 
 const HR_EMAILS = ['hr@eurokidsjmdenclave.org', 'admin@eurokidsjmdenclave.org'];
 
@@ -305,14 +306,31 @@ async function initApp(){
 }
 
 async function loadRequests(){
-  const sb = getSb();
-  const { data, error } = await sb.from('leave_requests')
-    .select('*')
-    .gte('start_date', AY.start)
-    .lte('end_date', AY.end)
-    .order('applied_at', { ascending: false });
-  if (error) { console.error('[loadRequests]', error); myRequests = []; return; }
-  myRequests = data || [];
+  // Fetch via the merged API so we see both:
+  //   • leave_requests rows (submitted by this teacher via the portal)
+  //   • portal_state.leaves entries (added manually by HR)
+  // Deduplication and status reconciliation happen server-side.
+  try {
+    const sb = getSb();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { myRequests = []; return; }
+    const resp = await fetch('/api/teacher/my-leaves', {
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
+    });
+    if (!resp.ok) {
+      console.error('[loadRequests] HTTP', resp.status);
+      myRequests = [];
+      return;
+    }
+    const json = await resp.json();
+    const leaves = (json.leaves || []).filter(L => L.start_date >= AY.start && L.end_date <= AY.end);
+    myRequests = leaves;
+    myCredits = (json.credits || []).filter(c => c.date >= AY.start && c.date <= AY.end);
+  } catch (e) {
+    console.error('[loadRequests]', e);
+    myRequests = [];
+    myCredits = [];
+  }
 }
 
 // ============================================================
@@ -320,8 +338,13 @@ async function loadRequests(){
 // ============================================================
 function renderBalance(){
   const approved = myRequests.filter(r => r.status === 'Approved');
-  const usedCL = approved.filter(r => r.leave_type === 'CL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
-  const usedEL = approved.filter(r => r.leave_type === 'EL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  const usedCL_raw = approved.filter(r => r.leave_type === 'CL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  const usedEL_raw = approved.filter(r => r.leave_type === 'EL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  // Subtract credits — days you applied for but actually came in are restored
+  const clCred = myCredits.filter(c => c.leave_type === 'CL').reduce((a,c)=>a + (c.days||1), 0);
+  const elCred = myCredits.filter(c => c.leave_type === 'EL').reduce((a,c)=>a + (c.days||1), 0);
+  const usedCL = Math.max(0, usedCL_raw - clCred);
+  const usedEL = Math.max(0, usedEL_raw - elCred);
   document.getElementById('cl-total').textContent = AY.cl_per_teacher;
   document.getElementById('el-total').textContent = AY.el_per_teacher;
   document.getElementById('cl-left').textContent  = Math.max(0, AY.cl_per_teacher - usedCL);
