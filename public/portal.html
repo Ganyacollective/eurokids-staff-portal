@@ -303,7 +303,7 @@
         <p class="text-sm text-gray-500 mb-8">Seeded for AY 2026-27 from your PDF.</p>
         <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-8">
           <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between"><h2 class="text-sm font-semibold">Holidays</h2><button onclick="addHoliday()" class="btn-link">+ Add</button></header>
-          <table><thead><tr><th>Date</th><th>Holiday</th><th>Type</th><th></th></tr></thead><tbody id="holidays-tbody"></tbody></table>
+          <table><thead><tr><th>Date</th><th>Holiday</th><th>Type</th><th>Works on this holiday</th><th></th></tr></thead><tbody id="holidays-tbody"></tbody></table>
         </section>
         <section class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-8">
           <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between"><h2 class="text-sm font-semibold">Vacation blocks</h2><button onclick="addVacation()" class="btn-link">+ Add</button></header>
@@ -631,7 +631,12 @@ function fmtDate(iso){ if(!iso) return ""; const d = new Date(iso+"T00:00:00Z");
 function fmtDateShort(iso){ const d = new Date(iso+"T00:00:00Z"); return d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",timeZone:"UTC"}); }
 function inr(n){ if(n==null) return "—"; return new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(n); }
 function empById(id){ return state.employees.find(e=>e.id===id); }
-function isStudentHolidayDate(date){ return (state.student_holidays||[]).some(s => s.date === date); }
+function isStudentHolidayDate(date){
+  return (state.student_holidays||[]).some(s => {
+    const end = s.end_date || s.date;
+    return date >= s.date && date <= end;
+  });
+}
 function empByName(name){ const t = name?.trim().toLowerCase(); return state.employees.find(e => e.name_petpooja.trim().toLowerCase()===t); }
 function daysInMonth(yyyymm){ const [y,m] = yyyymm.split('-').map(Number); return new Date(y, m, 0).getDate(); }
 function dateInMonth(yyyymm, d){ const [y,m] = yyyymm.split('-').map(Number); return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
@@ -646,7 +651,12 @@ const LATE_GRACE_MIN = 10, HALF_LWP_THRESHOLD = 90, STRIKE_TO_HALF_DAY = 3, SAT_
 function reconcile(rawRows, month){
   const holByDate = new Map(); state.holidays.forEach(h => holByDate.set(h.date, h));
   function inVacation(d){ for (const v of state.vacations) if (d >= v.start_date && d <= v.end_date) return v; return null; }
-  function isStudentHoliday(d){ return (state.student_holidays||[]).find(s => s.date === d) || null; }
+  function isStudentHoliday(d){
+    return (state.student_holidays||[]).find(s => {
+      const end = s.end_date || s.date;
+      return d >= s.date && d <= end;
+    }) || null;
+  }
   function isSpecialDay(d){ return (state.special_days||[]).find(s => s.date === d) || null; }
   function specialDayOverride(empId, specialDayId){ return (state.special_day_overrides||[]).find(o => o.employee_id === empId && o.special_day_id === specialDayId) || null; }
   const approvedLeaves = state.leaves.filter(L => L.status === "Approved");
@@ -700,8 +710,12 @@ function reconcile(rawRows, month){
       return;
     }
 
-    // Mandatory holiday — same treatment: if they came, show it.
-    if (hol?.is_mandatory) {
+    // Mandatory holiday — same exemption logic as vacations:
+    //   • Permanent: emp.works_through_holidays = true (daycare staff)
+    //   • Per-holiday: hol.working_employee_ids includes emp.id
+    // If exempt, the day is processed as a regular working day (LWP if absent without leave).
+    const holidayAppliesToThisEmp = hol?.is_mandatory && !emp.works_through_holidays && !(hol.working_employee_ids||[]).includes(emp.id);
+    if (holidayAppliesToThisEmp) {
       if (hasPunchData) {
         reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMinPre, out:outMinPre, note:`Worked on ${hol.name}`, worked_during_holiday: true, holiday_name: hol.name });
         const s = ensure(emp); s.fd++; s.workedHoliday = (s.workedHoliday||0) + 1;
@@ -1223,12 +1237,64 @@ function renderEmployees(){
 }
 
 function renderHolidays(){
-  document.getElementById('holidays-tbody').innerHTML = [...state.holidays].sort((a,b)=>a.date.localeCompare(b.date)).map(h => `<tr>
-    <td class="text-gray-600">${fmtDate(h.date)}</td>
-    <td class="font-medium">${h.name}</td>
-    <td><span class="badge ${h.is_mandatory?'b-mandatory':'b-optional'}">${h.is_mandatory?'Mandatory':'Optional'}</span></td>
-    <td><button onclick="removeHoliday('${h.id}')" class="btn-danger">Delete</button></td>
-  </tr>`).join('');
+  document.getElementById('holidays-tbody').innerHTML = [...state.holidays].sort((a,b)=>a.date.localeCompare(b.date)).map(h => {
+    const workers = (h.working_employee_ids||[]).map(id => empById(id)?.display_name).filter(Boolean);
+    const workerCell = !h.is_mandatory
+      ? '<span class="text-gray-400 text-xs italic">n/a (optional)</span>'
+      : workers.length === 0
+        ? '<span class="text-gray-400 italic">none</span>'
+        : `<span class="text-eurokids-blue font-medium">${workers.length} staff</span> <span class="text-gray-400 text-xs">— ${workers.slice(0,3).join(', ')}${workers.length>3?'…':''}</span>`;
+    const manageBtn = h.is_mandatory ? `<button onclick="manageHolidayWorkers('${h.id}')" class="btn-link">Manage</button> · ` : '';
+    return `<tr>
+      <td class="text-gray-600">${fmtDate(h.date)}</td>
+      <td class="font-medium">${h.name}</td>
+      <td><span class="badge ${h.is_mandatory?'b-mandatory':'b-optional'}">${h.is_mandatory?'Mandatory':'Optional'}</span></td>
+      <td>${workerCell}</td>
+      <td>${manageBtn}<button onclick="removeHoliday('${h.id}')" class="btn-danger">Delete</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function manageHolidayWorkers(holId){
+  const h = state.holidays.find(x => x.id === holId);
+  if (!h) return;
+  const current = new Set(h.working_employee_ids || []);
+  const sorted = [...state.employees].filter(e=>e.is_active).sort((a,b)=>a.display_name.localeCompare(b.display_name));
+  const rows = sorted.map(e => {
+    const checked = current.has(e.id) ? 'checked' : '';
+    const isPermWth = e.works_through_holidays;
+    const note = isPermWth ? '<span class="text-xs text-eurokids-blue">always works through holidays</span>' : '<span class="text-xs text-gray-400">' + e.department + ' · ' + e.designation + '</span>';
+    return `<label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-2">
+      <input type="checkbox" class="hol-worker-cb" data-emp="${e.id}" ${checked} ${isPermWth?'disabled':''} />
+      <div class="flex-1">
+        <div class="text-sm font-medium ${isPermWth?'text-gray-400':''}">${e.display_name}</div>
+        <div>${note}</div>
+      </div>
+    </label>`;
+  }).join('');
+  openModal(`Who works on "${h.name}"?`, `
+    <div class="space-y-3">
+      <p class="text-sm text-gray-600">Tick the staff who <em>do</em> work on this mandatory holiday. Their attendance is processed as a regular working day — absences without leave count as LWP.</p>
+      <p class="text-xs text-gray-500">Staff marked "Works through mandatory holidays" on their profile are exempted automatically.</p>
+      <div class="border border-gray-200 rounded-lg p-3 max-h-80 overflow-y-auto bg-gray-50">${rows}</div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="saveHolidayWorkers('${holId}')" class="btn-primary flex-1">Save</button>
+        <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+
+function saveHolidayWorkers(holId){
+  const h = state.holidays.find(x => x.id === holId);
+  if (!h) return;
+  const selected = Array.from(document.querySelectorAll('.hol-worker-cb:checked:not(:disabled)')).map(cb => cb.dataset.emp);
+  h.working_employee_ids = selected;
+  saveState();
+  const targetMonth = h.date.slice(0,7);
+  if (state.attendanceMonths[targetMonth]) rerunReconciliation(targetMonth);
+  renderAll();
+  closeModal();
 }
 function renderSpecialDays(){
   const tbody = document.getElementById('special-days-tbody');
@@ -1279,14 +1345,32 @@ function renderStudentHolidays(){
   const tbody = document.getElementById('student-holidays-tbody');
   const list = [...(state.student_holidays||[])].sort((a,b)=>a.date.localeCompare(b.date));
   if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500 py-12">No student-only holidays yet. Add them here so reporting time on those dates becomes 9:00 AM uniform.</td></tr>`; return; }
-  tbody.innerHTML = list.map(s => `<tr>
-    <td class="text-gray-600">${fmtDate(s.date)}</td>
-    <td class="font-medium">${s.name || '—'}</td>
-    <td class="text-gray-500 text-xs">${s.notes || ''}</td>
-    <td><button onclick="removeStudentHoliday('${s.id}')" class="btn-danger">Delete</button></td>
-  </tr>`).join('');
+  tbody.innerHTML = list.map(s => {
+    const isRange = s.end_date && s.end_date !== s.date;
+    const dateLabel = isRange
+      ? `${fmtDate(s.date)} <span class="text-gray-400">→</span> ${fmtDate(s.end_date)}`
+      : fmtDate(s.date);
+    return `<tr>
+      <td class="text-gray-600">${dateLabel}</td>
+      <td class="font-medium">${s.name || '—'}</td>
+      <td class="text-gray-500 text-xs">${s.notes || ''}</td>
+      <td><button onclick="removeStudentHoliday('${s.id}')" class="btn-danger">Delete</button></td>
+    </tr>`;
+  }).join('');
 }
-function addStudentHoliday(){ const date = prompt("Date (YYYY-MM-DD):"); if (!date) return; const name = prompt("Name (e.g. 'Reopening prep day', 'PTM'):", "") || ""; const notes = prompt("Notes (optional):", "") || ""; if (!state.student_holidays) state.student_holidays = []; state.student_holidays.push({ id:uid(), date, name, notes }); saveState(); rerunActiveMonth(); renderAll(); }
+function addStudentHoliday(){
+  const startDate = prompt("Start date (YYYY-MM-DD):");
+  if (!startDate) return;
+  const endDate = prompt("End date (YYYY-MM-DD)\n— same as start for a single day:", startDate);
+  if (!endDate) return;
+  const name = prompt("Name (e.g. 'Reopening prep week', 'PTM'):", "") || "";
+  const notes = prompt("Notes (optional):", "") || "";
+  if (!state.student_holidays) state.student_holidays = [];
+  const entry = { id: uid(), date: startDate, name, notes };
+  if (endDate !== startDate) entry.end_date = endDate;
+  state.student_holidays.push(entry);
+  saveState(); rerunActiveMonth(); renderAll();
+}
 function openBulkAddModal(){
   openModal("Bulk paste student holidays", `
     <p class="text-sm text-gray-600 mb-3">One per line. Date in <code>YYYY-MM-DD</code>. Optionally a name after a comma. Duplicates are skipped automatically.</p>
@@ -2137,6 +2221,7 @@ function openEmployeeForm(id){
       </div>
       <label class="flex items-center gap-2 text-sm"><input id="ef-active" type="checkbox" ${e?.is_active!==false?'checked':''} /> Active employee</label>
       <label class="flex items-center gap-2 text-sm"><input id="ef-wtv" type="checkbox" ${e?.works_through_vacations?'checked':''} /> <span>Works through school vacations <span class="text-xs text-gray-500">(daycare didis &amp; teachers, year-round duty)</span></span></label>
+      <label class="flex items-center gap-2 text-sm"><input id="ef-wth" type="checkbox" ${e?.works_through_holidays?'checked':''} /> <span>Works through mandatory holidays <span class="text-xs text-gray-500">(daycare wing — Independence Day, Republic Day, etc.)</span></span></label>
 
       <!-- ─── Portal access ─────────────────────────────────────── -->
       <div class="border-t border-gray-200 pt-4 mt-2">
@@ -2192,6 +2277,7 @@ async function saveEmployee(id){
   const phone = document.getElementById('ef-phone').value.replace(/\D/g, '');
   const active = document.getElementById('ef-active').checked;
   const wtv = document.getElementById('ef-wtv').checked;
+  const wth = document.getElementById('ef-wth').checked;
   const loginEmail = document.getElementById('ef-login-email').value.trim().toLowerCase();
   const loginPwd   = document.getElementById('ef-login-pwd').value;
 
@@ -2212,6 +2298,7 @@ async function saveEmployee(id){
       display_name: display, name_petpooja: pp, department: dept, designation: desg,
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
+      works_through_holidays: wth,
       login_email: loginEmail || empById(id).login_email || '',
     });
   } else {
@@ -2220,6 +2307,7 @@ async function saveEmployee(id){
       id: empId, display_name: display, name_petpooja: pp, department: dept, designation: desg,
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
+      works_through_holidays: wth,
       login_email: loginEmail || '',
     });
   }
