@@ -668,12 +668,43 @@ function reconcile(rawRows, month){
     const d = new Date(date+"T00:00:00Z");
     const dow = d.getUTCDay();
     const isSat = dow === 6;
+    const isSun = dow === 0;
 
     const vac = inVacation(date);
-    if (vac) { reconciledDays.push({ employee_id:emp.id, date, dow, status:"Vacation", note:vac.name }); ensure(emp).vacationDays++; return; }
-
     const hol = holByDate.get(date);
-    if (hol?.is_mandatory) { reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday", note:hol.name }); ensure(emp).holidays++; return; }
+
+    // Did the teacher actually punch in for the day? Vacations, mandatory holidays,
+    // and Sundays still count as paid — but if a teacher physically showed up
+    // (summer camp, event day, voluntary catch-up), their attendance must be
+    // visible in the report instead of being swallowed by the "Vacation" label.
+    const inMinPre  = timeToMin(row.first_punch);
+    const outMinPre = timeToMin(row.last_punch);
+    const ppStatusPre = (row.petpooja_status||"").trim();
+    const hasPunchData = (inMinPre != null) || (outMinPre != null) || /present|^fd$|f\.?d\.?|^hd$|half\s*day|full\s*day/i.test(ppStatusPre);
+
+    // Vacation — show actual attendance if the teacher came (e.g. summer camp).
+    if (vac) {
+      if (hasPunchData) {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMinPre, out:outMinPre, note:`Worked during ${vac.name}`, worked_during_vacation: true, vacation_name: vac.name });
+        const s = ensure(emp); s.fd++; s.workedVacation = (s.workedVacation||0) + 1;
+      } else {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"Vacation", note:vac.name });
+        ensure(emp).vacationDays++;
+      }
+      return;
+    }
+
+    // Mandatory holiday — same treatment: if they came, show it.
+    if (hol?.is_mandatory) {
+      if (hasPunchData) {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMinPre, out:outMinPre, note:`Worked on ${hol.name}`, worked_during_holiday: true, holiday_name: hol.name });
+        const s = ensure(emp); s.fd++; s.workedHoliday = (s.workedHoliday||0) + 1;
+      } else {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday", note:hol.name });
+        ensure(emp).holidays++;
+      }
+      return;
+    }
 
     const matched = leavesFor(emp.id, date);
     const inMin = timeToMin(row.first_punch);
@@ -702,13 +733,16 @@ function reconcile(rawRows, month){
     }
 
     // Sunday is a universal week-off across all departments and roles.
-    // PetPooja's status is ignored — even a stray "Absent" on a Sunday (common
-    // for newly onboarded staff whose PetPooja roster hasn't been recalibrated)
-    // must not produce an LWP. Mandatory holidays, vacations, and special days
-    // on a Sunday are handled by the earlier checks and take precedence.
+    // But if a teacher actually punched in on a Sunday (event, extra duty),
+    // show their attendance instead of silently hiding it as Week Off.
     if (dow === 0) {
-      reconciledDays.push({ employee_id:emp.id, date, dow, status:"WeekOff", note:"Sunday" });
-      ensure(emp).weekOffs++;
+      if (hasPunchData) {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMin, out:outMin, note:"Worked on Sunday", worked_on_sunday: true });
+        const s = ensure(emp); s.fd++; s.workedSunday = (s.workedSunday||0) + 1;
+      } else {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"WeekOff", note:"Sunday" });
+        ensure(emp).weekOffs++;
+      }
       return;
     }
 
