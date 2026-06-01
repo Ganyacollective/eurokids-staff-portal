@@ -252,9 +252,9 @@ async function submitForgotPassword(ev){
     msgEl.classList.remove('hidden');
     if (json.ok) {
       msgEl.className = 'text-sm rounded-lg p-3 bg-green-50 border border-green-200 text-green-700';
-      msgEl.textContent = 'If this email is registered, a fresh password has been sent to your personal email (and WhatsApp, if set up). Check both — it may take a minute. You can then sign in with the new password.';
+      msgEl.textContent = json.message || 'New password sent. Check your email and WhatsApp.';
       btn.textContent = 'Sent';
-      setTimeout(() => { closeForgotPassword(); btn.disabled = false; btn.textContent = 'Send new password'; }, 4500);
+      setTimeout(() => { closeForgotPassword(); btn.disabled = false; btn.textContent = 'Send new password'; }, 5500);
     } else {
       msgEl.className = 'text-sm rounded-lg p-3 bg-red-50 border border-red-200 text-red-700';
       msgEl.textContent = json.error || 'Something went wrong. Please contact the office.';

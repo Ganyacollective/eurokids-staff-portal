@@ -5,21 +5,22 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || "Eurokids Portal <onboarding@resend.dev>";
-// NB: WhatsApp delivery requires a per-teacher CallMeBot API key stored on
-// their employee record (employee.whatsapp_api_key). CallMeBot's free tier
-// binds each key to a specific authorized phone — keys are not interchangeable.
-// If a teacher hasn't set up their personal CallMeBot key, we fall back to
-// email only.
 
 // POST /api/auth/forgot-password
 // Body: { email }
-// Public (no auth). Resets the user's password and dispatches the new password
-// to their personal email and WhatsApp number on file.
+// Resets the user's password and dispatches the new password to whichever channels
+// are configured. Returns candid status so HR can diagnose issues quickly.
 export async function POST(req: NextRequest) {
   let body: { email?: string };
-  try { body = await req.json(); } catch { return NextResponse.json({ ok: true }); }  // always answer vaguely
+  try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 }); }
   const email = (body.email || "").trim().toLowerCase();
-  if (!email) return NextResponse.json({ ok: true });
+  if (!email) return NextResponse.json({ ok: false, error: "Please enter an email address." }, { status: 400 });
+
+  // Quick env sanity check
+  if (!SERVICE_ROLE) {
+    console.error("[forgot-password] SUPABASE_SERVICE_ROLE_KEY is not set in Vercel env");
+    return NextResponse.json({ ok: false, error: "Server misconfigured (missing service role)." }, { status: 500 });
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
@@ -27,17 +28,19 @@ export async function POST(req: NextRequest) {
   let target: { id: string; email?: string | null } | undefined;
   for (let page = 1; page <= 20 && !target; page++) {
     const { data: list, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) break;
+    if (error) {
+      console.error("[forgot-password] listUsers error", error);
+      return NextResponse.json({ ok: false, error: "Could not look up your account." }, { status: 500 });
+    }
     const users = list?.users || [];
     target = users.find((u) => (u.email || "").toLowerCase() === email);
     if (users.length < 200) break;
   }
   if (!target) {
-    // Don't disclose absence; return a generic acknowledgement
-    return NextResponse.json({ ok: true, sent: { email: false, whatsapp: false } });
+    return NextResponse.json({ ok: false, error: "No account exists with that email. Check spelling, or ask the office." }, { status: 404 });
   }
 
-  // 2) Look up the teacher_links → portal_state for personal contact details
+  // 2) Look up teacher_links → portal_state for personal contact details
   const { data: link } = await admin.from("teacher_links").select("employee_id, display_name").eq("user_id", target.id).maybeSingle();
   let personalEmail: string | null = null;
   let phone: string | null = null;
@@ -56,16 +59,25 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // If we have NO destination to dispatch to, fail fast with a clear message
+  if (!personalEmail && !(whatsappKey && phone)) {
+    return NextResponse.json({
+      ok: false,
+      error: "No personal email or WhatsApp on file for this account. Please ask the office to update your contact details.",
+    }, { status: 422 });
+  }
+
   // 3) Generate a fresh, memorable password
   const newPassword = "eurokids" + Math.floor(100 + Math.random() * 900);
 
   // 4) Apply the password
   const { error: updErr } = await admin.auth.admin.updateUserById(target.id, { password: newPassword });
   if (updErr) {
-    return NextResponse.json({ ok: false, error: "Could not reset password. Please contact the office." }, { status: 500 });
+    console.error("[forgot-password] updateUserById error", updErr);
+    return NextResponse.json({ ok: false, error: "Could not reset password: " + updErr.message }, { status: 500 });
   }
 
-  // 5) Dispatch via email + WhatsApp, in parallel; report which succeeded
+  // 5) Dispatch via email and/or WhatsApp
   const portalUrl = req.nextUrl.origin + "/teacher";
   const subject = "Your Eurokids portal password has been reset";
   const textBody = [
@@ -98,28 +110,58 @@ export async function POST(req: NextRequest) {
   `;
 
   const sent = { email: false, whatsapp: false };
+  const errors: string[] = [];
 
   // Email via Resend
-  if (RESEND_API_KEY && personalEmail) {
-    try {
-      const r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${RESEND_API_KEY}` },
-        body: JSON.stringify({ from: RESEND_FROM, to: [personalEmail], subject, text: textBody, html: htmlBody }),
-      });
-      sent.email = r.ok;
-    } catch { /* ignore */ }
+  if (personalEmail) {
+    if (!RESEND_API_KEY) {
+      errors.push("Email skipped: RESEND_API_KEY is not configured in Vercel.");
+    } else {
+      try {
+        const r = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${RESEND_API_KEY}` },
+          body: JSON.stringify({ from: RESEND_FROM, to: [personalEmail], subject, text: textBody, html: htmlBody }),
+        });
+        if (r.ok) {
+          sent.email = true;
+        } else {
+          const txt = await r.text();
+          console.error("[forgot-password] Resend error", r.status, txt);
+          errors.push(`Email failed (Resend ${r.status}): ${txt.slice(0, 200)}`);
+        }
+      } catch (e: unknown) {
+        errors.push("Email failed: " + (e instanceof Error ? e.message : String(e)));
+      }
+    }
   }
 
-  // WhatsApp via CallMeBot — only if this teacher has their own authorized API key
+  // WhatsApp via CallMeBot
   if (whatsappKey && phone) {
     try {
       const msg = `Hello ${displayName.split(" ")[0]}, your new Eurokids portal password is: ${newPassword}\n\nSign in at ${portalUrl}\n\nIf you didn't request this, tell the office.`;
       const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(whatsappKey)}`;
       const r = await fetch(url);
-      sent.whatsapp = r.ok;
-    } catch { /* ignore */ }
+      if (r.ok) sent.whatsapp = true;
+      else errors.push(`WhatsApp failed (${r.status}).`);
+    } catch (e: unknown) {
+      errors.push("WhatsApp failed: " + (e instanceof Error ? e.message : String(e)));
+    }
   }
 
-  return NextResponse.json({ ok: true, sent, hasEmail: !!personalEmail, hasPhone: !!phone });
+  // Compose response
+  if (!sent.email && !sent.whatsapp) {
+    return NextResponse.json({
+      ok: false,
+      error: "Password was reset but could not be delivered. " + (errors.join(" ") || "No channels succeeded."),
+      details: errors,
+    }, { status: 500 });
+  }
+
+  let msg = "Password reset and sent";
+  if (sent.email && sent.whatsapp) msg += " to your email and WhatsApp.";
+  else if (sent.email) msg += ` to ${personalEmail}.`;
+  else if (sent.whatsapp) msg += " to your WhatsApp.";
+
+  return NextResponse.json({ ok: true, message: msg, sent, warnings: errors });
 }
