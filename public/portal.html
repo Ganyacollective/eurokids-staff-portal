@@ -1670,12 +1670,19 @@ function renderBalances(){
     const clLeft = clAllowance - cl, elLeft = elAllowance - el;
     const clDisplay = clCred > 0 ? `${cl} <span class="text-xs text-gray-400">(${clRaw}−${clCred} credited)</span>` : `${cl}`;
     const elDisplay = elCred > 0 ? `${el} <span class="text-xs text-gray-400">(${elRaw}−${elCred} credited)</span>` : `${el}`;
+    // Left column: show "X of Y" with carry-forward breakdown if any
+    const clLeftDisplay = clCF > 0
+      ? `${clLeft} <span class="text-xs text-gray-400">of ${clAllowance} (${AY.cl_per_teacher}+${clCF} cf)</span>`
+      : `${clLeft} <span class="text-xs text-gray-400">of ${clAllowance}</span>`;
+    const elLeftDisplay = elCF > 0
+      ? `${elLeft} <span class="text-xs text-gray-400">of ${elAllowance} (${AY.el_per_teacher}+${elCF} cf)</span>`
+      : `${elLeft} <span class="text-xs text-gray-400">of ${elAllowance}</span>`;
     return `<tr>
       <td class="font-medium">${e.display_name}</td>
       <td>${clDisplay}</td>
-      <td class="${clLeft<=2?'text-red-600 font-semibold':''}">${clLeft}</td>
+      <td class="${clLeft<=2?'text-red-600 font-semibold':''}">${clLeftDisplay}</td>
       <td>${elDisplay}</td>
-      <td class="${elLeft<=2?'text-red-600 font-semibold':''}">${elLeft}</td>
+      <td class="${elLeft<=2?'text-red-600 font-semibold':''}">${elLeftDisplay}</td>
       <td class="${lwp>0?'text-orange-600':''}">${lwp}</td>
     </tr>`;
   }).join('');
