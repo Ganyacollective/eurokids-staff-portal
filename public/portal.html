@@ -856,7 +856,19 @@ function reconcile(rawRows, month){
       return;
     }
 
-    if (/week\s*off/i.test(status)) { reconciledDays.push({ employee_id:emp.id, date, dow, status:"WeekOff" }); ensure(emp).weekOffs++; return; }
+    // PetPooja's "Week Off" label is honoured only when there's no actual punch data.
+    // If a teacher punched in on a day PetPooja marked as Week Off (common on Saturdays
+    // where the roster auto-marks the day as off but the teacher actually came),
+    // her attendance must be visible — show as Full Day, not Week Off.
+    if (/week\s*off/i.test(status)) {
+      if (inMin != null || outMin != null) {
+        // Fall through to the normal punch-processing block below — she came in.
+      } else {
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"WeekOff" });
+        ensure(emp).weekOffs++;
+        return;
+      }
+    }
 
     if (/absent/i.test(status)) {
       if (matched) {
