@@ -28,6 +28,42 @@
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
   .modal-bg.show { display: flex; }
   .modal { background: white; border-radius: 18px; padding: 24px; max-width: 460px; width: 100%; max-height: 90vh; overflow-y: auto; }
+
+  /* ─── Attendance calendar cells (mirror HR portal palette) ─── */
+  .day-cell-mini {
+    border-radius: 7px; padding: 4px;
+    aspect-ratio: 1; min-height: 42px;
+    display: flex; flex-direction: column; gap: 1px;
+    color: white; font-size: 9px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    position: relative;
+  }
+  .day-cell-mini .dow { color: rgba(255,255,255,0.75); font-weight: 600; font-size: 8px; line-height: 1; }
+  .day-cell-mini .num { font-size: 13px; font-weight: 800; color: white; line-height: 1; }
+  .day-cell-mini .lab { font-size: 8px; font-weight: 600; color: rgba(255,255,255,0.95); line-height: 1; }
+  .day-cell-mini.forgiven { box-shadow: inset 0 0 0 2px white, 0 1px 2px rgba(0,0,0,0.04); }
+  .day-cell-mini .badge-corner { position: absolute; top: 2px; right: 2px; font-size: 8px; font-weight: 700; background: rgba(255,255,255,0.25); padding: 1px 4px; border-radius: 3px; color: white; line-height: 1; }
+  .day-FullDay { background: #16A34A; }
+  .day-HalfDay { background: #CA8A04; }
+  .day-Late { background: #D97706; }
+  .day-HalfLWP { background: #EA580C; }
+  .day-LWP { background: #DC2626; }
+  .day-CasualLeave { background: #2563EB; }
+  .day-EarnedLeave { background: #4F46E5; }
+  .day-Holiday { background: #7C3AED; }
+  .day-Vacation { background: #9333EA; }
+  .day-WeekOff { background: #64748B; }
+  .day-ForgotPunch { background: #0891B2; }
+  .day-NoData { background: #F3F4F6; color: #9CA3AF; box-shadow: none; }
+  .day-NoData .num, .day-NoData .dow { color: #9CA3AF; }
+
+  /* ─── Disclosure (accordion) ─── */
+  details.attendance-disclosure { background: white; border: 1px solid #E5E7EB; border-radius: 16px; overflow: hidden; }
+  details.attendance-disclosure summary { cursor: pointer; padding: 14px 16px; list-style: none; display: flex; align-items: center; justify-content: space-between; font-weight: 600; user-select: none; }
+  details.attendance-disclosure summary::-webkit-details-marker { display: none; }
+  details.attendance-disclosure summary::after { content: "▾"; color: #9CA3AF; font-size: 14px; transition: transform .15s; }
+  details.attendance-disclosure[open] summary::after { transform: rotate(180deg); }
+  details.attendance-disclosure .body { padding: 0 16px 16px; }
 </style>
 </head>
 <body class="bg-eurokids-paper text-eurokids-ink min-h-screen">
@@ -116,6 +152,23 @@
 
   <!-- Apply for leave -->
   <button onclick="openLeaveModal()" class="btn-primary w-full">+ Apply for leave</button>
+
+  <!-- Past attendance — collapsible -->
+  <details class="attendance-disclosure" id="attendance-disclosure">
+    <summary>
+      <span>📅 My past attendance</span>
+      <span id="att-summary-count" class="text-xs text-gray-400 font-normal"></span>
+    </summary>
+    <div class="body">
+      <p class="text-xs text-gray-500 mb-3">Finalised months only, made visible after the 10th of the following month.</p>
+      <div class="mb-3">
+        <select id="att-month-picker" onchange="renderAttendanceMonth()" class="input">
+          <option value="">Pick a month</option>
+        </select>
+      </div>
+      <div id="att-month-content"></div>
+    </div>
+  </details>
 
   <!-- History -->
   <section>
@@ -298,6 +351,9 @@ async function initApp(){
     renderBalance();
     renderHistory();
 
+    // 3) Load past attendance (finalised months only) — non-blocking
+    loadAttendance().then(() => renderAttendancePicker());
+
     document.getElementById('main').style.display = 'block';
   } catch (e) {
     alert('Failed to load: ' + e.message);
@@ -305,6 +361,143 @@ async function initApp(){
   } finally {
     boot.style.display = 'none';
   }
+}
+
+// ============================================================
+// Past attendance (calendar) — visible after the 10th of next month
+// ============================================================
+let myAttendance = [];        // [{ month, days, summary, forgivings }]
+let nextAttendanceUnlock = null;
+
+async function loadAttendance(){
+  try {
+    const sb = getSb();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+    const resp = await fetch('/api/teacher/my-attendance', {
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
+    });
+    if (!resp.ok) { console.error('[loadAttendance]', resp.status); return; }
+    const json = await resp.json();
+    myAttendance = json.months || [];
+    nextAttendanceUnlock = json.next_unlock || null;
+  } catch (e) {
+    console.error('[loadAttendance]', e);
+    myAttendance = [];
+    nextAttendanceUnlock = null;
+  }
+}
+
+function renderAttendancePicker(){
+  const picker = document.getElementById('att-month-picker');
+  const summary = document.getElementById('att-summary-count');
+  if (!picker) return;
+  if (myAttendance.length === 0) {
+    picker.innerHTML = '<option value="">No months available yet</option>';
+    summary.textContent = '';
+    const hint = nextAttendanceUnlock
+      ? `Next month visible from ${fmtDate(nextAttendanceUnlock.available_from)}.`
+      : 'After your attendance is finalised, your past calendar will appear here.';
+    document.getElementById('att-month-content').innerHTML = `<div class="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl p-4">${hint}</div>`;
+    return;
+  }
+  const labels = myAttendance.map(m => {
+    const [y, mo] = m.month.split('-').map(Number);
+    const d = new Date(Date.UTC(y, mo-1, 1));
+    return { val: m.month, label: d.toLocaleDateString('en-IN', { month:'long', year:'numeric', timeZone:'UTC' }) };
+  });
+  picker.innerHTML = labels.map((l, i) => `<option value="${l.val}" ${i===0?'selected':''}>${l.label}</option>`).join('');
+  summary.textContent = `${myAttendance.length} month${myAttendance.length===1?'':'s'} available`;
+  renderAttendanceMonth();
+}
+
+function renderAttendanceMonth(){
+  const monthKey = document.getElementById('att-month-picker').value;
+  const monthData = myAttendance.find(m => m.month === monthKey);
+  const wrap = document.getElementById('att-month-content');
+  if (!monthData) { wrap.innerHTML = ''; return; }
+
+  const [y, mo] = monthKey.split('-').map(Number);
+  const daysInMonth = new Date(y, mo, 0).getDate();
+  const firstDow = new Date(Date.UTC(y, mo-1, 1)).getUTCDay();
+  const dayByDate = new Map(monthData.days.map(d => [d.date, d]));
+
+  // Day cells
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push('<div></div>');
+  for (let dnum = 1; dnum <= daysInMonth; dnum++) {
+    const date = `${y}-${String(mo).padStart(2,'0')}-${String(dnum).padStart(2,'0')}`;
+    const d = dayByDate.get(date);
+    const dow = new Date(Date.UTC(y, mo-1, dnum)).getUTCDay();
+    const dowLabel = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow];
+    if (!d) {
+      cells.push(`<div class="day-cell-mini day-NoData"><div class="dow">${dowLabel}</div><div class="num">${dnum}</div></div>`);
+      continue;
+    }
+    const statusLabel = ({
+      FullDay: 'Full', HalfDay: '½ Day', Late: 'Late', HalfLWP: '½ LWP', LWP: 'LWP',
+      CasualLeave: 'CL', EarnedLeave: 'EL', Holiday: 'Holiday', Vacation: 'Vac',
+      WeekOff: 'Off', ForgotPunch: 'No-Punch'
+    })[d.status] || d.status;
+    const corner = d.forgiven ? '<div class="badge-corner">✓ FORGIVEN</div>' : (d.is_overridden ? '<div class="badge-corner">✎</div>' : '');
+    cells.push(`<div class="day-cell-mini day-${d.status} ${d.forgiven?'forgiven':''}" title="${escapeHtml(d.note || '')}"><div class="dow">${dowLabel}</div><div class="num">${dnum}</div><div class="lab">${statusLabel}</div>${corner}</div>`);
+  }
+
+  // Summary stats
+  const s = monthData.summary;
+  const forgCount = monthData.forgivings.length;
+
+  wrap.innerHTML = `
+    <div class="grid grid-cols-7 gap-1 mb-2 text-xs text-gray-500 font-semibold text-center">
+      ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}
+    </div>
+    <div class="grid grid-cols-7 gap-1 mb-3">${cells.join('')}</div>
+
+    <div class="grid grid-cols-3 gap-2 mb-3 text-center">
+      <div class="bg-green-50 border border-green-200 rounded-lg p-2">
+        <div class="text-[10px] text-green-700 font-semibold uppercase tracking-wider">Full days</div>
+        <div class="text-lg font-bold text-green-700">${s.fd}</div>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-2">
+        <div class="text-[10px] text-amber-700 font-semibold uppercase tracking-wider">Late strikes</div>
+        <div class="text-lg font-bold text-amber-700">${s.lateStrikes}</div>
+      </div>
+      <div class="bg-red-50 border border-red-200 rounded-lg p-2">
+        <div class="text-[10px] text-red-700 font-semibold uppercase tracking-wider">LWP days</div>
+        <div class="text-lg font-bold text-red-700">${s.lwpDays}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-2 mb-3 text-center">
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-2">
+        <div class="text-[10px] text-blue-700 font-semibold uppercase tracking-wider">CL taken</div>
+        <div class="text-lg font-bold text-blue-700">${s.clDays}</div>
+      </div>
+      <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-2">
+        <div class="text-[10px] text-indigo-700 font-semibold uppercase tracking-wider">EL taken</div>
+        <div class="text-lg font-bold text-indigo-700">${s.elDays}</div>
+      </div>
+    </div>
+
+    ${forgCount > 0 ? `
+      <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-2">
+        <div class="text-xs font-semibold text-purple-800 mb-2">${forgCount} forgiving${forgCount===1?'':'s'} this month</div>
+        <ul class="text-xs text-purple-900 space-y-1">
+          ${monthData.forgivings.map(f => `<li>• <strong>${fmtDateShort(f.date)}</strong> — ${escapeHtml(f.reason || '(no reason recorded)')}</li>`).join('')}
+        </ul>
+      </div>
+    ` : ''}
+
+    <div class="text-[10px] text-gray-400 leading-relaxed mt-2">
+      Green = Full Day · Amber = Late · Red = LWP · Blue = CL · Indigo = EL · Purple = Holiday · Violet = Vacation · Grey = Week Off / No Data. A ✓ FORGIVEN badge means HR waived that day's penalty for you.
+    </div>
+  `;
+}
+
+function fmtDateShort(iso){
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00Z');
+  return d.toLocaleDateString('en-IN', { day:'2-digit', month:'short', timeZone:'UTC' });
 }
 
 async function loadRequests(){

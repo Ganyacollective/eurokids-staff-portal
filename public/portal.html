@@ -466,6 +466,7 @@ const DEFAULT_STATE = {
   ],
   attendanceMonths: {},  // keyed by 'YYYY-MM'
   adjustments: [],  // forgiveness audit trail: {id, month, employee_id, date, kind: 'forgive_late'|'forgive_lwp'|'forgive_halflwp', reason, decided_at}
+  day_overrides: [],  // HR's manual day-status overrides: {id, employee_id, date, status, note, decided_at}
   special_days: [],  // {id, date, name, skip_late_strikes, notes} — sports day, annual function, etc.
   special_day_overrides: [],  // {id, special_day_id, employee_id, status: 'Present'|'CasualLeave'|'EarnedLeave'|'LWP'|'Excused', note}
   activeMonth: "2026-04",
@@ -1019,6 +1020,44 @@ function reconcile(rawRows, month){
     }
   }
 
+  // ─── Final pass: HR day-overrides take precedence over everything above. ───
+  // Apply each override that falls within this month, then recompute the affected
+  // employee's headline counters from the finalised reconciledDays so the salary
+  // sheet picks up the change.
+  const overridden = new Set();
+  for (const ov of (state.day_overrides || [])) {
+    if (ov.date < monthStart || ov.date > monthEnd) continue;
+    const day = reconciledDays.find(d => d.employee_id === ov.employee_id && d.date === ov.date);
+    if (!day) continue;
+    const prevStatus = day.status;
+    day.status = ov.status;
+    day.is_overridden = true;
+    day.override_note = ov.note || '';
+    day.override_prev_status = prevStatus;
+    overridden.add(ov.employee_id);
+  }
+  // Recompute headline counters (fd, halfLwp, lwpDays, clDays, elDays, weekOffs, holidays, vacationDays)
+  // for any employee touched by an override. Late-strike machinery (lateStrikes, lateDetails,
+  // strikeHalfDays) is preserved from Pass 1-3 since it depends on punch times, not final status.
+  for (const empId of overridden) {
+    const s = empSummary.get(empId); if (!s) continue;
+    s.fd = 0; s.halfLwp = 0; s.lwpDays = 0; s.clDays = 0; s.elDays = 0; s.weekOffs = 0; s.holidays = 0; s.vacationDays = 0;
+    for (const d of reconciledDays.filter(x => x.employee_id === empId)) {
+      switch (d.status) {
+        case "FullDay": case "Late": case "ForgotPunch": s.fd++; break;
+        case "HalfDay": s.fd += 0.5; break;
+        case "HalfLWP": s.halfLwp++; s.fd += 0.5; break;
+        case "LWP": s.lwpDays++; break;
+        case "CasualLeave": s.clDays++; break;
+        case "EarnedLeave": s.elDays++; break;
+        case "WeekOff": s.weekOffs++; break;
+        case "Holiday": s.holidays++; break;
+        case "Vacation": s.vacationDays++; break;
+      }
+    }
+    s.totalCutDays = s.lwpDays + 0.5 * (s.strikeHalfDays + s.halfLwp);
+  }
+
   return { reconciledDays, anomalies, summaries: Array.from(empSummary.values()), leave_credits };
 }
 
@@ -1085,7 +1124,12 @@ function renderAll(){
 }
 
 function updateNavBadges(){
-  const pending = state.leaves.filter(L => L.status === "Pending").length;
+  // Pending = manual state.leaves pending + portal-submitted requests not yet promoted into blob
+  const blobSourceIds = new Set();
+  for (const L of state.leaves) if (L.source_id) blobSourceIds.add(L.source_id);
+  const portalPending = (_inbox || []).filter(r => r.status === 'Pending' && !blobSourceIds.has(r.id)).length;
+  const blobPending = state.leaves.filter(L => L.status === "Pending").length;
+  const pending = blobPending + portalPending;
   const navP = document.getElementById('nav-pending');
   navP.textContent = pending; navP.classList.toggle('hidden', pending===0);
   const m = state.attendanceMonths[state.activeMonth];
@@ -1591,26 +1635,69 @@ document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', (
 function renderLeaves(){
   const tbody = document.getElementById('leaves-tbody');
   const tabPend = document.getElementById('leaves-tab-pending');
-  const pendingCount = state.leaves.filter(L=>L.status==='Pending').length;
+
+  // Merge HR blob leaves with teacher-portal-submitted requests (deduped by source_id).
+  // For requests already promoted into the blob (HR approved via Inbox), the blob is canonical.
+  // Pending / rejected requests not in the blob are surfaced here too.
+  const blobBySourceId = new Map();
+  for (const L of state.leaves) if (L.source_id) blobBySourceId.set(L.source_id, L);
+
+  const fromRequests = (_inbox || [])
+    .filter(r => !blobBySourceId.has(r.id))
+    .map(r => ({
+      id: r.id,
+      employee_id: r.employee_id,
+      leave_type: r.leave_type,
+      start_date: r.start_date,
+      end_date: r.end_date,
+      total_days: parseFloat(r.total_days),
+      reason: r.reason || '',
+      status: r.status,
+      reviewer_note: r.reviewer_note || '',
+      applied_at: r.applied_at,
+      _origin: 'portal',   // came from teacher portal — not yet in blob
+    }));
+
+  const allLeaves = [
+    ...state.leaves.map(L => ({ ...L, _origin: L.source === 'teacher_portal' ? 'portal' : 'manual' })),
+    ...fromRequests,
+  ];
+
+  const pendingCount = allLeaves.filter(L => L.status === 'Pending').length;
   if (pendingCount > 0) { tabPend.textContent = `(${pendingCount})`; } else tabPend.textContent = '';
 
-  let list = state.leaves.slice();
+  let list = allLeaves;
   if (leavesTab !== "all") list = list.filter(L => L.status === leavesTab);
-  list.sort((a,b)=>b.applied_at?.localeCompare(a.applied_at||'')||0);
+  list.sort((a,b) => (b.applied_at||'').localeCompare(a.applied_at||''));
 
   if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-12">No leave applications in this view.</td></tr>`; return; }
-  tbody.innerHTML = list.map(L => { const e = empById(L.employee_id);
+  tbody.innerHTML = list.map(L => {
+    const e = empById(L.employee_id);
+    const isPortal = L._origin === 'portal' && !L.source_id;  // unpromoted teacher-portal request
+    const originBadge = L._origin === 'portal'
+      ? '<span class="text-[10px] font-semibold uppercase tracking-wider text-eurokids-blue ml-1">via portal</span>'
+      : '';
+    // For unpromoted teacher-portal requests, Approve/Reject route through the Inbox handlers
+    // so the leave_requests row gets properly updated and the blob promotion happens.
+    const actionButtons = L.status === 'Pending'
+      ? (isPortal
+          ? ` · <button onclick="approveRequest('${L.id}')" class="btn-link" style="color:#15803D">Approve</button> · <button onclick="rejectRequest('${L.id}')" class="btn-link" style="color:#B91C1C">Reject</button>`
+          : ` · <button onclick="approveLeave('${L.id}')" class="btn-link" style="color:#15803D">Approve</button> · <button onclick="rejectLeave('${L.id}')" class="btn-link" style="color:#B91C1C">Reject</button>`)
+      : '';
+    const editButton = isPortal
+      ? ''  // teacher-portal requests aren't editable from HR side until promoted; use Inbox for triage
+      : `<button onclick="openLeaveForm('${L.id}')" class="btn-link">Edit</button>`;
+    const deleteButton = isPortal
+      ? ''  // can't delete portal requests directly — reject them instead
+      : ` · <button onclick="deleteLeave('${L.id}')" class="btn-danger">Delete</button>`;
     return `<tr>
-      <td class="font-medium">${e?.display_name||"?"}</td>
+      <td class="font-medium">${e?.display_name||"?"}${originBadge}</td>
       <td><span class="badge ${L.leave_type==='EL'?'b-el':L.leave_type==='CL'?'b-cl':'b-lwp'}">${L.leave_type}</span></td>
       <td class="text-gray-600">${fmtDateShort(L.start_date)} → ${fmtDateShort(L.end_date)}</td>
       <td>${L.total_days}</td>
       <td class="text-gray-600 text-xs max-w-xs">${L.reason||''}</td>
       <td><span class="badge ${L.status==='Approved'?'b-approved':L.status==='Rejected'?'b-rejected':'b-pending'}">${L.status}</span></td>
-      <td><button onclick="openLeaveForm('${L.id}')" class="btn-link">Edit</button>
-        ${L.status === 'Pending' ? ` · <button onclick="approveLeave('${L.id}')" class="btn-link" style="color:#15803D">Approve</button> · <button onclick="rejectLeave('${L.id}')" class="btn-link" style="color:#B91C1C">Reject</button>` : ''}
-        · <button onclick="deleteLeave('${L.id}')" class="btn-danger">Delete</button>
-      </td>
+      <td>${editButton}${actionButtons}${deleteButton}</td>
     </tr>`;
   }).join('');
 }
@@ -1871,9 +1958,10 @@ function renderReports(){
             const lateInfo = d.late ? `<div class="text-[10px] font-semibold" style="color:rgba(255,255,255,0.95)">+${d.late}m · ${minToTime(d.in)}</div>` : (d.in ? `<div class="text-[10px]" style="color:rgba(255,255,255,0.85)">${minToTime(d.in)}</div>` : '');
             const noteHtml = d.note ? `<div class="text-[10px] leading-tight" style="color:rgba(255,255,255,0.85)">${d.note}</div>` : '';
             const forgivenTag = d.forgiven ? `<div class="text-[9px] font-bold leading-none mt-auto self-start" style="background:rgba(255,255,255,0.25);padding:2px 5px;border-radius:4px;color:white">✓ FORGIVEN</div>` : '';
-            const clickable = (d.status === "LWP" && !d.forgiven) ? `onclick="openForgiveModal('${viewingEmployeeId}','${d.date}','forgive_lwp')" style="cursor:pointer" title="Click to forgive this LWP"` : '';
+            const editedTag = d.is_overridden ? `<div class="text-[9px] font-bold leading-none mt-auto self-start" style="background:rgba(255,255,255,0.3);padding:2px 5px;border-radius:4px;color:white">✎ EDITED</div>` : '';
+            const clickable = `onclick="openDayEditModal('${viewingEmployeeId}','${d.date}')" style="cursor:pointer" title="Click to edit this day"`;
             const statusLabel = d.status === "FullDay" ? "Full Day" : d.status === "CasualLeave" ? "CL" : d.status === "EarnedLeave" ? "EL" : d.status === "ForgotPunch" ? "Forgot Punch" : d.status === "WeekOff" ? "Week Off" : d.status === "HalfLWP" ? "Half LWP" : d.status;
-            cells.push(`<div class="day-cell day-${d.status} ${d.forgiven?'forgiven':''}" ${clickable}><div class="dow">${dowName(dow)}</div><div class="num">${dnum}</div><div class="text-[10px] font-semibold">${statusLabel}</div>${lateInfo}${noteHtml}${forgivenTag}</div>`);
+            cells.push(`<div class="day-cell day-${d.status} ${d.forgiven?'forgiven':''}" ${clickable}><div class="dow">${dowName(dow)}</div><div class="num">${dnum}</div><div class="text-[10px] font-semibold">${statusLabel}</div>${lateInfo}${noteHtml}${forgivenTag||editedTag}</div>`);
           }
           return cells.join('');
         })()}
@@ -2065,6 +2153,87 @@ function buildReportText(empId, month, opts={}){
   const closing = `\n${comparisonNote ? comparisonNote + '\n\n' : ''}${gratitude}\n\nIf anything in this report looks wrong, please reply and we'll review it together.\n\nWith warmth,\nEurokids JMD Enclave\n`;
 
   return greeting + '\n' + summary + lateSection + forgivenSection + forgotWarning + leaveTimingWarning + closing;
+}
+
+// ============================================================
+// Day editor — HR can override any day's verdict with a note.
+// Used for: biometric glitches, manual strikes for rule infractions, gift days, etc.
+// ============================================================
+function openDayEditModal(empId, date){
+  const emp = empById(empId); if (!emp) return;
+  const month = date.slice(0, 7);
+  const im = state.attendanceMonths[month];
+  const day = im?.reconciledDays?.find(d => d.employee_id === empId && d.date === date);
+  const currentStatus = day?.status || 'FullDay';
+  const existingOverride = (state.day_overrides || []).find(o => o.employee_id === empId && o.date === date);
+
+  const STATUS_OPTIONS = [
+    { val: 'FullDay',      label: 'Full Day — paid in full' },
+    { val: 'HalfLWP',      label: 'Half-day LWP — ½ day deducted (use for late penalty / rule infraction)' },
+    { val: 'LWP',          label: 'Leave Without Pay — full day deducted' },
+    { val: 'CasualLeave',  label: 'Casual Leave (CL) — uses CL balance' },
+    { val: 'EarnedLeave',  label: 'Earned Leave (EL) — uses EL balance' },
+    { val: 'WeekOff',      label: 'Week Off — paid, no deduction' },
+    { val: 'Holiday',      label: 'Holiday — paid, no deduction' },
+  ];
+  const opts = STATUS_OPTIONS.map(o => `<option value="${o.val}" ${o.val===currentStatus?'selected':''}>${o.label}</option>`).join('');
+
+  const punchLine = (day?.in || day?.out)
+    ? `<div class="text-xs text-gray-500 mb-2">PetPooja punches — in: <strong>${day.in?minToTime(day.in):'—'}</strong>, out: <strong>${day.out?minToTime(day.out):'—'}</strong></div>`
+    : '<div class="text-xs text-gray-500 mb-2">No punch data from PetPooja for this day.</div>';
+
+  const removeBtn = existingOverride
+    ? `<button onclick="removeDayOverride('${existingOverride.id}','${month}')" class="text-red-600 text-sm hover:underline">Remove override (revert to engine's verdict)</button>`
+    : '';
+
+  openModal(`Edit day — ${emp.display_name}, ${fmtDate(date)}`, `
+    <div class="space-y-3">
+      ${punchLine}
+      <div class="text-xs text-gray-500">Engine's current verdict: <strong>${currentStatus}</strong>${existingOverride ? ' <span class="text-eurokids-blue">(currently overridden)</span>' : ''}</div>
+      <div>
+        <label class="text-xs font-medium text-gray-700 block mb-1">New status for this day *</label>
+        <select id="dov-status" class="input">${opts}</select>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-gray-700 block mb-1">Note / reason *</label>
+        <textarea id="dov-note" rows="2" class="input" placeholder="e.g. 'Came in physically, biometric malfunctioned' or 'Marked ½-day LWP for breaking dress code rule'">${existingOverride?.note || ''}</textarea>
+        <div class="text-xs text-gray-500 mt-1">This note is preserved on the day for audit and shown to HR. Teachers don't see it directly.</div>
+      </div>
+      <div class="flex flex-wrap gap-2 pt-2">
+        <button onclick="saveDayOverride('${empId}','${date}')" class="btn-primary flex-1">Save override</button>
+        <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+      </div>
+      ${removeBtn ? `<div class="pt-2 border-t border-gray-200 mt-2">${removeBtn}</div>` : ''}
+    </div>
+  `);
+  setTimeout(() => document.getElementById('dov-note')?.focus(), 100);
+}
+
+function saveDayOverride(empId, date){
+  const status = document.getElementById('dov-status').value;
+  const note = document.getElementById('dov-note').value.trim();
+  if (!note) return alert("Please add a short reason — this gets preserved with the override.");
+  if (!state.day_overrides) state.day_overrides = [];
+  const existing = state.day_overrides.find(o => o.employee_id === empId && o.date === date);
+  if (existing) {
+    Object.assign(existing, { status, note, decided_at: new Date().toISOString() });
+  } else {
+    state.day_overrides.push({ id: uid(), employee_id: empId, date, status, note, decided_at: new Date().toISOString() });
+  }
+  saveState();
+  const month = date.slice(0, 7);
+  if (state.attendanceMonths[month]) rerunReconciliation(month);
+  renderAll();
+  closeModal();
+}
+
+function removeDayOverride(ovId, month){
+  if (!confirm("Remove this day override and revert to the engine's automatic verdict?")) return;
+  state.day_overrides = (state.day_overrides || []).filter(o => o.id !== ovId);
+  saveState();
+  if (state.attendanceMonths[month]) rerunReconciliation(month);
+  renderAll();
+  closeModal();
 }
 
 function openForgiveModal(empId, date, kind){
