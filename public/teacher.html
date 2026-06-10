@@ -393,12 +393,9 @@ function renderAttendancePicker(){
   const summary = document.getElementById('att-summary-count');
   if (!picker) return;
   if (myAttendance.length === 0) {
-    picker.innerHTML = '<option value="">No months available yet</option>';
+    picker.innerHTML = '<option value="">Nothing published yet</option>';
     summary.textContent = '';
-    const hint = nextAttendanceUnlock
-      ? `Next month visible from ${fmtDate(nextAttendanceUnlock.available_from)}.`
-      : 'After your attendance is finalised, your past calendar will appear here.';
-    document.getElementById('att-month-content').innerHTML = `<div class="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl p-4">${hint}</div>`;
+    document.getElementById('att-month-content').innerHTML = `<div class="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl p-4">Your attendance will appear here once the office publishes a month. They usually do this after the salary is paid.</div>`;
     return;
   }
   const labels = myAttendance.map(m => {
@@ -407,7 +404,7 @@ function renderAttendancePicker(){
     return { val: m.month, label: d.toLocaleDateString('en-IN', { month:'long', year:'numeric', timeZone:'UTC' }) };
   });
   picker.innerHTML = labels.map((l, i) => `<option value="${l.val}" ${i===0?'selected':''}>${l.label}</option>`).join('');
-  summary.textContent = `${myAttendance.length} month${myAttendance.length===1?'':'s'} available`;
+  summary.textContent = `${myAttendance.length} month${myAttendance.length===1?'':'s'}`;
   renderAttendanceMonth();
 }
 
@@ -421,8 +418,18 @@ function renderAttendanceMonth(){
   const daysInMonth = new Date(y, mo, 0).getDate();
   const firstDow = new Date(Date.UTC(y, mo-1, 1)).getUTCDay();
   const dayByDate = new Map(monthData.days.map(d => [d.date, d]));
+  const STATUS_LABEL = {
+    FullDay: 'Full Day', HalfDay: 'Half Day', Late: 'Late', HalfLWP: '½-day LWP', LWP: 'LWP',
+    CasualLeave: 'Casual Leave', EarnedLeave: 'Earned Leave', Holiday: 'Holiday',
+    Vacation: 'Vacation', WeekOff: 'Week Off', ForgotPunch: 'Forgot Punch',
+  };
+  const SHORT_LABEL = {
+    FullDay: 'Full', HalfDay: '½ Day', Late: 'Late', HalfLWP: '½ LWP', LWP: 'LWP',
+    CasualLeave: 'CL', EarnedLeave: 'EL', Holiday: 'Hol', Vacation: 'Vac',
+    WeekOff: 'Off', ForgotPunch: 'No-Pn',
+  };
 
-  // Day cells
+  // ─── Calendar grid ─────────────────────────────────────
   const cells = [];
   for (let i = 0; i < firstDow; i++) cells.push('<div></div>');
   for (let dnum = 1; dnum <= daysInMonth; dnum++) {
@@ -434,26 +441,62 @@ function renderAttendanceMonth(){
       cells.push(`<div class="day-cell-mini day-NoData"><div class="dow">${dowLabel}</div><div class="num">${dnum}</div></div>`);
       continue;
     }
-    const statusLabel = ({
-      FullDay: 'Full', HalfDay: '½ Day', Late: 'Late', HalfLWP: '½ LWP', LWP: 'LWP',
-      CasualLeave: 'CL', EarnedLeave: 'EL', Holiday: 'Holiday', Vacation: 'Vac',
-      WeekOff: 'Off', ForgotPunch: 'No-Punch'
-    })[d.status] || d.status;
-    const corner = d.forgiven ? '<div class="badge-corner">✓ FORGIVEN</div>' : (d.is_overridden ? '<div class="badge-corner">✎</div>' : '');
-    cells.push(`<div class="day-cell-mini day-${d.status} ${d.forgiven?'forgiven':''}" title="${escapeHtml(d.note || '')}"><div class="dow">${dowLabel}</div><div class="num">${dnum}</div><div class="lab">${statusLabel}</div>${corner}</div>`);
+    const lbl = SHORT_LABEL[d.status] || d.status;
+    const corner = d.forgiven ? '<div class="badge-corner">✓</div>' : (d.is_overridden ? '<div class="badge-corner">✎</div>' : '');
+    cells.push(`<div class="day-cell-mini day-${d.status} ${d.forgiven?'forgiven':''}" title="${escapeHtml(d.note || '')}"><div class="dow">${dowLabel}</div><div class="num">${dnum}</div><div class="lab">${lbl}</div>${corner}</div>`);
   }
 
-  // Summary stats
   const s = monthData.summary;
+  const inr = (n) => '₹' + Number(n).toLocaleString('en-IN');
+
+  // ─── Per-day detail table (the granular view the user asked for) ──
+  const dayRows = monthData.days.map(d => {
+    const statusName = STATUS_LABEL[d.status] || d.status;
+    const punch = (d.in_label || d.out_label)
+      ? `${d.in_label || '—'} <span class="text-gray-300">→</span> ${d.out_label || '—'}`
+      : '<span class="text-gray-400">—</span>';
+    const lateInfo = (d.late_min != null && d.late_min > 0)
+      ? `<span class="text-amber-700 font-medium">+${d.late_min}m late${d.is_strike?' · strike':''}</span>`
+      : '';
+    const overrideInfo = d.is_overridden
+      ? `<div class="text-[10px] text-eurokids-blue mt-0.5">✎ Changed from ${STATUS_LABEL[d.override_prev_status]||d.override_prev_status} — ${escapeHtml(d.override_note||'')}</div>`
+      : '';
+    const forgiveInfo = d.forgiven
+      ? `<div class="text-[10px] text-green-700 mt-0.5">✓ Forgiven${d.forgive_reason?' — '+escapeHtml(d.forgive_reason):''}</div>`
+      : '';
+    const creditInfo = d.leave_credit
+      ? `<div class="text-[10px] text-green-700 mt-0.5">${d.leave_credit} applied but came in — balance restored</div>`
+      : '';
+    const notesInfo = d.note && !d.is_overridden && !d.forgiven && !d.leave_credit
+      ? `<div class="text-[10px] text-gray-500 mt-0.5">${escapeHtml(d.note)}</div>`
+      : '';
+    return `
+      <tr class="border-b border-gray-100 last:border-b-0">
+        <td class="py-2 pr-3 text-sm font-medium align-top whitespace-nowrap">${fmtDateShort(d.date)}</td>
+        <td class="py-2 pr-3 align-top">
+          <span class="badge day-${d.status}" style="color:white;font-size:9pt">${statusName}</span>
+          ${overrideInfo}${forgiveInfo}${creditInfo}${notesInfo}
+        </td>
+        <td class="py-2 pr-3 text-sm text-gray-700 align-top whitespace-nowrap">${punch}</td>
+        <td class="py-2 text-xs align-top">${lateInfo}</td>
+      </tr>`;
+  }).join('');
+
   const forgCount = monthData.forgivings.length;
+  const publishedDate = monthData.published_at ? new Date(monthData.published_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '';
 
   wrap.innerHTML = `
+    <!-- Published timestamp -->
+    <div class="text-[10px] text-gray-400 italic mb-3">Published ${publishedDate}</div>
+
+    <!-- Calendar grid -->
     <div class="grid grid-cols-7 gap-1 mb-2 text-xs text-gray-500 font-semibold text-center">
       ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div>${d}</div>`).join('')}
     </div>
-    <div class="grid grid-cols-7 gap-1 mb-3">${cells.join('')}</div>
+    <div class="grid grid-cols-7 gap-1 mb-4">${cells.join('')}</div>
 
-    <div class="grid grid-cols-3 gap-2 mb-3 text-center">
+    <!-- Headline summary cards -->
+    <div class="grid grid-cols-3 gap-2 mb-2 text-center">
       <div class="bg-green-50 border border-green-200 rounded-lg p-2">
         <div class="text-[10px] text-green-700 font-semibold uppercase tracking-wider">Full days</div>
         <div class="text-lg font-bold text-green-700">${s.fd}</div>
@@ -461,13 +504,13 @@ function renderAttendanceMonth(){
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-2">
         <div class="text-[10px] text-amber-700 font-semibold uppercase tracking-wider">Late strikes</div>
         <div class="text-lg font-bold text-amber-700">${s.lateStrikes}</div>
+        ${s.strikeHalfDays > 0 ? `<div class="text-[9px] text-amber-700">→ ${s.strikeHalfDays} ½-day cut</div>` : ''}
       </div>
       <div class="bg-red-50 border border-red-200 rounded-lg p-2">
-        <div class="text-[10px] text-red-700 font-semibold uppercase tracking-wider">LWP days</div>
-        <div class="text-lg font-bold text-red-700">${s.lwpDays}</div>
+        <div class="text-[10px] text-red-700 font-semibold uppercase tracking-wider">LWP / ½ LWP</div>
+        <div class="text-lg font-bold text-red-700">${s.lwpDays} <span class="text-xs">/ ${s.halfLwp}</span></div>
       </div>
     </div>
-
     <div class="grid grid-cols-2 gap-2 mb-3 text-center">
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-2">
         <div class="text-[10px] text-blue-700 font-semibold uppercase tracking-wider">CL taken</div>
@@ -479,17 +522,55 @@ function renderAttendanceMonth(){
       </div>
     </div>
 
+    <!-- Total cuts + salary impact -->
+    <div class="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-300 rounded-xl p-3 mb-4">
+      <div class="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1">This month's salary</div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[10px] text-gray-500">Base</div>
+          <div class="text-base font-bold text-eurokids-ink">${inr(s.monthlySalary)}</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-gray-500">Cut days</div>
+          <div class="text-base font-bold ${s.totalCutDays>0?'text-red-700':'text-green-700'}">${s.totalCutDays}</div>
+          ${s.cutAmount>0?`<div class="text-[9px] text-red-700">−${inr(s.cutAmount)}</div>`:''}
+        </div>
+        <div>
+          <div class="text-[10px] text-gray-500">Net payable</div>
+          <div class="text-base font-bold text-green-700">${inr(s.netPayable)}</div>
+        </div>
+      </div>
+    </div>
+
     ${forgCount > 0 ? `
-      <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-2">
-        <div class="text-xs font-semibold text-purple-800 mb-2">${forgCount} forgiving${forgCount===1?'':'s'} this month</div>
+      <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-3">
+        <div class="text-xs font-semibold text-purple-800 mb-2">${forgCount} forgiving${forgCount===1?'':'s'} this month — thank you, HR</div>
         <ul class="text-xs text-purple-900 space-y-1">
           ${monthData.forgivings.map(f => `<li>• <strong>${fmtDateShort(f.date)}</strong> — ${escapeHtml(f.reason || '(no reason recorded)')}</li>`).join('')}
         </ul>
       </div>
     ` : ''}
 
-    <div class="text-[10px] text-gray-400 leading-relaxed mt-2">
-      Green = Full Day · Amber = Late · Red = LWP · Blue = CL · Indigo = EL · Purple = Holiday · Violet = Vacation · Grey = Week Off / No Data. A ✓ FORGIVEN badge means HR waived that day's penalty for you.
+    <!-- Detailed day-by-day table -->
+    <details class="bg-white border border-gray-200 rounded-xl overflow-hidden mb-3">
+      <summary class="p-3 cursor-pointer text-sm font-semibold text-eurokids-ink hover:bg-gray-50">Day-by-day detail</summary>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50 border-y border-gray-200">
+            <tr class="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">
+              <th class="text-left py-2 pl-3 pr-3">Date</th>
+              <th class="text-left py-2 pr-3">Status</th>
+              <th class="text-left py-2 pr-3">Punch in / out</th>
+              <th class="text-left py-2 pr-3">Notes</th>
+            </tr>
+          </thead>
+          <tbody>${dayRows}</tbody>
+        </table>
+      </div>
+    </details>
+
+    <div class="text-[10px] text-gray-400 leading-relaxed">
+      Calendar legend — Green = Full · Amber = Late · Red = LWP · Blue = CL · Indigo = EL · Purple = Holiday · Violet = Vacation · Slate = Week Off · Cyan = Forgot Punch. ✓ in the corner = HR forgave that day's penalty. ✎ = HR manually edited that day's status (reason shown in the detailed view).
     </div>
   `;
 }

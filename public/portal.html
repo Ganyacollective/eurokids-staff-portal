@@ -1615,16 +1615,46 @@ function renderImports(){
   const tbody = document.getElementById('imports-tbody');
   const months = Object.keys(state.attendanceMonths).sort().reverse();
   if (months.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-12">No imports yet. Upload your first PetPooja file above.</td></tr>`; return; }
-  tbody.innerHTML = months.map(m => { const im = state.attendanceMonths[m]; return `<tr>
-    <td class="font-medium">${m}</td>
-    <td>${im.rawRows.length}</td>
-    <td>${im.anomalies.length}</td>
-    <td class="text-gray-500 text-xs">${new Date(im.importedAt).toLocaleString('en-IN')}</td>
-    <td><button onclick="setActiveMonth('${m}')" class="btn-link">Set active</button> · <button onclick="rerunReconciliation('${m}')" class="btn-link">Re-run</button> · <button onclick="deleteImport('${m}')" class="btn-danger">Delete</button></td>
-  </tr>`}).join('');
+  tbody.innerHTML = months.map(m => {
+    const im = state.attendanceMonths[m];
+    const isPublished = !!im.published_at;
+    const publishBtn = isPublished
+      ? `<button onclick="unpublishMonth('${m}')" class="btn-link" style="color:#B45309" title="Hide this month from teachers again">Unpublish</button>`
+      : `<button onclick="publishMonth('${m}')" class="btn-link" style="color:#15803D" title="Make this month visible to teachers">Publish to teachers</button>`;
+    const publishedBadge = isPublished
+      ? `<div class="text-[10px] text-green-700 font-semibold">✓ Published ${new Date(im.published_at).toLocaleDateString('en-IN')}</div>`
+      : `<div class="text-[10px] text-gray-400">Hidden from teachers</div>`;
+    return `<tr>
+      <td class="font-medium">${m}${publishedBadge}</td>
+      <td>${im.rawRows.length}</td>
+      <td>${im.anomalies.length}</td>
+      <td class="text-gray-500 text-xs">${new Date(im.importedAt).toLocaleString('en-IN')}</td>
+      <td><button onclick="setActiveMonth('${m}')" class="btn-link">Set active</button> · <button onclick="rerunReconciliation('${m}')" class="btn-link">Re-run</button> · ${publishBtn} · <button onclick="deleteImport('${m}')" class="btn-danger">Delete</button></td>
+    </tr>`;
+  }).join('');
 }
 function setActiveMonth(m){ state.activeMonth = m; saveState(); renderAll(); }
 function deleteImport(m){ if (confirm(`Delete the ${m} import?`)) { delete state.attendanceMonths[m]; if (state.activeMonth === m) state.activeMonth = Object.keys(state.attendanceMonths)[0] || "2026-04"; saveState(); renderAll(); } }
+
+// Make this month's reconciled attendance visible to teachers on their portal.
+// Until published, teachers see no data for the month — even after import.
+function publishMonth(m){
+  const im = state.attendanceMonths[m];
+  if (!im) return;
+  if (im.published_at && !confirm(`Re-publish ${m}? The latest reconciliation will become visible to teachers.`)) return;
+  if (!im.published_at && !confirm(`Publish ${m} to all teachers? Each will see their own day-by-day attendance, late strikes, leaves, forgivings, and total cuts.`)) return;
+  im.published_at = new Date().toISOString();
+  saveState(); renderAll();
+}
+
+function unpublishMonth(m){
+  const im = state.attendanceMonths[m];
+  if (!im) return;
+  if (!confirm(`Hide ${m} from teachers again? They won't see their attendance for this month until you re-publish.`)) return;
+  delete im.published_at;
+  delete im.published_by;
+  saveState(); renderAll();
+}
 
 // ============================================================
 // LEAVES with approval workflow
