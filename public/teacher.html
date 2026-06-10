@@ -176,6 +176,8 @@ let _sb = null;
 let me = null;        // teacher_links row
 let myRequests = [];  // merged leaves (request + blob)
 let myCredits = [];   // leave_credits across reconciled months
+let myCarryForward = { cl: 0, el: 0 };  // additive carry-forward from previous AYs
+let myLegacyOverride = { cl: null, el: null };  // back-compat for old data shape
 
 const HR_EMAILS = ['hr@eurokidsjmdenclave.org', 'admin@eurokidsjmdenclave.org'];
 
@@ -326,10 +328,14 @@ async function loadRequests(){
     const leaves = (json.leaves || []).filter(L => L.start_date >= AY.start && L.end_date <= AY.end);
     myRequests = leaves;
     myCredits = (json.credits || []).filter(c => c.date >= AY.start && c.date <= AY.end);
+    myCarryForward = json.carry_forward || { cl: 0, el: 0 };
+    myLegacyOverride = json.legacy_override || { cl: null, el: null };
   } catch (e) {
     console.error('[loadRequests]', e);
     myRequests = [];
     myCredits = [];
+    myCarryForward = { cl: 0, el: 0 };
+    myLegacyOverride = { cl: null, el: null };
   }
 }
 
@@ -345,10 +351,14 @@ function renderBalance(){
   const elCred = myCredits.filter(c => c.leave_type === 'EL').reduce((a,c)=>a + (c.days||1), 0);
   const usedCL = Math.max(0, usedCL_raw - clCred);
   const usedEL = Math.max(0, usedEL_raw - elCred);
-  document.getElementById('cl-total').textContent = AY.cl_per_teacher;
-  document.getElementById('el-total').textContent = AY.el_per_teacher;
-  document.getElementById('cl-left').textContent  = Math.max(0, AY.cl_per_teacher - usedCL);
-  document.getElementById('el-left').textContent  = Math.max(0, AY.el_per_teacher - usedEL);
+  // Total = standard AY allowance + carry-forward from last year (additive)
+  // Legacy override field, if present, is the literal total (back-compat)
+  const clTotal = (myLegacyOverride.cl != null) ? myLegacyOverride.cl : (AY.cl_per_teacher + (myCarryForward.cl || 0));
+  const elTotal = (myLegacyOverride.el != null) ? myLegacyOverride.el : (AY.el_per_teacher + (myCarryForward.el || 0));
+  document.getElementById('cl-total').textContent = clTotal;
+  document.getElementById('el-total').textContent = elTotal;
+  document.getElementById('cl-left').textContent  = Math.max(0, clTotal - usedCL);
+  document.getElementById('el-left').textContent  = Math.max(0, elTotal - usedEL);
 }
 
 function fmtDate(iso){

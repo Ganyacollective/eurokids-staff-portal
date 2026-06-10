@@ -51,6 +51,26 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Pluck the per-employee carry-forward additions
+  type Emp = {
+    id: string;
+    cl_carry_forward?: number | null;
+    el_carry_forward?: number | null;
+    cl_allowance_override?: number | null;  // legacy field
+    el_allowance_override?: number | null;  // legacy field
+  };
+  const employees = (portal?.data?.employees as Emp[]) || [];
+  const empRecord = employees.find((e) => e.id === link.employee_id);
+  // Carry-forward is additive on top of AY default; legacy override is total (back-compat).
+  const carryForward = {
+    cl: Number(empRecord?.cl_carry_forward ?? 0),
+    el: Number(empRecord?.el_carry_forward ?? 0),
+  };
+  const legacyOverride = {
+    cl: empRecord?.cl_carry_forward == null && empRecord?.cl_allowance_override != null ? empRecord.cl_allowance_override : null,
+    el: empRecord?.el_carry_forward == null && empRecord?.el_allowance_override != null ? empRecord.el_allowance_override : null,
+  };
+
   // 4) Merge — leave_request rows are primary. For each leave_request, if there
   //    exists a blob entry with matching source_id, prefer the blob's status &
   //    reviewer_note (HR may have edited after approval). Blob entries with no
@@ -97,5 +117,5 @@ export async function GET(req: NextRequest) {
   // 5) Sort newest first by applied_at
   merged.sort((a, b) => (b.applied_at || "").localeCompare(a.applied_at || ""));
 
-  return NextResponse.json({ ok: true, leaves: merged, credits, employee: link });
+  return NextResponse.json({ ok: true, leaves: merged, credits, carry_forward: carryForward, legacy_override: legacyOverride, employee: link });
 }

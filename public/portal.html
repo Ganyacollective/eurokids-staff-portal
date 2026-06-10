@@ -1660,7 +1660,14 @@ function renderBalances(){
     const cl = Math.max(0, clRaw - clCred);
     const el = Math.max(0, elRaw - elCred);
     const lwp = lwpCounts[e.id] || 0;
-    const clLeft = AY.cl_per_teacher - cl, elLeft = AY.el_per_teacher - el;
+    // Carry-forward from last year is ADDED on top of the AY default — never replaces.
+    // Legacy `*_allowance_override` (if present from earlier data) is interpreted as
+    // already-total, kept for back-compat until the next year-end refresh.
+    const clCF = (e.cl_carry_forward != null && !isNaN(e.cl_carry_forward)) ? Number(e.cl_carry_forward) : 0;
+    const elCF = (e.el_carry_forward != null && !isNaN(e.el_carry_forward)) ? Number(e.el_carry_forward) : 0;
+    const clAllowance = (e.cl_allowance_override != null && e.cl_carry_forward == null) ? e.cl_allowance_override : (AY.cl_per_teacher + clCF);
+    const elAllowance = (e.el_allowance_override != null && e.el_carry_forward == null) ? e.el_allowance_override : (AY.el_per_teacher + elCF);
+    const clLeft = clAllowance - cl, elLeft = elAllowance - el;
     const clDisplay = clCred > 0 ? `${cl} <span class="text-xs text-gray-400">(${clRaw}−${clCred} credited)</span>` : `${cl}`;
     const elDisplay = elCred > 0 ? `${el} <span class="text-xs text-gray-400">(${elRaw}−${elCred} credited)</span>` : `${el}`;
     return `<tr>
@@ -2272,6 +2279,14 @@ function openEmployeeForm(id){
   const suggestedEmail = isEdit
     ? (e.login_email || e.email || '')
     : '';
+  // Carry-forward pre-fill: prefer the new field, else derive from legacy override, else empty
+  const deriveCarry = (carry, override, def) => {
+    if (carry != null && carry !== '') return carry;
+    if (override != null && !isNaN(override)) return Math.max(0, override - def);
+    return '';
+  };
+  const clCFVal = e ? deriveCarry(e.cl_carry_forward, e.cl_allowance_override, AY.cl_per_teacher) : '';
+  const elCFVal = e ? deriveCarry(e.el_carry_forward, e.el_allowance_override, AY.el_per_teacher) : '';
   openModal(isEdit ? "Edit employee" : "Add employee", `
     <div class="space-y-3">
       <div><label class="text-xs font-medium text-gray-700 block mb-1">Display name *</label><input id="ef-display" class="input" value="${e?.display_name||''}" /></div>
@@ -2291,6 +2306,26 @@ function openEmployeeForm(id){
       <label class="flex items-center gap-2 text-sm"><input id="ef-active" type="checkbox" ${e?.is_active!==false?'checked':''} /> Active employee</label>
       <label class="flex items-center gap-2 text-sm"><input id="ef-wtv" type="checkbox" ${e?.works_through_vacations?'checked':''} /> <span>Works through school vacations <span class="text-xs text-gray-500">(daycare didis &amp; teachers, year-round duty)</span></span></label>
       <label class="flex items-center gap-2 text-sm"><input id="ef-wth" type="checkbox" ${e?.works_through_holidays?'checked':''} /> <span>Works through mandatory holidays <span class="text-xs text-gray-500">(daycare wing — Independence Day, Republic Day, etc.)</span></span></label>
+
+      <!-- ─── Carry-forward from last year ─────────────────────── -->
+      <div class="border-t border-gray-200 pt-4 mt-2">
+        <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Carried forward from last year</div>
+        <div class="space-y-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-medium text-gray-700 block mb-1">CL carried forward</label>
+              <input id="ef-cl-carryfwd" type="number" min="0" step="0.5" class="input" value="${clCFVal}" placeholder="0" />
+              <div class="text-xs text-gray-500 mt-1">Total CL this year = ${AY.cl_per_teacher} + above</div>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-gray-700 block mb-1">EL carried forward</label>
+              <input id="ef-el-carryfwd" type="number" min="0" step="0.5" class="input" value="${elCFVal}" placeholder="0" />
+              <div class="text-xs text-gray-500 mt-1">Total EL this year = ${AY.el_per_teacher} + above</div>
+            </div>
+          </div>
+          <div class="text-xs text-gray-500">Standard allowance this AY ${AY.label}: <strong>${AY.cl_per_teacher} CL · ${AY.el_per_teacher} EL</strong>. Whatever you type above is <em>added</em> to that — leave-applications already in the system are not touched.</div>
+        </div>
+      </div>
 
       <!-- ─── Portal access ─────────────────────────────────────── -->
       <div class="border-t border-gray-200 pt-4 mt-2">
@@ -2347,6 +2382,10 @@ async function saveEmployee(id){
   const active = document.getElementById('ef-active').checked;
   const wtv = document.getElementById('ef-wtv').checked;
   const wth = document.getElementById('ef-wth').checked;
+  const clCFStr = document.getElementById('ef-cl-carryfwd').value.trim();
+  const elCFStr = document.getElementById('ef-el-carryfwd').value.trim();
+  const clCF = clCFStr === '' ? 0 : parseFloat(clCFStr);
+  const elCF = elCFStr === '' ? 0 : parseFloat(elCFStr);
   const loginEmail = document.getElementById('ef-login-email').value.trim().toLowerCase();
   const loginPwd   = document.getElementById('ef-login-pwd').value;
 
@@ -2368,6 +2407,8 @@ async function saveEmployee(id){
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
       works_through_holidays: wth,
+      cl_carry_forward: clCF,
+      el_carry_forward: elCF,
       login_email: loginEmail || empById(id).login_email || '',
     });
   } else {
@@ -2377,6 +2418,8 @@ async function saveEmployee(id){
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
       works_through_holidays: wth,
+      cl_carry_forward: clCF,
+      el_carry_forward: elCF,
       login_email: loginEmail || '',
     });
   }
