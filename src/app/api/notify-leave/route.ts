@@ -12,6 +12,7 @@ const HR_NOTIFY_EMAIL  = process.env.HR_NOTIFY_EMAIL;
 const SLACK_WEBHOOK    = process.env.SLACK_WEBHOOK_URL;
 const WHATSAPP_PHONE   = process.env.WHATSAPP_PHONE;        // e.g. 919876543210
 const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY;      // CallMeBot key
+const GOOGLE_SHEET_WEBHOOK_URL = process.env.GOOGLE_SHEET_WEBHOOK_URL;
 
 // POST /api/notify-leave
 // Body: { request_id }
@@ -112,6 +113,31 @@ export async function POST(req: NextRequest) {
       results.whatsapp = r.ok ? "sent" : `failed: ${r.status}`;
     } catch (e: unknown) { results.whatsapp = "failed: " + (e instanceof Error ? e.message : String(e)); }
   } else { results.whatsapp = "skipped (no WHATSAPP_PHONE or WHATSAPP_API_KEY)"; }
+
+  // 4) Google Sheet backup — mirror this leave to a Sheet if webhook is configured
+  if (GOOGLE_SHEET_WEBHOOK_URL) {
+    try {
+      const r = await fetch(GOOGLE_SHEET_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applied_at: lr.applied_at,
+          employee_id: lr.employee_id,
+          employee_name: teacherName,
+          department: link?.department || "",
+          designation: link?.designation || "",
+          leave_type: lr.leave_type,
+          start_date: lr.start_date,
+          end_date: lr.end_date,
+          total_days: Number(lr.total_days),
+          reason: lr.reason || "",
+          status: lr.status || "Pending",
+          source: "teacher_portal",
+        }),
+      });
+      results.gsheet = r.ok ? "sent" : `failed: ${r.status}`;
+    } catch (e: unknown) { results.gsheet = "failed: " + (e instanceof Error ? e.message : String(e)); }
+  } else { results.gsheet = "skipped (no GOOGLE_SHEET_WEBHOOK_URL)"; }
 
   return NextResponse.json({ ok: true, request_id, results });
 }
