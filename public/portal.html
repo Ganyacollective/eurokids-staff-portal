@@ -1078,6 +1078,59 @@ function reconcile(rawRows, month){
     s.totalCutDays = s.lwpDays + 0.5 * (s.strikeHalfDays + s.halfLwp);
   }
 
+  // ─── Post-processing: fill in holidays PetPooja never reported ───
+  // PetPooja's Excel export commonly omits holiday dates entirely (since no
+  // biometric activity occurred). Without this pass, those days show as
+  // "No Data" grey cells — even though they should be paid Holiday cells.
+  // For each holiday in this month, for each active employee, ensure there's
+  // a reconciled entry — respecting approved leaves, the works_through_holidays
+  // flag, and the per-holiday worker override.
+  for (const emp of state.employees.filter(e => e.is_active)) {
+    for (const hol of state.holidays) {
+      if (hol.date < monthStart || hol.date > monthEnd) continue;
+      // Skip if we already have an entry for this employee on this date
+      if (reconciledDays.some(d => d.employee_id === emp.id && d.date === hol.date)) continue;
+
+      const holDow = dayOfWeek(hol.date);
+
+      // If teacher has an approved leave overlapping this date, use it
+      const holLeave = state.leaves.find(L => L.status === "Approved" && L.employee_id === emp.id && hol.date >= L.start_date && hol.date <= L.end_date);
+      if (holLeave) {
+        const dayStatus = holLeave.leave_type === "EL" ? "EarnedLeave" : holLeave.leave_type === "CL" ? "CasualLeave" : "LWP";
+        reconciledDays.push({ employee_id: emp.id, date: hol.date, dow: holDow, status: dayStatus, leave_id: holLeave.id, note: `${holLeave.leave_type}: ${holLeave.reason || ""} (on ${hol.name})` });
+        const s = ensure(emp);
+        if (dayStatus === "EarnedLeave") s.elDays++;
+        else if (dayStatus === "CasualLeave") s.clDays++;
+        else s.lwpDays++;
+        continue;
+      }
+
+      // Mandatory holiday — apply per-employee opt-out logic
+      if (hol.is_mandatory) {
+        const applies = !emp.works_through_holidays && !(hol.working_employee_ids || []).includes(emp.id);
+        if (applies) {
+          reconciledDays.push({ employee_id: emp.id, date: hol.date, dow: holDow, status: "Holiday", note: hol.name });
+          ensure(emp).holidays++;
+        } else {
+          // Teacher works on this mandatory holiday but had no punch — no leave — so LWP
+          reconciledDays.push({ employee_id: emp.id, date: hol.date, dow: holDow, status: "LWP", note: `No leave; expected to work on ${hol.name}` });
+          const s = ensure(emp); s.lwpDays++;
+        }
+        continue;
+      }
+
+      // Optional holiday — teacher observed it (no punch, no leave)
+      reconciledDays.push({
+        employee_id: emp.id, date: hol.date, dow: holDow,
+        status: "Holiday", note: `Optional holiday observed: ${hol.name}`,
+        is_optional_holiday: true, holiday_name: hol.name,
+      });
+      const s = ensure(emp);
+      s.holidays++;
+      s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1;
+    }
+  }
+
   return { reconciledDays, anomalies, summaries: Array.from(empSummary.values()), leave_credits };
 }
 
