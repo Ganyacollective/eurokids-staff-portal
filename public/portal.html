@@ -916,8 +916,28 @@ function reconcile(rawRows, month){
       reconciledDays.push({ employee_id:emp.id, date, dow, status:"HalfDay" });
       ensure(emp).fd += 0.5;
     } else {
-      reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"Unknown PetPooja status: "+status });
-      ensure(emp).lwpDays++;
+      // No punch data AND no recognised attendance label. Before defaulting to LWP,
+      // check whether this date is a holiday for the teacher — PetPooja often exports
+      // an unrecognised status like "H", "Holiday", or blank on holiday dates.
+      if (hol && !hol.is_mandatory) {
+        // Optional holiday observed
+        reconciledDays.push({
+          employee_id:emp.id, date, dow, status:"Holiday",
+          note:`Optional holiday observed: ${hol.name}`,
+          is_optional_holiday: true, holiday_name: hol.name,
+        });
+        const s = ensure(emp);
+        s.holidays++;
+        s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1;
+      } else if (hol?.is_mandatory && !emp.works_through_holidays && !(hol.working_employee_ids||[]).includes(emp.id)) {
+        // Mandatory holiday that applies to this employee
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday", note: hol.name });
+        ensure(emp).holidays++;
+      } else {
+        // Truly unknown — LWP
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"Unknown PetPooja status: "+status });
+        ensure(emp).lwpDays++;
+      }
     }
   });
 
@@ -2781,7 +2801,12 @@ function openLeaveForm(id){
       <div><label class="text-xs font-medium text-gray-700 block mb-1">Employee *</label><select id="lf-emp" class="input"><option value="">— select —</option>${empOptions}</select></div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Type *</label><select id="lf-type" class="input">${["CL","EL","LWP","Other"].map(t=>`<option ${L?.leave_type===t?'selected':''}>${t}</option>`).join('')}</select></div>
-        <div><label class="text-xs font-medium text-gray-700 block mb-1">Status</label><select id="lf-status" class="input">${["Pending","Approved","Rejected"].map(s=>`<option ${L?.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Status</label><select id="lf-status" class="input">${["Pending","Approved","Rejected"].map(s=>{
+          // For NEW leaves (no L), default to Approved — HR is usually recording a decision, not requesting one.
+          // For EXISTING leaves, keep whatever status is on the record.
+          const isSelected = L ? (L.status === s) : (s === 'Approved');
+          return `<option ${isSelected?'selected':''}>${s}</option>`;
+        }).join('')}</select></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Start date *</label><input id="lf-start" type="date" class="input" value="${L?.start_date||''}" /></div>
