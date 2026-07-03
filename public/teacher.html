@@ -25,7 +25,7 @@
   .b-cl       { background: #DBEAFE; color: #1E40AF; }
   .b-el       { background: #E0E7FF; color: #3730A3; }
   .b-lwp      { background: #FEE2E2; color: #B91C1C; }
-  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
   .modal-bg.show { display: flex; }
   .modal { background: white; border-radius: 18px; padding: 24px; max-width: 460px; width: 100%; max-height: 90vh; overflow-y: auto; }
 
@@ -78,7 +78,23 @@
         <p class="text-xs text-gray-500">Eurokids JMD Enclave</p>
       </div>
     </div>
-    <form onsubmit="return doLogin(event)" class="space-y-4">
+    <!-- Primary path: Just apply — no sign-in needed -->
+    <button type="button" onclick="openAnonymousApply(event)" class="btn-primary w-full text-base">
+      ✍ Just apply for a leave
+    </button>
+    <p class="text-xs text-gray-500 mt-2 text-center leading-relaxed">
+      No sign-in needed. Pick your name, tell us the dates.
+    </p>
+
+    <!-- Divider -->
+    <div class="my-6 flex items-center gap-3">
+      <div class="flex-1 border-t border-gray-200"></div>
+      <span class="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">or sign in for balance &amp; history</span>
+      <div class="flex-1 border-t border-gray-200"></div>
+    </div>
+
+    <!-- Secondary path: Full sign-in -->
+    <form onsubmit="return doLogin(event)" class="space-y-3">
       <div>
         <label class="text-sm font-medium text-gray-700 block mb-1">Email</label>
         <input id="login-email" type="email" required autocomplete="username" placeholder="you@eurokidsjmdenclave.org" class="input" />
@@ -89,24 +105,10 @@
       </div>
       <div id="login-error" class="text-sm text-red-600 hidden bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
       <div id="login-info" class="text-sm text-eurokids-blue hidden bg-blue-50 border border-blue-200 rounded-lg px-3 py-2"></div>
-      <button id="login-btn" type="submit" class="btn-primary w-full">Sign in to view balance &amp; history</button>
+      <button id="login-btn" type="submit" class="btn-secondary w-full">Sign in</button>
     </form>
     <p class="text-xs text-gray-500 mt-3 text-center leading-relaxed">
       <a href="#" onclick="openForgotPassword(event)" class="text-eurokids-blue hover:underline font-medium">Forgot your password?</a>
-    </p>
-
-    <!-- Divider -->
-    <div class="my-5 flex items-center gap-3">
-      <div class="flex-1 border-t border-gray-200"></div>
-      <span class="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">or</span>
-      <div class="flex-1 border-t border-gray-200"></div>
-    </div>
-
-    <button onclick="openAnonymousApply(event)" class="w-full bg-gray-100 hover:bg-gray-200 text-eurokids-ink font-medium py-2.5 rounded-lg transition-colors text-sm">
-      ✍ Just apply for a leave
-    </button>
-    <p class="text-[10px] text-gray-400 mt-2 text-center leading-relaxed">
-      No sign-in needed. Pick your name, tell us the dates, we'll take it from there.
     </p>
   </div>
 </div>
