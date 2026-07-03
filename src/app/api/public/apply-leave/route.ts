@@ -109,8 +109,12 @@ export async function POST(req: NextRequest) {
     })());
   }
 
-  // (b) Teacher confirmation email
-  if (RESEND_API_KEY && emp.email) {
+  // (b) Teacher confirmation email — record explicit skip reasons so the UI can surface them
+  if (!RESEND_API_KEY) {
+    results.teacher_confirm = "skipped: RESEND_API_KEY not set in Vercel";
+  } else if (!emp.email) {
+    results.teacher_confirm = "skipped: no personal email on employee record";
+  } else {
     dispatches.push((async () => {
       try {
         const r = await fetch("https://api.resend.com/emails", {
@@ -123,7 +127,12 @@ export async function POST(req: NextRequest) {
             html: `<div style="font-family:sans-serif;max-width:520px"><h2 style="color:#21409A">Thank you for applying</h2><p>Hello ${emp.display_name?.split(" ")[0]||""},</p><p>We've received your leave application. Here's a copy for your records:</p><table style="border-collapse:collapse;font-size:14px;margin:14px 0"><tr><td style="padding:6px 12px 6px 0;color:#718096">Type</td><td><strong>${leave_type}</strong></td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096">Dates</td><td>${dateText}</td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096">Days</td><td>${total_days}</td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096;vertical-align:top">Reason</td><td>${escapeHtml(reason)}</td></tr></table><p>HR will review and let you know shortly. If you did not submit this application, please tell the office right away.</p><p style="color:#888;font-size:11pt">— Eurokids JMD Enclave</p></div>`,
           }),
         });
-        results.teacher_confirm = r.ok ? "sent" : `failed:${r.status}`;
+        if (r.ok) {
+          results.teacher_confirm = "sent";
+        } else {
+          const errText = await r.text();
+          results.teacher_confirm = `failed HTTP ${r.status}: ${errText.slice(0, 200)}`;
+        }
       } catch (e) { results.teacher_confirm = "err:" + (e as Error).message; }
     })());
   }
@@ -180,12 +189,15 @@ export async function POST(req: NextRequest) {
 
   // Build a candid, teacher-friendly message that reflects what actually happened.
   const parts: string[] = ["Application received. HR will review shortly."];
-  if (!emp.email) {
-    parts.push("(No personal email on file — please ask the office to add one so future confirmations reach you.)");
-  } else if (results.teacher_confirm === "sent") {
-    parts.push(`A confirmation has been sent to ${emp.email}. Check your inbox and spam folder.`);
-  } else if (results.teacher_confirm && results.teacher_confirm !== "sent") {
-    parts.push(`Confirmation to ${emp.email} could not be sent (${results.teacher_confirm}). The application is safe on our side.`);
+  const confirmStatus = results.teacher_confirm || "unknown";
+  if (confirmStatus === "sent") {
+    parts.push(`Confirmation sent to ${emp.email}. Check inbox + spam folder.`);
+  } else if (confirmStatus.startsWith("skipped: no personal email")) {
+    parts.push("(No personal email on file for you — ask the office to add one so future confirmations reach you.)");
+  } else if (confirmStatus.startsWith("skipped: RESEND_API_KEY")) {
+    parts.push("(Email confirmations are not yet configured — ask the office.)");
+  } else if (confirmStatus.startsWith("failed") || confirmStatus.startsWith("err")) {
+    parts.push(`(Confirmation to ${emp.email} could not be delivered: ${confirmStatus}.)`);
   }
   return NextResponse.json({
     ok: true,
@@ -193,6 +205,12 @@ export async function POST(req: NextRequest) {
     leave_id: newLeave.id,
     personal_email: emp.email || null,
     notifications: results,
+    diagnostics: {
+      resend_api_key_present: !!RESEND_API_KEY,
+      resend_from: RESEND_FROM,
+      hr_notify_email_present: !!HR_NOTIFY_EMAIL,
+      employee_personal_email: emp.email || null,
+    },
   });
 }
 

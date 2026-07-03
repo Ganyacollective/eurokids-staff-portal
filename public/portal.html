@@ -258,7 +258,7 @@
         <p class="text-sm text-gray-500 mb-8">Each teacher gets <b>7 CL</b> and <b>8 EL</b> per academic year. Used = sum of approved leaves within AY.</p>
         <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
           <table>
-            <thead><tr><th>Employee</th><th>CL Used</th><th>CL Left</th><th>EL Used</th><th>EL Left</th><th>LWP Days (this AY)</th></tr></thead>
+            <thead><tr><th>Employee</th><th>CL Used</th><th>CL Left</th><th>EL Used</th><th>EL Left</th><th>Optional Hols</th><th>LWP Days (this AY)</th></tr></thead>
             <tbody id="balances-tbody"></tbody>
           </table>
         </div>
@@ -379,7 +379,7 @@
 // State
 // ============================================================
 const STORAGE_KEY = 'eurokids_staff_portal_v2';
-const AY = { start: '2026-04-06', end: '2027-03-19', label: '2026-27', cl_per_teacher: 7, el_per_teacher: 8 };
+const AY = { start: '2026-04-06', end: '2027-03-19', label: '2026-27', cl_per_teacher: 7, el_per_teacher: 8, optional_hol_per_teacher: 5 };
 const DEFAULT_STATE = {
   employees: [
     { id:'e1',  name_petpooja: "Manisha Zurange", display_name: "Manisha Zurange", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 12000, is_active: true },
@@ -878,6 +878,14 @@ function reconcile(rawRows, month){
         if (dayStatus === "EarnedLeave") s.elDays++;
         else if (dayStatus === "CasualLeave") s.clDays++;
         else s.lwpDays++;
+      } else if (hol && !hol.is_mandatory) {
+        // Optional holiday, absent, no leave application — teacher chose to observe it.
+        // Treat as a paid Holiday and increment her optional-holiday tally so HR can
+        // see who's used how many across the year.
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday", note:`Optional holiday observed: ${hol.name}`, is_optional_holiday: true, holiday_name: hol.name });
+        const s = ensure(emp);
+        s.holidays++;
+        s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1;
       } else {
         reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"No leave application for this day" });
         const s = ensure(emp); s.lwpDays++; if (isSat) s.satAbsences++;
@@ -1771,9 +1779,14 @@ function renderBalances(){
   // CL/EL credit counts across all imports — these are dates the teacher applied for leave
   // but came in anyway, so they shouldn't be deducted from balance.
   const clCredits = {}, elCredits = {};
+  // Optional holidays observed across the AY (from every reconciled month).
+  const optHolCounts = {};
   for (const m of Object.keys(state.attendanceMonths)) {
     const im = state.attendanceMonths[m];
-    for (const d of im.reconciledDays) if (d.status === "LWP" && d.date >= AY.start && d.date <= AY.end) lwpCounts[d.employee_id] = (lwpCounts[d.employee_id]||0) + 1;
+    for (const d of im.reconciledDays) {
+      if (d.status === "LWP" && d.date >= AY.start && d.date <= AY.end) lwpCounts[d.employee_id] = (lwpCounts[d.employee_id]||0) + 1;
+      if (d.is_optional_holiday && d.date >= AY.start && d.date <= AY.end) optHolCounts[d.employee_id] = (optHolCounts[d.employee_id]||0) + 1;
+    }
     for (const c of (im.leave_credits || [])) {
       if (c.date < AY.start || c.date > AY.end) continue;
       if (c.leave_type === 'CL') clCredits[c.employee_id] = (clCredits[c.employee_id]||0) + (c.days || 1);
@@ -1806,12 +1819,18 @@ function renderBalances(){
     const elLeftDisplay = elCF > 0
       ? `${elLeft} <span class="text-xs text-gray-400">of ${elAllowance} (${AY.el_per_teacher}+${elCF} cf)</span>`
       : `${elLeft} <span class="text-xs text-gray-400">of ${elAllowance}</span>`;
+    // Optional-holiday tally against the AY cap
+    const optHol = optHolCounts[e.id] || 0;
+    const optHolCap = AY.optional_hol_per_teacher || 3;
+    const optHolOver = optHol > optHolCap;
+    const optHolDisplay = `${optHol} <span class="text-xs text-gray-400">of ${optHolCap}</span>${optHolOver?' <span class="text-xs text-red-600 font-semibold ml-1">over cap</span>':''}`;
     return `<tr>
       <td class="font-medium">${e.display_name}</td>
       <td>${clDisplay}</td>
       <td class="${clLeft<=2?'text-red-600 font-semibold':''}">${clLeftDisplay}</td>
       <td>${elDisplay}</td>
       <td class="${elLeft<=2?'text-red-600 font-semibold':''}">${elLeftDisplay}</td>
+      <td class="${optHolOver?'text-red-600':''}">${optHolDisplay}</td>
       <td class="${lwp>0?'text-orange-600':''}">${lwp}</td>
     </tr>`;
   }).join('');
