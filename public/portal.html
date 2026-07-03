@@ -1808,15 +1808,23 @@ function renderLeaves(){
 function approveLeave(id){
   const L = state.leaves.find(x=>x.id===id); if (!L) return;
   L.status = "Approved"; L.reviewed_at = new Date().toISOString();
-  saveState(); rerunActiveMonth(); renderAll();
+  saveState(); rerunForDateRange(L.start_date, L.end_date); renderAll();
 }
 function rejectLeave(id){
   const L = state.leaves.find(x=>x.id===id); if (!L) return;
   const note = prompt("Rejection reason (optional):", "");
   L.status = "Rejected"; L.reviewed_at = new Date().toISOString(); L.reviewer_note = note || "";
-  saveState(); rerunActiveMonth(); renderAll();
+  saveState(); rerunForDateRange(L.start_date, L.end_date); renderAll();
 }
-function deleteLeave(id){ if (confirm("Delete this leave application?")) { state.leaves = state.leaves.filter(L=>L.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
+function deleteLeave(id){
+  if (!confirm("Delete this leave application?")) return;
+  const L = state.leaves.find(x => x.id === id);
+  const s = L?.start_date, e = L?.end_date;
+  state.leaves = state.leaves.filter(x => x.id !== id);
+  saveState();
+  if (s && e) rerunForDateRange(s, e);
+  renderAll();
+}
 
 // Re-runs reconciliation for the active month so leave changes propagate
 function rerunActiveMonth(){ if (state.activeMonth && state.attendanceMonths[state.activeMonth]) rerunReconciliation(state.activeMonth); }
@@ -2789,6 +2797,21 @@ function openLeaveForm(id){
     </div>
   `);
 }
+// Re-run reconciliation for every month overlapping a date range.
+// Use this instead of rerunActiveMonth() whenever the change might affect
+// a month that's not currently active — e.g., HR adds an April leave
+// while viewing May.
+function rerunForDateRange(startDate, endDate){
+  if (!startDate || !endDate) return;
+  const s = new Date(startDate + 'T00:00:00Z').getTime();
+  const e = new Date(endDate + 'T00:00:00Z').getTime();
+  const months = new Set();
+  for (let t = s; t <= e; t += 86400000) {
+    months.add(new Date(t).toISOString().slice(0, 7));
+  }
+  months.forEach(m => { if (state.attendanceMonths[m]) rerunReconciliation(m); });
+}
+
 function saveLeave(id){
   const empId = document.getElementById('lf-emp').value;
   const type = document.getElementById('lf-type').value;
@@ -2799,6 +2822,10 @@ function saveLeave(id){
   const reason = document.getElementById('lf-reason').value;
   const note = document.getElementById('lf-note').value;
   if (!empId || !start || !end) return alert("Employee, start date, end date are required.");
+  // Capture prior dates so we can also re-run the OLD months if HR edited a leave to move it
+  const prev = id ? state.leaves.find(x=>x.id===id) : null;
+  const prevStart = prev?.start_date;
+  const prevEnd = prev?.end_date;
   if (id) {
     const L = state.leaves.find(x=>x.id===id);
     Object.assign(L, { employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note });
@@ -2806,13 +2833,45 @@ function saveLeave(id){
   } else {
     state.leaves.push({ id: uid(), employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note, applied_at:new Date().toISOString(), reviewed_at: status!=="Pending" ? new Date().toISOString() : null });
   }
-  saveState(); rerunActiveMonth(); renderAll(); closeModal();
+  saveState();
+  rerunForDateRange(start, end);
+  if (prevStart && prevEnd && (prevStart !== start || prevEnd !== end)) rerunForDateRange(prevStart, prevEnd);
+  renderAll();
+  closeModal();
 }
 
-function addHoliday(){ const date = prompt("Date (YYYY-MM-DD):"); if (!date) return; const name = prompt("Holiday name:"); if (!name) return; const mandatory = confirm("Mandatory? OK = yes, Cancel = optional"); state.holidays.push({ id:uid(), date, name, is_mandatory: mandatory }); saveState(); rerunActiveMonth(); renderAll(); }
-function removeHoliday(id){ if (confirm("Delete this holiday?")) { state.holidays = state.holidays.filter(h=>h.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
-function addVacation(){ const start = prompt("Start date (YYYY-MM-DD):"); if (!start) return; const end = prompt("End date (YYYY-MM-DD):", start); if (!end) return; const name = prompt("Description:"); if (!name) return; state.vacations.push({ id:uid(), start_date: start, end_date: end, name }); saveState(); rerunActiveMonth(); renderAll(); }
-function removeVacation(id){ if (confirm("Delete this vacation?")) { state.vacations = state.vacations.filter(v=>v.id!==id); saveState(); rerunActiveMonth(); renderAll(); } }
+function addHoliday(){
+  const date = prompt("Date (YYYY-MM-DD):"); if (!date) return;
+  const name = prompt("Holiday name:"); if (!name) return;
+  const mandatory = confirm("Mandatory? OK = yes, Cancel = optional");
+  state.holidays.push({ id:uid(), date, name, is_mandatory: mandatory });
+  saveState(); rerunForDateRange(date, date); renderAll();
+}
+function removeHoliday(id){
+  if (!confirm("Delete this holiday?")) return;
+  const h = state.holidays.find(x => x.id === id);
+  const d = h?.date;
+  state.holidays = state.holidays.filter(x => x.id !== id);
+  saveState();
+  if (d) rerunForDateRange(d, d);
+  renderAll();
+}
+function addVacation(){
+  const start = prompt("Start date (YYYY-MM-DD):"); if (!start) return;
+  const end = prompt("End date (YYYY-MM-DD):", start); if (!end) return;
+  const name = prompt("Description:"); if (!name) return;
+  state.vacations.push({ id:uid(), start_date: start, end_date: end, name });
+  saveState(); rerunForDateRange(start, end); renderAll();
+}
+function removeVacation(id){
+  if (!confirm("Delete this vacation?")) return;
+  const v = state.vacations.find(x => x.id === id);
+  const s = v?.start_date, e = v?.end_date;
+  state.vacations = state.vacations.filter(x => x.id !== id);
+  saveState();
+  if (s && e) rerunForDateRange(s, e);
+  renderAll();
+}
 
 // ============================================================
 // Nav
