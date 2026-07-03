@@ -178,10 +178,20 @@ export async function POST(req: NextRequest) {
 
   await Promise.all(dispatches);
 
+  // Build a candid, teacher-friendly message that reflects what actually happened.
+  const parts: string[] = ["Application received. HR will review shortly."];
+  if (!emp.email) {
+    parts.push("(No personal email on file — please ask the office to add one so future confirmations reach you.)");
+  } else if (results.teacher_confirm === "sent") {
+    parts.push(`A confirmation has been sent to ${emp.email}. Check your inbox and spam folder.`);
+  } else if (results.teacher_confirm && results.teacher_confirm !== "sent") {
+    parts.push(`Confirmation to ${emp.email} could not be sent (${results.teacher_confirm}). The application is safe on our side.`);
+  }
   return NextResponse.json({
     ok: true,
-    message: `Application received. HR will review shortly.${emp.email ? " A confirmation has been sent to your personal email." : ""}`,
+    message: parts.join(" "),
     leave_id: newLeave.id,
+    personal_email: emp.email || null,
     notifications: results,
   });
 }
