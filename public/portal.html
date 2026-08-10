@@ -539,12 +539,26 @@ async function _flushSave(){
   if (indicator) { indicator.textContent = '⟳ Saving…'; indicator.className = 'text-xs text-gray-500'; }
   try {
     const sb = getSb();
-    const { error } = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+    let { error } = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+
+    // If the save failed with an auth-ish error, the JWT probably expired.
+    // Force a session refresh and retry once before surfacing the failure.
+    if (error && /jwt|token|expired|401|403|auth/i.test(error.message || '')) {
+      console.warn('[saveState] auth-ish failure, refreshing session and retrying…', error.message);
+      try { await sb.auth.refreshSession(); } catch (_) {}
+      const retry = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+      error = retry.error;
+    }
+
     if (error) {
       console.error('[saveState]', error);
-      if (indicator) { indicator.textContent = '⚠ Save failed'; indicator.className = 'text-xs text-red-600'; }
+      if (indicator) {
+        indicator.textContent = `⚠ Save failed — ${(error.message || 'unknown').slice(0, 60)}`;
+        indicator.className = 'text-xs text-red-600';
+        indicator.title = error.message || '';
+      }
     } else {
-      if (indicator) { indicator.textContent = '✓ Saved'; indicator.className = 'text-xs text-green-600'; }
+      if (indicator) { indicator.textContent = '✓ Saved'; indicator.className = 'text-xs text-green-600'; indicator.title = ''; }
     }
   } finally {
     _saveInflight = false;
@@ -744,6 +758,9 @@ function reconcile(rawRows, month){
     if (!emp.is_active) return;
 
     const date = row.attendance_date;
+    // Days before the employee joined are ignored entirely — no LWP, no strikes,
+    // no phantom absences for months before they existed on the roster.
+    if (emp.joining_date && date < emp.joining_date) return;
     const d = new Date(date+"T00:00:00Z");
     const dow = d.getUTCDay();
     const isSat = dow === 6;
@@ -872,12 +889,21 @@ function reconcile(rawRows, month){
 
     if (/absent/i.test(status)) {
       if (matched) {
+        const isHalfLeave = Number(matched.total_days) === 0.5;
         const dayStatus = matched.leave_type === "EL" ? "EarnedLeave" : matched.leave_type === "CL" ? "CasualLeave" : "LWP";
-        reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, leave_id:matched.id, note: matched.leave_type+": "+(matched.reason||"") });
-        const s = ensure(emp);
-        if (dayStatus === "EarnedLeave") s.elDays++;
-        else if (dayStatus === "CasualLeave") s.clDays++;
-        else s.lwpDays++;
+        if (isHalfLeave && dayStatus !== "LWP") {
+          // Half-day leave but absent the WHOLE day: half covered by leave, other half unpaid.
+          reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, leave_id:matched.id, note: `Half-day ${matched.leave_type} — other half LWP (absent full day): ${matched.reason||""}` });
+          const s = ensure(emp);
+          if (dayStatus === "EarnedLeave") s.elDays += 0.5; else s.clDays += 0.5;
+          s.lwpDays += 0.5;
+        } else {
+          reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, leave_id:matched.id, note: matched.leave_type+": "+(matched.reason||"") });
+          const s = ensure(emp);
+          if (dayStatus === "EarnedLeave") s.elDays++;
+          else if (dayStatus === "CasualLeave") s.clDays++;
+          else s.lwpDays++;
+        }
       } else if (hol && !hol.is_mandatory) {
         // Optional holiday, absent, no leave application — teacher chose to observe it.
         // Treat as a paid Holiday and increment her optional-holiday tally so HR can
@@ -1044,6 +1070,13 @@ function reconcile(rawRows, month){
       if (recDay && (recDay.status === "FullDay" || recDay.status === "Late" || recDay.status === "HalfLWP" || recDay.status === "ForgotPunch")) {
         const e = empById(L.employee_id);
 
+        // Half-day leaves are NOT credited back on presence — punching in is expected
+        // (the teacher works their half). Only full-day leaves get the came-in credit.
+        if (Number(L.total_days) === 0.5) {
+          if (!recDay.note) recDay.note = `Half-day ${L.leave_type} taken — worked the other half`;
+          continue;
+        }
+
         // 1) Always credit — applied for leave but came in, so balance must be restored.
         leave_credits.push({ employee_id: L.employee_id, leave_id: L.id, leave_type: L.leave_type, date: dStr, days: 1 });
         recDay.leave_credit = { leave_type: L.leave_type, leave_id: L.id };
@@ -1108,6 +1141,8 @@ function reconcile(rawRows, month){
   for (const emp of state.employees.filter(e => e.is_active)) {
     for (const hol of state.holidays) {
       if (hol.date < monthStart || hol.date > monthEnd) continue;
+      // Never synthesise days before the employee joined
+      if (emp.joining_date && hol.date < emp.joining_date) continue;
       // Skip if we already have an entry for this employee on this date
       if (reconciledDays.some(d => d.employee_id === emp.id && d.date === hol.date)) continue;
 
@@ -1197,22 +1232,44 @@ function showResult(msg, kind){ const el = document.getElementById('att-result')
 // ============================================================
 // Renderers
 // ============================================================
+// ============================================================
+// Lazy panel rendering — only the visible panel is rebuilt on
+// each change; hidden panels are marked dirty and rendered when
+// the user actually navigates to them. This is the single biggest
+// perf win: previously every keystroke-level mutation rebuilt all
+// 14 panels' innerHTML (~1000s of DOM nodes).
+// ============================================================
+const PANEL_RENDERERS = {
+  dashboard: () => renderDashboard(),
+  inbox:     () => renderInbox(),
+  reports:   () => { renderReportMonthDropdown(); renderReports(); },
+  leaves:    () => renderLeaves(),
+  balances:  () => renderBalances(),
+  attendance:() => renderImports(),
+  anomalies: () => renderAnomalies(),
+  salary:    () => renderSalary(),
+  employees: () => renderEmployees(),
+  holidays:  () => { renderHolidays(); renderVacations(); renderStudentHolidays(); renderSpecialDays(); },
+};
+const _dirtyPanels = new Set();
+
+function currentPanelName(){
+  const active = document.querySelector('.panel.active');
+  return active ? active.id.replace('panel-','') : 'dashboard';
+}
+
+function renderPanel(name){
+  const fn = PANEL_RENDERERS[name];
+  if (!fn) return;
+  fn();
+  _dirtyPanels.delete(name);
+}
+
 function renderAll(){
   document.getElementById('active-month').textContent = state.activeMonth || "—";
-  renderDashboard();
-  renderEmployees();
-  renderHolidays();
-  renderVacations();
-  renderStudentHolidays();
-  renderSpecialDays();
-  renderLeaves();
-  renderBalances();
-  renderImports();
-  renderReportMonthDropdown();
-  renderReports();
-  renderAnomalies();
-  renderSalary();
-  renderInbox();
+  // Mark every panel stale, then rebuild only what's on screen.
+  Object.keys(PANEL_RENDERERS).forEach(p => _dirtyPanels.add(p));
+  renderPanel(currentPanelName());
   updateNavBadges();
 }
 
@@ -1431,7 +1488,7 @@ function renderEmployees(){
     return;
   }
   tbody.innerHTML = list.map(e => `<tr ${e.is_active ? '' : 'class="opacity-60"'}>
-    <td><div class="font-medium">${e.display_name}${e.is_active ? '' : ' <span class="badge b-inactive">archived</span>'}</div>${e.display_name !== e.name_petpooja.trim() ? `<div class="text-xs text-gray-400">PetPooja: "${e.name_petpooja}"</div>` : ''}${e.left_date ? `<div class="text-xs text-gray-400">Left ${fmtDateShort(e.left_date)}</div>` : ''}</td>
+    <td><div class="font-medium">${e.display_name}${e.is_active ? '' : ' <span class="badge b-inactive">archived</span>'}</div>${e.display_name !== e.name_petpooja.trim() ? `<div class="text-xs text-gray-400">PetPooja: "${e.name_petpooja}"</div>` : ''}${e.joining_date ? `<div class="text-xs text-gray-400">Joined ${fmtDateShort(e.joining_date)}</div>` : ''}${e.left_date ? `<div class="text-xs text-gray-400">Left ${fmtDateShort(e.left_date)}</div>` : ''}</td>
     <td class="text-gray-600">${e.department}</td>
     <td class="text-gray-600">${e.designation}</td>
     <td class="text-gray-600">${minToTime(e.reporting_minutes)}</td>
@@ -1932,8 +1989,24 @@ function renderReportMonthDropdown(){
 
 let viewingEmployeeId = null;
 let reportDeptFilter = 'all';
-function viewReport(empId){ viewingEmployeeId = empId; renderReports(); }
+function viewReport(empId){ viewingEmployeeId = empId; renderReports(); window.scrollTo(0,0); }
 function backToReportsList(){ viewingEmployeeId = null; renderReports(); }
+
+// Keyboard navigation inside a report: ← previous employee, → next employee.
+document.addEventListener('keydown', (e) => {
+  if (!viewingEmployeeId) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const tag = (document.activeElement?.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;  // don't hijack form fields
+  const month = document.getElementById('report-month')?.value || state.activeMonth;
+  const m = state.attendanceMonths[month];
+  if (!m) return;
+  const roster = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name));
+  const idx = roster.findIndex(s => s.employee.id === viewingEmployeeId);
+  if (idx < 0) return;
+  const target = e.key === 'ArrowLeft' ? roster[idx-1] : roster[idx+1];
+  if (target) viewReport(target.employee.id);
+});
 function setReportDeptFilter(d){ reportDeptFilter = d; renderReports(); }
 
 function renderReports(){
@@ -2021,9 +2094,24 @@ function renderReports(){
   // Late details sorted
   const lateDetails = [...summary.lateDetails].sort((a,b)=>a.date.localeCompare(b.date));
 
+  // Employee switcher: same roster as the list view, sorted by name, so HR can
+  // hop between teachers without going back to the list.
+  const roster = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name));
+  const rosterIdx = roster.findIndex(s => s.employee.id === viewingEmployeeId);
+  const prevEmp = rosterIdx > 0 ? roster[rosterIdx-1].employee : null;
+  const nextEmp = rosterIdx >= 0 && rosterIdx < roster.length-1 ? roster[rosterIdx+1].employee : null;
+  const switcherOptions = roster.map(s => `<option value="${s.employee.id}" ${s.employee.id===viewingEmployeeId?'selected':''}>${s.employee.display_name}</option>`).join('');
+
   detail.innerHTML = `
-    <div class="flex items-center justify-between mb-6">
-      <button onclick="backToReportsList()" class="btn-link">← Back to all reports</button>
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div class="flex items-center gap-2">
+        <button onclick="backToReportsList()" class="btn-link">← All reports</button>
+        <span class="text-gray-300">|</span>
+        <button onclick="${prevEmp?`viewReport('${prevEmp.id}')`:''}" class="btn-secondary text-sm px-3 py-1.5 ${prevEmp?'':'opacity-30 cursor-not-allowed'}" title="${prevEmp?prevEmp.display_name:'First employee'}" ${prevEmp?'':'disabled'}>‹ Prev</button>
+        <select onchange="viewReport(this.value)" class="input" style="width:auto;padding:6px 10px;font-size:13px">${switcherOptions}</select>
+        <button onclick="${nextEmp?`viewReport('${nextEmp.id}')`:''}" class="btn-secondary text-sm px-3 py-1.5 ${nextEmp?'':'opacity-30 cursor-not-allowed'}" title="${nextEmp?nextEmp.display_name:'Last employee'}" ${nextEmp?'':'disabled'}>Next ›</button>
+        <span class="text-xs text-gray-400">${rosterIdx+1} of ${roster.length}</span>
+      </div>
       <div class="flex gap-2">
         <button onclick="whatsappReport('${viewingEmployeeId}','${month}')" class="btn-secondary" style="background:#25D366;color:white">📱 WhatsApp</button>
         <button onclick="emailReport('${viewingEmployeeId}','${month}')" class="btn-primary">✉ Email report</button>
@@ -2046,7 +2134,7 @@ function renderReports(){
 
     <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
       <div class="stat"><div class="label">Full Days</div><div class="value text-green-700">${summary.fd}</div></div>
-      <div class="stat"><div class="label">Lates</div><div class="value text-amber-700">${summary.lateStrikes}</div><div class="sub">→ ${summary.strikeHalfDays} ½-day cut${summary.strikeHalfDays!==1?'s':''}</div></div>
+      <div class="stat"><div class="label">Lates</div><div class="value text-amber-700">${summary.lateStrikes}</div><div class="sub">→ ${summary.strikeHalfDays} half-day cut${summary.strikeHalfDays!==1?'s':''} = ${summary.strikeHalfDays * 0.5} day${summary.strikeHalfDays*0.5!==1?'s':''}</div></div>
       <div class="stat"><div class="label">CL · EL Taken</div><div class="value text-blue-700">${summary.clDays} · ${summary.elDays}</div></div>
       <div class="stat"><div class="label">LWP</div><div class="value text-red-700">${summary.lwpDays}</div></div>
       <div class="stat"><div class="label">Holidays</div><div class="value text-purple-700">${summary.holidays + summary.vacationDays}</div><div class="sub">incl. vacation</div></div>
@@ -2618,6 +2706,10 @@ function openEmployeeForm(id){
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Monthly salary (₹)</label><input id="ef-sal" type="number" class="input" value="${e?.monthly_salary||0}" /></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Joining date</label><input id="ef-join" type="date" class="input" value="${e?.joining_date||''}" /><div class="text-xs text-gray-500 mt-1">Days before this are ignored in attendance — no LWP for months before they existed.</div></div>
+        <div></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Personal email (optional)</label><input id="ef-email" type="email" class="input" value="${e?.email||''}" /></div>
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Phone (incl. country code)</label><input id="ef-phone" class="input" value="${e?.phone||''}" placeholder="919876543210" /></div>
       </div>
@@ -2700,6 +2792,7 @@ async function saveEmployee(id){
   const active = document.getElementById('ef-active').checked;
   const wtv = document.getElementById('ef-wtv').checked;
   const wth = document.getElementById('ef-wth').checked;
+  const joinDate = document.getElementById('ef-join').value || null;
   const clCFStr = document.getElementById('ef-cl-carryfwd').value.trim();
   const elCFStr = document.getElementById('ef-el-carryfwd').value.trim();
   const clCF = clCFStr === '' ? 0 : parseFloat(clCFStr);
@@ -2725,6 +2818,7 @@ async function saveEmployee(id){
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
       works_through_holidays: wth,
+      joining_date: joinDate,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || empById(id).login_email || '',
@@ -2736,6 +2830,7 @@ async function saveEmployee(id){
       reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
       works_through_holidays: wth,
+      joining_date: joinDate,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || '',
@@ -2904,7 +2999,9 @@ function removeVacation(id){
 function goto(panel){
   document.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('active', a.dataset.panel === panel));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-'+panel));
-  if (panel === 'reports' && !viewingEmployeeId) renderReports();
+  // Lazily rebuild the panel if data changed while it was hidden
+  if (_dirtyPanels.has(panel)) renderPanel(panel);
+  else if (panel === 'reports' && !viewingEmployeeId) renderReports();
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav-link').forEach(a => a.addEventListener('click', () => { if (a.dataset.panel !== 'reports') viewingEmployeeId = null; goto(a.dataset.panel); }));

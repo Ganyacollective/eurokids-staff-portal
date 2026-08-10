@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
     start_date?: string;
     end_date?: string;
     reason?: string;
+    half_day?: boolean;
   };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400 }); }
 
@@ -59,9 +60,13 @@ export async function POST(req: NextRequest) {
   if (!emp) return NextResponse.json({ ok: false, error: "Employee not found. Please pick from the list." }, { status: 404 });
   if (emp.is_active === false) return NextResponse.json({ ok: false, error: "This employee is archived." }, { status: 400 });
 
+  const isHalf = !!body.half_day;
+  if (isHalf && start_date !== end_date) {
+    return NextResponse.json({ ok: false, error: "Half-day leave must be a single date." }, { status: 400 });
+  }
   const startTs = new Date(start_date + "T00:00:00Z").getTime();
   const endTs = new Date(end_date + "T00:00:00Z").getTime();
-  const total_days = Math.round((endTs - startTs) / 86400000) + 1;
+  const total_days = isHalf ? 0.5 : Math.round((endTs - startTs) / 86400000) + 1;
 
   const newLeave: Leave = {
     id: randomUUID().slice(0, 8),
@@ -70,7 +75,7 @@ export async function POST(req: NextRequest) {
     start_date,
     end_date,
     total_days,
-    reason,
+    reason: isHalf ? `[Half-day] ${reason}` : reason,
     status: "Pending",
     applied_at: new Date().toISOString(),
     source: "anonymous_portal",
