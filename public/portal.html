@@ -2707,7 +2707,28 @@ function openEmployeeForm(id){
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Joining date</label><input id="ef-join" type="date" class="input" value="${e?.joining_date||''}" /><div class="text-xs text-gray-500 mt-1">Days before this are ignored in attendance — no LWP for months before they existed.</div></div>
-        <div></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Punch-out time (HH:MM)</label><input id="ef-punchout" type="time" class="input" value="${e?.punch_out_minutes!=null?String(Math.floor(e.punch_out_minutes/60)).padStart(2,'0')+':'+String(e.punch_out_minutes%60).padStart(2,'0'):''}" /><div class="text-xs text-gray-500 mt-1">Scheduled leaving time (for records; not yet enforced).</div></div>
+      </div>
+
+      <!-- ─── Staff information (records) ─────────────────────── -->
+      <div class="border-t border-gray-200 pt-4 mt-2">
+        <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Staff information</div>
+        <div class="space-y-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <div><label class="text-xs font-medium text-gray-700 block mb-1">Address</label><textarea id="ef-address" rows="2" class="input" placeholder="Residential address">${e?.address||''}</textarea></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs font-medium text-gray-700 block mb-1">Emergency contact number</label><input id="ef-emergency" class="input" value="${e?.emergency_contact||''}" placeholder="9876543210 (relation)" /></div>
+            <div><label class="text-xs font-medium text-gray-700 block mb-1">Aadhaar number</label><input id="ef-aadhaar" class="input" value="${e?.aadhaar||''}" placeholder="XXXX XXXX XXXX" maxlength="14" /></div>
+          </div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 pt-1">Bank details</div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs font-medium text-gray-700 block mb-1">Bank name</label><input id="ef-bank-name" class="input" value="${e?.bank_name||''}" placeholder="e.g. HDFC Bank" /></div>
+            <div><label class="text-xs font-medium text-gray-700 block mb-1">Account number</label><input id="ef-bank-account" class="input" value="${e?.bank_account||''}" placeholder="Account number" /></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs font-medium text-gray-700 block mb-1">IFSC code</label><input id="ef-bank-ifsc" class="input" value="${e?.bank_ifsc||''}" placeholder="e.g. HDFC0001234" style="text-transform:uppercase" /></div>
+            <div><label class="text-xs font-medium text-gray-700 block mb-1">Name on the account</label><input id="ef-bank-holder" class="input" value="${e?.bank_account_name||''}" placeholder="As per bank records" /></div>
+          </div>
+        </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Personal email (optional)</label><input id="ef-email" type="email" class="input" value="${e?.email||''}" /></div>
@@ -2793,6 +2814,15 @@ async function saveEmployee(id){
   const wtv = document.getElementById('ef-wtv').checked;
   const wth = document.getElementById('ef-wth').checked;
   const joinDate = document.getElementById('ef-join').value || null;
+  const punchOutStr = document.getElementById('ef-punchout').value;
+  const punchOutMin = punchOutStr ? (parseInt(punchOutStr.split(':')[0])*60 + parseInt(punchOutStr.split(':')[1]||0)) : null;
+  const address = document.getElementById('ef-address').value.trim();
+  const emergency = document.getElementById('ef-emergency').value.trim();
+  const aadhaar = document.getElementById('ef-aadhaar').value.trim();
+  const bankName = document.getElementById('ef-bank-name').value.trim();
+  const bankAccount = document.getElementById('ef-bank-account').value.trim();
+  const bankIfsc = document.getElementById('ef-bank-ifsc').value.trim().toUpperCase();
+  const bankHolder = document.getElementById('ef-bank-holder').value.trim();
   const clCFStr = document.getElementById('ef-cl-carryfwd').value.trim();
   const elCFStr = document.getElementById('ef-el-carryfwd').value.trim();
   const clCF = clCFStr === '' ? 0 : parseFloat(clCFStr);
@@ -2819,6 +2849,9 @@ async function saveEmployee(id){
       works_through_vacations: wtv,
       works_through_holidays: wth,
       joining_date: joinDate,
+      punch_out_minutes: punchOutMin,
+      address, emergency_contact: emergency, aadhaar,
+      bank_name: bankName, bank_account: bankAccount, bank_ifsc: bankIfsc, bank_account_name: bankHolder,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || empById(id).login_email || '',
@@ -2831,6 +2864,9 @@ async function saveEmployee(id){
       works_through_vacations: wtv,
       works_through_holidays: wth,
       joining_date: joinDate,
+      punch_out_minutes: punchOutMin,
+      address, emergency_contact: emergency, aadhaar,
+      bank_name: bankName, bank_account: bankAccount, bank_ifsc: bankIfsc, bank_account_name: bankHolder,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || '',
