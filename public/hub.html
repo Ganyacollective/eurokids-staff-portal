@@ -398,7 +398,8 @@ async function tabOverview(){
     if (e1 || e2) return el('body').innerHTML = fail(e1 || e2);
     if (!sum)     return el('body').innerHTML = `<div class="err">No finance access.</div>`;
     el('body').innerHTML = head('Overview', 'Live from EPMS, corrected for status and discount.',
-        `<span class="hint" id="sync-info">Checking last import…</span>`)
+        `<span class="hint" id="sync-info" style="margin-right:10px">Checking…</span>
+         <button class="btn line sm" id="sync">Sync from EPMS</button>`)
       + `<div class="stats">
         <div class="stat acc"><div class="k">Active students</div><div class="v">${sum.students_active}</div>
           <div class="m">${sum.students_in_epms} in EPMS − ${sum.students_quit} quit − ${sum.students_transferred_out} transferred</div></div>
@@ -422,19 +423,49 @@ async function tabOverview(){
            <td class="r num">${money(r.term2_due)}</td>
            <td class="r num" style="font-weight:600">${money(r.true_due)}</td></tr>`).join('')}
        </tbody></table></div></div>`;
-    // Show when data last arrived from EPMS (the importer is push-based; there is
-    // no in-browser "sync now" — a fresh harvest is run from the automation side).
-    (async () => {
+    // When did data last arrive from EPMS?
+    const showLastSync = async () => {
       const info = el('sync-info'); if (!info) return;
       try {
         const { data: runs } = await s.schema('epms').from('sync_runs')
-          .select('finished_at,status,rows_fetched').order('finished_at', { ascending: false }).limit(1);
+          .select('finished_at,status,rows_fetched').not('finished_at','is',null)
+          .order('finished_at', { ascending: false }).limit(1);
         const last = runs && runs[0];
-        info.textContent = last && last.finished_at
-          ? `EPMS data last imported ${new Date(last.finished_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})} · ${last.rows_fetched ?? '?'} rows`
-          : 'No EPMS import recorded yet';
+        info.textContent = last
+          ? `Last synced ${new Date(last.finished_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${last.status==='ok' ? '' : ' (failed)'}`
+          : 'Never synced';
       } catch (_) { info.textContent = ''; }
-    })();
+    };
+    showLastSync();
+
+    // Manual sync — logs into EPMS server-side, re-pulls the Payment Due report,
+    // then re-renders this tab with the fresh figures.
+    const b = el('sync');
+    if (b) b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Syncing…';
+      el('sync-info').textContent = 'Fetching from EPMS…';
+      try {
+        const { data: { session: sess } } = await getSb().auth.getSession();
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/epms-pull`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${sess.access_token}`, apikey: SUPABASE_ANON_KEY },
+        });
+        const j = await r.json();
+        if (j.ok) {
+          el('sync-info').textContent = `Synced ${j.invoices} records · ${j.active} active`;
+          b.textContent = 'Synced ✓';
+          setTimeout(() => tabOverview(), 900);          // repaint with new numbers
+        } else {
+          el('sync-info').textContent = '';
+          alert('Sync failed:\n\n' + (j.error || 'unknown error'));
+          b.disabled = false; b.textContent = 'Sync from EPMS';
+        }
+      } catch (e) {
+        el('sync-info').textContent = '';
+        alert('Sync failed: ' + e.message);
+        b.disabled = false; b.textContent = 'Sync from EPMS';
+      }
+    };
     return;
   }
 
