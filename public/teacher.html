@@ -299,7 +299,7 @@ let myCredits = [];   // leave_credits across reconciled months
 let myCarryForward = { cl: 0, el: 0 };  // additive carry-forward from previous AYs
 let myLegacyOverride = { cl: null, el: null };  // back-compat for old data shape
 
-const HR_EMAILS = ['hr@eurokidsjmdenclave.org', 'admin@eurokidsjmdenclave.org'];
+const HR_EMAILS = ['hr@eurokidsjmdenclave.org', 'abhinav@ganya.in'];
 
 function getSb(){
   if (_sb) return _sb;
@@ -332,7 +332,7 @@ async function doLogin(ev){
   }
   // HR signed in here by mistake — dispatch them to the HR console
   if (isHrEmail(data.user?.email)) {
-    location.replace('/');
+    location.replace('/staff');
     return false;
   }
   await initApp();
@@ -909,7 +909,7 @@ async function submitLeave(ev){
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
       if (isHrEmail(session.user?.email)) {
-        location.replace('/');
+        location.replace('/staff');
         return;
       }
       await initApp();

@@ -6,8 +6,9 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const HR_EMAILS = new Set([
-  "hr@eurokidsjmdenclave.org",
-  "admin@eurokidsjmdenclave.org",
+  "hr@eurokidsjmdenclave.org",   // staff-portal master — can create teachers, reset their passwords
+  "abhinav@ganya.in",            // overall master
+  // admin@eurokidsjmdenclave.org deliberately absent: that account is hub/billing only.
 ]);
 
 export function getAdminClient(): SupabaseClient {
