@@ -479,9 +479,21 @@ async function tabOverview(){
         });
         const j = await r.json();
         if (j.ok) {
-          el('sync-info').textContent = j.new_payments
+          // Second pass: the Admission report carries parent emails, batch, kit dispatch.
+          el('sync-info').textContent = 'Fetching parent details…';
+          let extra = '';
+          try {
+            const r2 = await fetch(`${SUPABASE_URL}/functions/v1/epms-admission-pull`, {
+              method: 'POST',
+              headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${sess.access_token}`, apikey: SUPABASE_ANON_KEY },
+            });
+            const j2 = await r2.json();
+            if (j2.ok) extra = ` · ${j2.with_email} parent emails`;
+          } catch (_) { /* the main sync already succeeded */ }
+
+          el('sync-info').textContent = (j.new_payments
             ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
-            : `Synced ${j.invoices} records · ${j.active} active · nothing new`;
+            : `Synced ${j.invoices} records · ${j.active} active`) + extra;
           b.textContent = 'Synced ✓';
           setTimeout(() => tabOverview(), 900);          // repaint with new numbers
         } else {
