@@ -13,7 +13,11 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return {
       beforeFiles: [
-        { source: "/", destination: "/portal.html" },
+        // The hub is the front door: one sign-in, then a choice of app.
+        { source: "/", destination: "/hub.html" },
+        // The HR console is unchanged — it just moved off the root.
+        { source: "/staff", destination: "/portal.html" },
+        // Teachers are untouched.
         { source: "/teacher", destination: "/teacher.html" },
       ],
       afterFiles: [],
