@@ -9,8 +9,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
-  --bone:#F4F1EC; --card:#FFF; --ink:#1A1A1A; --muted:#6B6B6B; --faint:#9A968F;
-  --line:#E7E3DB; --line-2:#D8D3C9; --accent:#DC2B1C; --accent-wash:#FCEEEC; --bar:#000;
+  --bone:#FFFFFF; --card:#FFF; --ink:#1A1A1A; --muted:#6B6B6B; --faint:#9A968F;
+  --line:#E5E7EB; --line-2:#D1D5DB; --accent:#DC2B1C; --accent-wash:#FCEEEC; --bar:#000;
   --good:#1E7A4B; --good-wash:#E8F3ED; --warn:#9A6410; --warn-wash:#FAF0DF;
   --crit:#B32519; --crit-wash:#FBEBE9; --r:12px;
 }
@@ -33,7 +33,7 @@ button,input,select{font:inherit;color:inherit}
 .hello{font-size:46px;font-weight:700;letter-spacing:-.035em}
 .askline{color:var(--muted);font-size:16px;margin-top:6px}
 .deck{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:22px;margin-top:38px}
-.door{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:26px 26px 22px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:9px;box-shadow:0 1px 2px rgba(26,26,26,.04);transition:box-shadow .18s,transform .18s,border-color .18s;width:100%}
+.door{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:26px 26px 22px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:9px;box-shadow:0 1px 3px rgba(26,26,26,.06),0 4px 14px -6px rgba(26,26,26,.08);transition:box-shadow .18s,transform .18s,border-color .18s;width:100%}
 .door:hover:not(.shut){box-shadow:0 6px 22px rgba(26,26,26,.09);transform:translateY(-2px);border-color:var(--line-2)}
 .door h3{font-size:19px;font-weight:600}
 .door p{margin:0;color:var(--muted);font-size:14px}

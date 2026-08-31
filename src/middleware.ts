@@ -28,7 +28,10 @@ export async function middleware(request: NextRequest) {
     path === "/" ||
     path === "/portal.html" ||
     path === "/teacher.html" ||
+    path === "/hub.html" ||
     path.startsWith("/portal") ||
+    path.startsWith("/staff") ||
+    path.startsWith("/hub") ||
     path.startsWith("/teacher") ||
     path.startsWith("/login") ||
     path.startsWith("/reset-password") ||
