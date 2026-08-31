@@ -127,8 +127,9 @@ const el = id => document.getElementById(id);
 const TABS = {
   overview:   { label: 'Overview', need: () => has('admission') || has('finance') },
   children:   { label: 'Children', need: () => has('finance') },
-  discounts:  { label: 'Discounts', need: () => has('finance') },
-  plans:      { label: 'Payment Plans', need: () => has('finance') || has('admission') },
+  plans:      { label: 'Fees & Plans', need: () => has('finance') || has('admission') },
+  liability:  { label: 'Cash in hand', need: () => has('finance') },
+  discounts:  { label: 'Quick discounts', need: () => has('finance') },
   kits:       { label: 'Kits',     need: () => has('kits') },
   fees:       { label: 'Fee Reference', need: () => has('fees') || has('finance') }
 };
@@ -376,7 +377,7 @@ function renderApp(){
   el('back').onclick = () => { app = null; paint(); };
   document.querySelectorAll('.tab[data-tab]').forEach(b =>
     b.onclick = () => { tab = b.dataset.tab; renderApp(); });
-  ({ overview: tabOverview, children: tabChildren, discounts: tabDiscounts, plans: tabPlans,
+  ({ overview: tabOverview, children: tabChildren, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      kits: tabKits, fees: tabFees }[tab] || tabOverview)();
 }
 
@@ -524,7 +525,7 @@ async function tabChildren(){
   el('body').innerHTML = '<div class="loading">Loading roster…</div>';
   // Everyone, newest admission first. No limit — the whole active roster.
   const { data, error } = await getSb().schema('eurokids').from('v_dues')
-    .select('uin,student_name,father_name,program_name,student_status,eurokids_discount,our_discount,admission_date,batch,total_collected,epms_due,true_due,payment_status')
+    .select('uin,student_name,father_name,program_name,student_status,eurokids_discount,our_discount,uncredited_cash,admission_date,batch,mobile1,mobile2,parent_email1,parent_email2,total_collected,total_invoiced,epms_due,true_due,payment_status')
     .order('admission_date', { ascending: false })
     .order('student_name', { ascending: true });
   if (error) return el('body').innerHTML = fail(error);
@@ -553,8 +554,18 @@ function renderChildren(){
   const fmtDate = d => d ? new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit',timeZone:'UTC'}) : '—';
   const owing = rows.filter(r => Number(r.true_due) > 0).length;
 
+  // Per-class strip: headcount and what the class is worth
+  const classStrip = PROGRAMS.filter(p => countFor(p)).map(p => {
+    const set = _kids.filter(r => r.program_name === p);
+    const due = set.reduce((a,r) => a + Number(r.true_due), 0);
+    return `<div class="stat" style="padding:11px 13px">
+      <div class="k">${p}</div><div class="v" style="font-size:19px">${set.length}</div>
+      <div class="m">${due > 0 ? money(due) + ' outstanding' : 'all paid'}</div></div>`;
+  }).join('');
+
   el('body').innerHTML = head('Children', 'Active roster. Quit and Transfer Out are excluded everywhere.')
-    + `<div class="panel" style="padding:14px 16px;margin-bottom:14px">
+    + `<div class="stats" style="margin-bottom:14px">${classStrip}</div>
+      <div class="panel" style="padding:14px 16px;margin-bottom:14px">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <input class="in" id="kid-q" placeholder="Search name, father or UIN…" value="${esc(_kidQ)}" style="flex:1;min-width:220px">
           <select class="in" id="kid-prog" style="width:auto">
@@ -577,25 +588,39 @@ function renderChildren(){
       </div>
 
       <div class="panel"><div class="ptop"><h2>Roster</h2>
-        <span class="hint"><strong>${rows.length}</strong> shown of ${_kids.length} active · ${owing} still owe</span></div>
+        <span class="hint"><strong>${rows.length}</strong> shown of ${_kids.length} active ·
+          <span style="color:var(--good)">${rows.length-owing} fully paid</span> ·
+          <span style="color:var(--crit)">${owing} still owe</span></span></div>
       <div class="tw"><table><thead><tr>
-        <th>Child</th><th>Father</th><th>Class</th><th>Batch</th><th>Admitted</th>
-        <th>EuroKids discount</th><th class="r">Ours</th><th class="r">Collected</th>
-        <th class="r">Truly due</th><th>Status</th></tr></thead><tbody>
-        ${rows.length ? rows.map(r => `<tr>
-          <td><strong>${esc(r.student_name)}</strong><br><span class="num" style="color:var(--muted);font-size:11px">${esc(r.uin)}</span></td>
-          <td style="color:var(--muted)">${esc(r.father_name || '—')}</td>
+        <th>Child</th><th>Parents</th><th>Class</th><th>Batch</th><th>Admitted</th>
+        <th class="r">Fee</th><th class="r">Collected</th><th class="r">Truly due</th><th></th></tr></thead><tbody>
+        ${rows.length ? rows.map(r => {
+          const paid = Number(r.true_due) <= 0;
+          const part = !paid && Number(r.total_collected) > 0;
+          const tint = paid ? 'background:var(--good-wash)' : (part ? 'background:var(--warn-wash)' : 'background:var(--crit-wash)');
+          const bar  = paid ? 'var(--good)' : (part ? 'var(--warn)' : 'var(--crit)');
+          const contacts = [r.parent_email1, r.parent_email2].filter(Boolean);
+          const phones   = [r.mobile1, r.mobile2].filter(Boolean);
+          return `<tr style="${tint}">
+          <td style="border-left:3px solid ${bar}">
+            <strong>${esc(r.student_name)}</strong>
+            ${Number(r.our_discount) ? `<span class="chip c-mute" style="margin-left:6px">−${money(r.our_discount)}</span>`:''}
+            ${Number(r.uncredited_cash) ? `<span class="chip c-warn" style="margin-left:4px">${money(r.uncredited_cash)} in hand</span>`:''}
+            <br><span class="num" style="color:var(--muted);font-size:11px">${esc(r.uin)}</span></td>
+          <td style="font-size:12px;color:var(--muted)">${esc(r.father_name || '—')}
+            ${phones.length?`<br>${phones.map(p=>`<a href="tel:${esc(p)}" style="color:var(--muted)">${esc(p)}</a>`).join(' · ')}`:''}
+            ${contacts.length?`<br>${contacts.map(e2=>`<a href="mailto:${esc(e2)}" style="color:var(--accent)">${esc(e2)}</a>`).join(' · ')}`
+                             :'<br><span style="color:var(--faint)">no email on file</span>'}</td>
           <td>${esc(r.program_name)}</td>
           <td>${r.batch ? esc(r.batch) : `<select class="in" style="padding:2px 6px;font-size:12px;width:auto" onchange="setBatch('${esc(r.uin)}', this.value)">
                 <option value="">—</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option></select>`}</td>
           <td class="hint">${fmtDate(r.admission_date)}</td>
-          <td>${esc(r.eurokids_discount || '—')}</td>
-          <td class="r num">${Number(r.our_discount) ? money(r.our_discount) : '—'}</td>
+          <td class="r num">${money(r.total_invoiced)}</td>
           <td class="r num">${money(r.total_collected)}</td>
-          <td class="r num" style="font-weight:600">${money(r.true_due)}</td>
-          <td><span class="chip ${r.true_due <= 0 ? 'c-good' : r.total_collected > 0 ? 'c-warn' : 'c-crit'}">
-            ${r.true_due <= 0 ? 'Paid' : r.total_collected > 0 ? 'Partial' : 'Nothing paid'}</span></td></tr>`).join('')
-        : `<tr><td colspan="10" style="padding:26px;text-align:center;color:var(--muted)">No child matches that search.</td></tr>`}
+          <td class="r num" style="font-weight:700;color:${bar}">${paid ? 'Paid' : money(r.true_due)}</td>
+          <td><a style="color:var(--accent);cursor:pointer;white-space:nowrap" onclick="app='admissions';tab='plans';renderApp();setTimeout(()=>openPlan('${esc(r.uin)}'),400)">Plan →</a></td>
+        </tr>`;}).join('')
+        : `<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--muted)">No child matches that search.</td></tr>`}
       </tbody></table></div></div>`;
 
   // Wire the controls (preserve caret position in the search box)
@@ -614,6 +639,89 @@ async function setBatch(uin, batch){
   if (error) return alert('Could not save batch: ' + error.message);
   const k = _kids.find(x => x.uin === uin); if (k) k.batch = batch;
   renderChildren();
+}
+
+/* ── cash in hand: money received but not yet posted into EPMS ─────────── */
+async function tabLiability(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const s = getSb();
+  const [{ data: recs, error }, { data: kids }] = await Promise.all([
+    s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }),
+    s.schema('eurokids').from('v_dues').select('uin,student_name').order('student_name'),
+  ]);
+  if (error) return el('body').innerHTML = fail(error);
+  const open = (recs||[]).filter(r => !r.reflected_in_epms);
+  const held = open.reduce((a,r) => a + Number(r.amount_rupees), 0);
+  const opts = (kids||[]).map(k => `<option value="${esc(k.uin)}">${esc(k.student_name)}</option>`).join('');
+
+  el('body').innerHTML = head('Cash in hand',
+      'Money a parent has given us that has not yet been posted into EPMS. Until it is, EPMS keeps showing it as due and we are holding it.')
+    + `<div class="stats" style="margin-bottom:16px">
+        <div class="stat crit"><div class="k">Not yet deposited</div><div class="v">${money(held)}</div>
+          <div class="m">${open.length} receipt${open.length===1?'':'s'} outstanding</div></div>
+        <div class="stat good"><div class="k">Settled</div><div class="v">${money((recs||[]).filter(r=>r.reflected_in_epms).reduce((a,r)=>a+Number(r.amount_rupees),0))}</div>
+          <div class="m">Already reflected in EPMS</div></div>
+      </div>
+
+      <div class="panel" style="padding:18px">
+        <h3 style="margin-bottom:10px">Record money received</h3>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.4fr;gap:10px;align-items:end">
+          <div class="fld" style="margin:0"><label>Child</label>
+            <select class="in" id="lb-uin"><option value="">— pick —</option>${opts}</select></div>
+          <div class="fld" style="margin:0"><label>Mode</label>
+            <select class="in" id="lb-mode"><option>Cash</option><option>Cheque</option><option>UPI</option><option>Other</option></select></div>
+          <div class="fld" style="margin:0"><label>Amount</label><input class="in num" id="lb-amt" type="number"></div>
+          <div class="fld" style="margin:0"><label>Received on</label><input class="in" id="lb-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="fld" style="margin:0"><label>Received by</label><input class="in" id="lb-by" placeholder="who took it"></div>
+        </div>
+        <div id="lb-msg"></div>
+        <button class="btn" id="lb-add" style="margin-top:12px">Add receipt</button>
+      </div>
+
+      <div class="panel" style="margin-top:16px"><div class="ptop"><h2>Receipts</h2>
+        <span class="hint">Tick “In EPMS” once you have posted it — the child's balance corrects at once</span></div>
+        <div class="tw"><table><thead><tr><th>Child</th><th>Mode</th><th class="r">Amount</th>
+          <th>Received</th><th>By</th><th>Deposited</th><th>In EPMS</th><th></th></tr></thead><tbody>
+          ${(recs||[]).map(r => `<tr style="${r.reflected_in_epms?'':'background:var(--crit-wash)'}">
+            <td>${esc(r.student_name || r.uin)}</td>
+            <td><span class="chip ${r.mode==='Cash'?'c-warn':'c-mute'}">${esc(r.mode)}</span></td>
+            <td class="r num" style="font-weight:600">${money(r.amount_rupees)}</td>
+            <td class="hint">${r.received_on ? new Date(r.received_on+'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',timeZone:'UTC'}) : '—'}</td>
+            <td class="hint">${esc(r.received_by||'—')}</td>
+            <td><input class="in" type="date" value="${r.deposited_on||''}" style="padding:3px 6px;font-size:12px;width:auto"
+                  onchange="setDeposited(${r.id}, this.value)"></td>
+            <td style="text-align:center"><input type="checkbox" ${r.reflected_in_epms?'checked':''}
+                  onchange="setReflected(${r.id}, this.checked)">
+                ${r.reflected_at?`<div class="hint" style="font-size:10px">${new Date(r.reflected_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>`:''}</td>
+            <td><a style="color:var(--crit);cursor:pointer" onclick="delReceipt(${r.id})">Remove</a></td>
+          </tr>`).join('') || `<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">Nothing recorded yet.</td></tr>`}
+        </tbody></table></div></div>`;
+
+  el('lb-add').onclick = async () => {
+    const uin = el('lb-uin').value, amt = Number(el('lb-amt').value)||0;
+    if (!uin || amt <= 0) { el('lb-msg').innerHTML = '<div class="err">Pick a child and an amount.</div>'; return; }
+    const name = (kids||[]).find(k=>k.uin===uin)?.student_name || null;
+    const { error } = await getSb().schema('eurokids').from('receipt_offline').insert({
+      uin, student_name: name, mode: el('lb-mode').value, amount_rupees: amt,
+      received_on: el('lb-on').value, received_by: el('lb-by').value || null });
+    if (error) { el('lb-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return; }
+    tabLiability();
+  };
+}
+
+async function setReflected(id, on){
+  const { error } = await getSb().schema('eurokids').from('receipt_offline')
+    .update({ reflected_in_epms: on }).eq('id', id);
+  if (error) return alert(error.message);
+  tabLiability();
+}
+async function setDeposited(id, d){
+  await getSb().schema('eurokids').from('receipt_offline').update({ deposited_on: d || null }).eq('id', id);
+}
+async function delReceipt(id){
+  if (!confirm('Remove this receipt?')) return;
+  await getSb().schema('eurokids').from('receipt_offline').delete().eq('id', id);
+  tabLiability();
 }
 
 /* ── payment plans: agreed fee, our discount, instalments, welcome letter ── */
@@ -697,11 +805,13 @@ async function openPlan(uin){
         <input class="in" id="pf-note" value="${esc(plan?.note||'')}" placeholder="e.g. Booking amount covers the welcome kit."></div>
 
       <div id="pf-msg"></div>
-      <div style="display:flex;gap:8px;margin-top:14px">
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
         <button class="btn" id="pf-save">Save plan</button>
-        <button class="btn line" id="pf-send">Save &amp; send welcome letter</button>
+        <button class="btn line" id="pf-send" data-kind="welcome">Save &amp; send welcome letter</button>
+        <button class="btn line" id="pf-send2" data-kind="schedule">Send schedule only</button>
         <button class="btn line" onclick="el('plan-editor').innerHTML=''">Close</button>
       </div>
+      <div class="hint" style="margin-top:6px">The welcome letter is the warm first email. “Schedule only” is the plainer re-send when a parent asks for the terms again. Both cc admin@eurokidsjmdenclave.org.</div>
       ${plan?.welcome_sent_at ? `<div class="hint" style="margin-top:8px">Letter last sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN')}</div>` : ''}
     </div>`;
 
@@ -779,22 +889,25 @@ async function openPlan(uin){
     if (await savePlan()) { el('pf-msg').innerHTML = '<div class="ok-msg" style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Plan saved.</div>'; tabPlans(); }
   };
 
-  el('pf-send').onclick = async () => {
+  const sendLetter = async (btn) => {
     el('pf-msg').innerHTML = '';
     if (!(await savePlan())) return;
-    const btn = el('pf-send'); btn.disabled = true; btn.textContent = 'Sending…';
+    const kind = btn.dataset.kind, label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Sending…';
     try {
       const { data: { session: sess } } = await getSb().auth.getSession();
       const r = await fetch('/api/fees/welcome-email', { method:'POST',
         headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sess.access_token}` },
-        body: JSON.stringify({ uin: _planUin }) });
+        body: JSON.stringify({ uin: _planUin, kind }) });
       const j = await r.json();
       el('pf-msg').innerHTML = j.ok
-        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Letter sent to ${j.sent_to.join(', ')} (cc ${j.cc}).</div>`
+        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Sent to ${j.sent_to.join(', ')} (cc ${j.cc}).</div>`
         : `<div class="err">${esc(j.error||'Could not send')}</div>`;
     } catch(e) { el('pf-msg').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
-    btn.disabled = false; btn.textContent = 'Save & send welcome letter';
+    btn.disabled = false; btn.textContent = label;
   };
+  el('pf-send').onclick  = e => sendLetter(e.currentTarget);
+  el('pf-send2').onclick = e => sendLetter(e.currentTarget);
 
   el('plan-editor').scrollIntoView({ behavior:'smooth', block:'start' });
 }
