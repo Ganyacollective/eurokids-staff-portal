@@ -169,8 +169,13 @@ function paintChrome(){
 function paint(){
   paintChrome();
   if (!session) return renderLogin();
+  if (app === 'users') return renderUsers();
   if (!app)     return renderChooser();
   renderApp();
+}
+
+function isOwner(){
+  return (session?.user?.email || '').toLowerCase() === 'abhinav@ganya.in';
 }
 
 /* ── sign in ──────────────────────────────────────────── */
@@ -218,6 +223,8 @@ function renderChooser(){
     { key:'pulse', name:'Site Pulse',
       desc:'Enquiries, conversions and centre performance.', ok:false, soon:true }
   ];
+  if (isOwner()) doors.push({ key:'users', name:'Users & access',
+    desc:'Create accounts for coordinators and HR; grant modules.', ok:true, href:null });
   el('stage').innerHTML = `
     <div class="chooser">
       <h1 class="hello">Hello</h1>
@@ -241,6 +248,119 @@ function renderChooser(){
       paint(); scrollTo({ top: 0 });
     };
   });
+}
+
+/* ── users & access (owner only) ─────────────────────── */
+const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','finance'];
+const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
+  payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission', finance:'Finance (money)' };
+
+async function hubUsersApi(method, body){
+  const { data: { session: s } } = await getSb().auth.getSession();
+  const resp = await fetch('/api/admin/hub-users', {
+    method,
+    headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${s.access_token}` },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return resp.json();
+}
+
+function modChecks(prefix, selected){
+  return ALL_MODULES.map(m => `
+    <label style="display:inline-flex;align-items:center;gap:6px;margin:3px 12px 3px 0;font-size:13px;${m==='finance'?'color:var(--crit);font-weight:600':''}">
+      <input type="checkbox" class="${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}> ${MODULE_LABEL[m]}
+    </label>`).join('');
+}
+
+async function renderUsers(){
+  el('stage').innerHTML = `
+    <div class="crumb"><button id="back">&larr; All apps</button><span>/</span><span>Users &amp; access</span></div>
+    <div id="body"><div class="loading">Loading users…</div></div>`;
+  el('back').onclick = () => { app = null; paint(); };
+
+  const json = await hubUsersApi('GET');
+  if (!json.ok) { el('body').innerHTML = `<div class="err">${esc(json.error||'Could not load')}</div>`; return; }
+
+  const staffUsers = json.users.filter(u => !u.is_teacher);
+  const teacherCount = json.users.length - staffUsers.length;
+
+  el('body').innerHTML = `
+    <div class="panel" style="padding:20px">
+      <h3 style="margin-bottom:4px">Create an account</h3>
+      <p class="hint" style="margin-bottom:14px">For coordinators, HR staff and yourself. Teachers are created in the Staff Portal → Employees, the same as always (${teacherCount} teacher account${teacherCount===1?'':'s'} exist there).</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:820px">
+        <div class="fld"><label>Full name</label><input class="in" id="nu-name" placeholder="e.g. Sunita Saxena"></div>
+        <div class="fld"><label>Email</label><input class="in" id="nu-email" type="email" placeholder="name@eurokidsjmdenclave.org"></div>
+        <div class="fld"><label>Password (min 8)</label><input class="in" id="nu-pass" placeholder="They can't change it — pick well"></div>
+      </div>
+      <div style="margin:8px 0 14px"><div class="hint" style="margin-bottom:4px">Modules — tick what they may open. <span style="color:var(--crit)">Finance shows money; grant sparingly.</span></div>${modChecks('nu')}</div>
+      <div id="nu-msg"></div>
+      <button class="btn" id="nu-go">Create account</button>
+    </div>
+
+    <div class="panel" style="padding:0;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="text-align:left;border-bottom:1px solid var(--line)">
+          <th style="padding:12px 16px">Person</th><th style="padding:12px">Modules</th>
+          <th style="padding:12px">Last sign-in</th><th style="padding:12px 16px"></th>
+        </tr></thead>
+        <tbody>${staffUsers.map(u => `
+          <tr style="border-bottom:1px solid var(--line)" data-uid="${u.id}">
+            <td style="padding:12px 16px"><strong>${esc(u.full_name||'—')}</strong><br><span class="hint">${esc(u.email)}</span></td>
+            <td style="padding:12px;max-width:340px">${u.modules.length ? u.modules.map(m=>`<span style="display:inline-block;background:${m==='finance'?'var(--crit-wash)':'var(--good-wash)'};color:${m==='finance'?'var(--crit)':'var(--good)'};border-radius:99px;padding:1px 9px;margin:2px;font-size:11px">${MODULE_LABEL[m]||m}</span>`).join('') : '<span class="hint">none</span>'}</td>
+            <td style="padding:12px" class="hint">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : 'never'}</td>
+            <td style="padding:12px 16px;white-space:nowrap">
+              <a style="color:var(--accent);cursor:pointer" onclick="editUserModules('${u.id}')">Modules</a> ·
+              <a style="color:var(--accent);cursor:pointer" onclick="resetUserPassword('${u.id}','${esc(u.email)}')">Password</a>
+              ${u.email==='abhinav@ganya.in'?'':` · <a style="color:var(--crit);cursor:pointer" onclick="deleteHubUser('${u.id}','${esc(u.email)}')">Remove</a>`}
+            </td>
+          </tr>
+          <tr class="modrow" id="modrow-${u.id}" style="display:none;border-bottom:1px solid var(--line);background:var(--bone)">
+            <td colspan="4" style="padding:12px 16px">
+              ${modChecks('mm-'+u.id, u.modules)}
+              <div style="margin-top:8px"><button class="btn" onclick="saveUserModules('${u.id}')">Save modules</button></div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  el('nu-go').onclick = async () => {
+    const full_name = el('nu-name').value.trim(), email = el('nu-email').value.trim(), password = el('nu-pass').value;
+    const modules = [...document.querySelectorAll('.nu-mod:checked')].map(c=>c.value);
+    if (!full_name || !email || password.length < 8) { el('nu-msg').innerHTML = '<div class="err">Name, email, and a password of at least 8 characters are required.</div>'; return; }
+    if (modules.includes('finance') && !confirm('Grant FINANCE? This person will see collections, dues and discounts. Continue?')) return;
+    el('nu-go').disabled = true; el('nu-go').textContent = 'Creating…';
+    const r = await hubUsersApi('POST', { action:'create', email, password, full_name, modules });
+    if (r.ok) { renderUsers(); }
+    else { el('nu-msg').innerHTML = `<div class="err">${esc(r.error||'Failed')}</div>`; el('nu-go').disabled = false; el('nu-go').textContent = 'Create account'; }
+  };
+}
+
+function editUserModules(uid){
+  const row = el('modrow-'+uid);
+  row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
+async function saveUserModules(uid){
+  const modules = [...document.querySelectorAll(`.mm-${CSS.escape(uid)}-mod:checked`)].map(c=>c.value);
+  if (modules.includes('finance') && !confirm('Grant FINANCE to this account?')) return;
+  const r = await hubUsersApi('POST', { action:'set_modules', user_id: uid, modules });
+  if (r.ok) renderUsers(); else alert(r.error||'Failed');
+}
+
+async function resetUserPassword(uid, email){
+  const pw = prompt(`New password for ${email} (min 8 chars):`);
+  if (!pw) return;
+  if (pw.length < 8) return alert('At least 8 characters.');
+  const r = await hubUsersApi('POST', { action:'reset_password', user_id: uid, password: pw });
+  if (r.ok) alert(`Done. Share it with them privately:\n\n${email}\n${pw}`); else alert(r.error||'Failed');
+}
+
+async function deleteHubUser(uid, email){
+  if (!confirm(`Remove ${email}? Their sign-in stops working immediately.`)) return;
+  const r = await hubUsersApi('POST', { action:'delete', user_id: uid });
+  if (r.ok) renderUsers(); else alert(r.error||'Failed');
 }
 
 /* ── app shell ────────────────────────────────────────── */
