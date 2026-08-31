@@ -128,6 +128,7 @@ const TABS = {
   overview:   { label: 'Overview', need: () => has('admission') || has('finance') },
   children:   { label: 'Children', need: () => has('finance') },
   discounts:  { label: 'Discounts', need: () => has('finance') },
+  plans:      { label: 'Payment Plans', need: () => has('finance') || has('admission') },
   kits:       { label: 'Kits',     need: () => has('kits') },
   fees:       { label: 'Fee Reference', need: () => has('fees') || has('finance') }
 };
@@ -375,7 +376,7 @@ function renderApp(){
   el('back').onclick = () => { app = null; paint(); };
   document.querySelectorAll('.tab[data-tab]').forEach(b =>
     b.onclick = () => { tab = b.dataset.tab; renderApp(); });
-  ({ overview: tabOverview, children: tabChildren, discounts: tabDiscounts,
+  ({ overview: tabOverview, children: tabChildren, discounts: tabDiscounts, plans: tabPlans,
      kits: tabKits, fees: tabFees }[tab] || tabOverview)();
 }
 
@@ -516,25 +517,286 @@ async function tabOverview(){
 }
 
 /* ── children ─────────────────────────────────────────── */
+// Roster state — kept module-level so filters don't refetch.
+let _kids = [], _kidQ = '', _kidProg = 'all', _kidBatch = 'all', _kidSort = 'newest';
+
 async function tabChildren(){
+  el('body').innerHTML = '<div class="loading">Loading roster…</div>';
+  // Everyone, newest admission first. No limit — the whole active roster.
   const { data, error } = await getSb().schema('eurokids').from('v_dues')
-    .select('student_name,father_name,program_name,eurokids_discount,our_discount,total_collected,epms_due,true_due,payment_status')
-    .order('true_due', { ascending: false }).limit(60);
+    .select('uin,student_name,father_name,program_name,student_status,eurokids_discount,our_discount,admission_date,batch,total_collected,epms_due,true_due,payment_status')
+    .order('admission_date', { ascending: false })
+    .order('student_name', { ascending: true });
   if (error) return el('body').innerHTML = fail(error);
+  _kids = data || [];
+  renderChildren();
+}
+
+function renderChildren(){
+  const PROGRAMS = ['Play Group','Nursery','Euro Junior','Euro Senior','Eurotots'];
+  const q = _kidQ.trim().toLowerCase();
+  let rows = _kids.filter(r => {
+    if (_kidProg !== 'all' && (r.program_name || '') !== _kidProg) return false;
+    if (_kidBatch !== 'all' && (r.batch || 'Unset') !== _kidBatch) return false;
+    if (!q) return true;
+    return (r.student_name || '').toLowerCase().includes(q)
+        || (r.father_name || '').toLowerCase().includes(q)
+        || (r.uin || '').toLowerCase().includes(q);
+  });
+  if (_kidSort === 'newest') rows.sort((a,b) => (b.admission_date||'').localeCompare(a.admission_date||''));
+  else if (_kidSort === 'oldest') rows.sort((a,b) => (a.admission_date||'').localeCompare(b.admission_date||''));
+  else if (_kidSort === 'name')   rows.sort((a,b) => (a.student_name||'').localeCompare(b.student_name||''));
+  else if (_kidSort === 'due')    rows.sort((a,b) => Number(b.true_due) - Number(a.true_due));
+
+  // Counts per program for the filter chips
+  const countFor = p => _kids.filter(r => (r.program_name||'') === p).length;
+  const fmtDate = d => d ? new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit',timeZone:'UTC'}) : '—';
+  const owing = rows.filter(r => Number(r.true_due) > 0).length;
+
   el('body').innerHTML = head('Children', 'Active roster. Quit and Transfer Out are excluded everywhere.')
-    + `<div class="panel"><div class="ptop"><h2>Active roster</h2>
-        <span class="chip c-mute">Showing ${(data || []).length}</span></div>
-      <div class="tw"><table><thead><tr><th>Child</th><th>Father</th><th>Program</th><th>EuroKids discount</th>
-        <th class="r">Ours</th><th class="r">Collected</th><th class="r">Truly due</th><th>Status</th></tr></thead><tbody>
-        ${(data || []).map(r => `<tr><td>${esc(r.student_name)}</td>
-          <td style="color:var(--muted)">${esc(r.father_name || '—')}</td><td>${esc(r.program_name)}</td>
+    + `<div class="panel" style="padding:14px 16px;margin-bottom:14px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input class="in" id="kid-q" placeholder="Search name, father or UIN…" value="${esc(_kidQ)}" style="flex:1;min-width:220px">
+          <select class="in" id="kid-prog" style="width:auto">
+            <option value="all">All classes (${_kids.length})</option>
+            ${PROGRAMS.filter(p=>countFor(p)).map(p=>`<option value="${p}" ${_kidProg===p?'selected':''}>${p} (${countFor(p)})</option>`).join('')}
+          </select>
+          <select class="in" id="kid-batch" style="width:auto">
+            <option value="all">Both batches</option>
+            <option value="Morning"   ${_kidBatch==='Morning'?'selected':''}>Morning</option>
+            <option value="Afternoon" ${_kidBatch==='Afternoon'?'selected':''}>Afternoon</option>
+            <option value="Unset"     ${_kidBatch==='Unset'?'selected':''}>Batch not set</option>
+          </select>
+          <select class="in" id="kid-sort" style="width:auto">
+            <option value="newest" ${_kidSort==='newest'?'selected':''}>Newest admission first</option>
+            <option value="oldest" ${_kidSort==='oldest'?'selected':''}>Oldest first</option>
+            <option value="name"   ${_kidSort==='name'?'selected':''}>Name A–Z</option>
+            <option value="due"    ${_kidSort==='due'?'selected':''}>Biggest balance</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel"><div class="ptop"><h2>Roster</h2>
+        <span class="hint"><strong>${rows.length}</strong> shown of ${_kids.length} active · ${owing} still owe</span></div>
+      <div class="tw"><table><thead><tr>
+        <th>Child</th><th>Father</th><th>Class</th><th>Batch</th><th>Admitted</th>
+        <th>EuroKids discount</th><th class="r">Ours</th><th class="r">Collected</th>
+        <th class="r">Truly due</th><th>Status</th></tr></thead><tbody>
+        ${rows.length ? rows.map(r => `<tr>
+          <td><strong>${esc(r.student_name)}</strong><br><span class="num" style="color:var(--muted);font-size:11px">${esc(r.uin)}</span></td>
+          <td style="color:var(--muted)">${esc(r.father_name || '—')}</td>
+          <td>${esc(r.program_name)}</td>
+          <td>${r.batch ? esc(r.batch) : `<select class="in" style="padding:2px 6px;font-size:12px;width:auto" onchange="setBatch('${esc(r.uin)}', this.value)">
+                <option value="">—</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option></select>`}</td>
+          <td class="hint">${fmtDate(r.admission_date)}</td>
           <td>${esc(r.eurokids_discount || '—')}</td>
           <td class="r num">${Number(r.our_discount) ? money(r.our_discount) : '—'}</td>
           <td class="r num">${money(r.total_collected)}</td>
           <td class="r num" style="font-weight:600">${money(r.true_due)}</td>
           <td><span class="chip ${r.true_due <= 0 ? 'c-good' : r.total_collected > 0 ? 'c-warn' : 'c-crit'}">
-            ${r.true_due <= 0 ? 'Paid' : r.total_collected > 0 ? 'Partial' : 'Nothing paid'}</span></td></tr>`).join('')}
+            ${r.true_due <= 0 ? 'Paid' : r.total_collected > 0 ? 'Partial' : 'Nothing paid'}</span></td></tr>`).join('')
+        : `<tr><td colspan="10" style="padding:26px;text-align:center;color:var(--muted)">No child matches that search.</td></tr>`}
       </tbody></table></div></div>`;
+
+  // Wire the controls (preserve caret position in the search box)
+  const qEl = el('kid-q');
+  qEl.oninput = () => { _kidQ = qEl.value; const pos = qEl.selectionStart; renderChildren();
+    const n = el('kid-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  el('kid-prog').onchange  = e => { _kidProg  = e.target.value; renderChildren(); };
+  el('kid-batch').onchange = e => { _kidBatch = e.target.value; renderChildren(); };
+  el('kid-sort').onchange  = e => { _kidSort  = e.target.value; renderChildren(); };
+}
+
+async function setBatch(uin, batch){
+  if (!batch) return;
+  const { error } = await getSb().schema('eurokids').from('child_batch')
+    .upsert({ uin, batch, updated_at: new Date().toISOString() });
+  if (error) return alert('Could not save batch: ' + error.message);
+  const k = _kids.find(x => x.uin === uin); if (k) k.batch = batch;
+  renderChildren();
+}
+
+/* ── payment plans: agreed fee, our discount, instalments, welcome letter ── */
+let _planUin = null;
+
+async function tabPlans(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const s = getSb();
+  const [{ data: kids, error }, { data: plans }] = await Promise.all([
+    s.schema('eurokids').from('v_dues')
+      .select('uin,student_name,father_name,program_name,admission_date,total_invoiced,our_discount')
+      .order('admission_date', { ascending: false }),
+    s.schema('eurokids').from('payment_plan').select('uin,final_fee,welcome_sent_at')
+  ]);
+  if (error) return el('body').innerHTML = fail(error);
+  const done = Object.fromEntries((plans || []).map(p => [p.uin, p]));
+
+  el('body').innerHTML = head('Payment Plans',
+      'Agree the fee, record any discount out of your margin, set the instalment dates, then send the welcome letter.')
+    + `<div class="panel" style="padding:14px 16px;margin-bottom:14px">
+        <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:320px">
+      </div>
+      <div class="panel"><div class="ptop"><h2>Newest admissions first</h2>
+        <span class="hint">${(plans||[]).length} of ${(kids||[]).length} have a plan</span></div>
+        <div class="tw"><table><thead><tr><th>Child</th><th>Class</th><th>Admitted</th>
+          <th class="r">EPMS fee</th><th>Plan</th><th></th></tr></thead>
+        <tbody id="plan-rows"></tbody></table></div></div>
+      <div id="plan-editor"></div>`;
+
+  const paint = (q='') => {
+    const rows = (kids||[]).filter(k => !q ||
+      (k.student_name||'').toLowerCase().includes(q) || (k.uin||'').toLowerCase().includes(q));
+    el('plan-rows').innerHTML = rows.slice(0, 400).map(k => {
+      const p = done[k.uin];
+      return `<tr><td><strong>${esc(k.student_name)}</strong><br>
+          <span class="num" style="color:var(--muted);font-size:11px">${esc(k.uin)}</span></td>
+        <td>${esc(k.program_name)}</td>
+        <td class="hint">${k.admission_date ? new Date(k.admission_date+'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit',timeZone:'UTC'}) : '—'}</td>
+        <td class="r num">${money(k.total_invoiced)}</td>
+        <td>${p ? `<span class="chip c-good">${money(p.final_fee)}</span>${p.welcome_sent_at?' <span class="chip c-mute">letter sent</span>':''}`
+                : '<span class="chip c-warn">not set</span>'}</td>
+        <td><a style="color:var(--accent);cursor:pointer" onclick="openPlan('${esc(k.uin)}')">${p?'Edit':'Create'} →</a></td></tr>`;
+    }).join('') || `<tr><td colspan="6" style="padding:22px;text-align:center;color:var(--muted)">No match.</td></tr>`;
+  };
+  paint();
+  el('plan-q').oninput = e => paint(e.target.value.trim().toLowerCase());
+}
+
+async function openPlan(uin){
+  _planUin = uin;
+  const s = getSb();
+  const [{ data: kid }, { data: plan }, { data: items }, { data: contact }] = await Promise.all([
+    s.schema('eurokids').from('v_dues').select('student_name,father_name,program_name,total_invoiced').eq('uin', uin).maybeSingle(),
+    s.schema('eurokids').from('payment_plan').select('*').eq('uin', uin).maybeSingle(),
+    s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date').eq('uin', uin).order('seq'),
+    s.schema('eurokids').from('child_contact').select('*').eq('uin', uin).maybeSingle(),
+  ]);
+  const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
+  const total = plan?.total_fee ?? kid?.total_invoiced ?? 0;
+
+  el('plan-editor').innerHTML = `
+    <div class="panel" style="padding:20px;margin-top:16px">
+      <div class="ptop" style="padding:0 0 12px"><h2>${esc(kid?.student_name||uin)}</h2>
+        <span class="hint">${esc(kid?.program_name||'')} · ${esc(uin)}</span></div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:640px">
+        <div class="fld"><label>Total fee (EPMS)</label><input class="in num" id="pf-total" type="number" value="${total}"></div>
+        <div class="fld"><label>Our discount</label><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}"></div>
+        <div class="fld"><label>Final payable</label><input class="in num" id="pf-final" type="number" value="${plan?.final_fee ?? total}" readonly style="background:var(--bone);font-weight:700"></div>
+      </div>
+
+      <div class="hint" style="margin:16px 0 6px">Instalments — fill the earlier ones and the last is worked out for you.</div>
+      <div id="pf-items"></div>
+      <button class="btn line sm" id="pf-add" style="margin-top:8px">+ Add instalment</button>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:640px;margin-top:16px">
+        <div class="fld"><label>Parent email 1</label><input class="in" id="pf-em1" type="email" value="${esc(contact?.parent_email1||'')}"></div>
+        <div class="fld"><label>Parent email 2</label><input class="in" id="pf-em2" type="email" value="${esc(contact?.parent_email2||'')}"></div>
+      </div>
+      <div class="fld" style="max-width:640px"><label>Note for the letter (optional)</label>
+        <input class="in" id="pf-note" value="${esc(plan?.note||'')}" placeholder="e.g. Booking amount covers the welcome kit."></div>
+
+      <div id="pf-msg"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn" id="pf-save">Save plan</button>
+        <button class="btn line" id="pf-send">Save &amp; send welcome letter</button>
+        <button class="btn line" onclick="el('plan-editor').innerHTML=''">Close</button>
+      </div>
+      ${plan?.welcome_sent_at ? `<div class="hint" style="margin-top:8px">Letter last sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN')}</div>` : ''}
+    </div>`;
+
+  let rows = it.map(x => ({ amount: x.amount ?? '', due_date: x.due_date ?? '' }));
+
+  const drawItems = () => {
+    el('pf-items').innerHTML = rows.map((r,i) => `
+      <div style="display:grid;grid-template-columns:90px 1fr 1fr 40px;gap:10px;align-items:end;margin-bottom:8px;max-width:640px">
+        <div class="hint" style="padding-bottom:9px">Payment ${i+1}</div>
+        <div class="fld" style="margin:0"><label>Amount</label>
+          <input class="in num pf-amt" data-i="${i}" type="number" value="${r.amount}"></div>
+        <div class="fld" style="margin:0"><label>Due date</label>
+          <input class="in pf-due" data-i="${i}" type="date" value="${r.due_date}"></div>
+        <div>${rows.length>1 ? `<button class="btn line sm pf-del" data-i="${i}" style="padding:6px 9px">✕</button>` : ''}</div>
+      </div>`).join('');
+    document.querySelectorAll('.pf-amt').forEach(x => x.oninput = e => { rows[+e.target.dataset.i].amount = e.target.value; autoLast(); });
+    document.querySelectorAll('.pf-due').forEach(x => x.onchange = e => { rows[+e.target.dataset.i].due_date = e.target.value; });
+    document.querySelectorAll('.pf-del').forEach(x => x.onclick = e => { rows.splice(+e.target.dataset.i,1); drawItems(); autoLast(); });
+  };
+
+  // final = total − discount; last instalment = final − everything before it
+  const recalcFinal = () => {
+    const t = Number(el('pf-total').value)||0, d = Number(el('pf-disc').value)||0;
+    el('pf-final').value = Math.max(0, t - d);
+  };
+  const autoLast = () => {
+    recalcFinal();
+    const final = Number(el('pf-final').value)||0;
+    if (rows.length < 2) { if (rows.length===1 && !rows[0].amount) { rows[0].amount = final;
+      const f = document.querySelector('.pf-amt[data-i="0"]'); if (f) f.value = final; } return; }
+    const head = rows.slice(0,-1).reduce((a,r)=>a + (Number(r.amount)||0), 0);
+    const last = Math.max(0, final - head);
+    rows[rows.length-1].amount = last;
+    const lastEl = document.querySelector(`.pf-amt[data-i="${rows.length-1}"]`);
+    if (lastEl) lastEl.value = last;
+  };
+
+  drawItems(); autoLast();
+  el('pf-total').oninput = autoLast;
+  el('pf-disc').oninput  = autoLast;
+  el('pf-add').onclick = () => { if (rows.length >= 5) return alert('Five instalments is the maximum.');
+    rows.push({ amount:'', due_date:'' }); drawItems(); autoLast(); };
+
+  const savePlan = async () => {
+    const total = Number(el('pf-total').value)||0, disc = Number(el('pf-disc').value)||0;
+    const final = Math.max(0, total - disc);
+    const clean = rows.filter(r => Number(r.amount) > 0 && r.due_date);
+    if (!clean.length) { el('pf-msg').innerHTML = '<div class="err">Add at least one instalment with an amount and a date.</div>'; return false; }
+    const sum = clean.reduce((a,r)=>a+Number(r.amount),0);
+    if (Math.abs(sum - final) > 1) { el('pf-msg').innerHTML = `<div class="err">Instalments add to ${money(sum)} but the final fee is ${money(final)}.</div>`; return false; }
+
+    const s = getSb();
+    const p = await s.schema('eurokids').from('payment_plan').upsert({
+      uin: _planUin, total_fee: total, our_discount: disc, final_fee: final,
+      note: el('pf-note').value || null, updated_at: new Date().toISOString() }, { onConflict: 'uin' });
+    if (p.error) { el('pf-msg').innerHTML = `<div class="err">${esc(p.error.message)}</div>`; return false; }
+
+    await s.schema('eurokids').from('payment_plan_item').delete().eq('uin', _planUin);
+    const ins = await s.schema('eurokids').from('payment_plan_item')
+      .insert(clean.map((r,i) => ({ uin: _planUin, seq: i+1, amount: Number(r.amount), due_date: r.due_date })));
+    if (ins.error) { el('pf-msg').innerHTML = `<div class="err">${esc(ins.error.message)}</div>`; return false; }
+
+    // keep the discount tab in step
+    if (disc > 0) await s.schema('eurokids').from('child_discount')
+      .upsert({ uin: _planUin, amount_rupees: disc, reason: 'Payment plan' }, { onConflict: 'uin' });
+
+    await s.schema('eurokids').from('child_contact').upsert({
+      uin: _planUin, parent_email1: el('pf-em1').value.trim() || null,
+      parent_email2: el('pf-em2').value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: 'uin' });
+    return true;
+  };
+
+  el('pf-save').onclick = async () => {
+    el('pf-msg').innerHTML = '';
+    if (await savePlan()) { el('pf-msg').innerHTML = '<div class="ok-msg" style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Plan saved.</div>'; tabPlans(); }
+  };
+
+  el('pf-send').onclick = async () => {
+    el('pf-msg').innerHTML = '';
+    if (!(await savePlan())) return;
+    const btn = el('pf-send'); btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const { data: { session: sess } } = await getSb().auth.getSession();
+      const r = await fetch('/api/fees/welcome-email', { method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sess.access_token}` },
+        body: JSON.stringify({ uin: _planUin }) });
+      const j = await r.json();
+      el('pf-msg').innerHTML = j.ok
+        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Letter sent to ${j.sent_to.join(', ')} (cc ${j.cc}).</div>`
+        : `<div class="err">${esc(j.error||'Could not send')}</div>`;
+    } catch(e) { el('pf-msg').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+    btn.disabled = false; btn.textContent = 'Save & send welcome letter';
+  };
+
+  el('plan-editor').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
 /* ── discounts: where the phantom dues get corrected ──── */
