@@ -411,6 +411,7 @@ async function tabOverview(){
           <div class="m">The bulk of the balance</div></div>
         <div class="stat good"><div class="k">Collected</div><div class="v">${money(sum.collected_total)}</div>
           <div class="m">Royalty ${money(sum.royalty_accrued)} at 20%</div></div></div>
+      <div class="panel" id="recent-pay"></div>
       <div class="panel"><div class="ptop"><h2>Biggest balances</h2>
         <span class="hint">${Number(sum.our_discounts_total) > 0
           ? money(sum.our_discounts_total) + ' of our own discount applied'
@@ -423,6 +424,30 @@ async function tabOverview(){
            <td class="r num">${money(r.term2_due)}</td>
            <td class="r num" style="font-weight:600">${money(r.true_due)}</td></tr>`).join('')}
        </tbody></table></div></div>`;
+    // Recent payments — derived by diffing EPMS collections between syncs,
+    // so it captures every channel: link, Paytm, POS, Homebuddy, and cash we post.
+    const showRecentPayments = async () => {
+      const box = el('recent-pay'); if (!box) return;
+      try {
+        const { data: pays } = await s.schema('epms').from('payment_events')
+          .select('uin,student_name,term,amount_paise,detected_at')
+          .order('detected_at', { ascending: false }).limit(12);
+        if (!pays || !pays.length) { box.style.display = 'none'; return; }
+        const sum = pays.reduce((a, p) => a + Number(p.amount_paise), 0);
+        box.innerHTML = `<div class="ptop"><h2>Payments received</h2>
+            <span class="hint">${money(sum)} across the last ${pays.length} · newest first</span></div>
+          <div class="tw"><table><thead><tr><th>Child</th><th>UIN</th><th>Term</th>
+            <th class="r">Amount</th><th>Noticed</th></tr></thead><tbody>
+            ${pays.map(p => `<tr><td>${esc(p.student_name || '')}</td>
+              <td class="num" style="color:var(--muted)">${esc(p.uin)}</td>
+              <td>Term ${p.term}</td>
+              <td class="r num" style="font-weight:600;color:var(--good)">${money(p.amount_paise)}</td>
+              <td class="hint">${new Date(p.detected_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+            </tr>`).join('')}</tbody></table></div>`;
+      } catch (_) { box.style.display = 'none'; }
+    };
+    showRecentPayments();
+
     // When did data last arrive from EPMS?
     const showLastSync = async () => {
       const info = el('sync-info'); if (!info) return;
@@ -452,7 +477,9 @@ async function tabOverview(){
         });
         const j = await r.json();
         if (j.ok) {
-          el('sync-info').textContent = `Synced ${j.invoices} records · ${j.active} active`;
+          el('sync-info').textContent = j.new_payments
+            ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
+            : `Synced ${j.invoices} records · ${j.active} active · nothing new`;
           b.textContent = 'Synced ✓';
           setTimeout(() => tabOverview(), 900);          // repaint with new numbers
         } else {
