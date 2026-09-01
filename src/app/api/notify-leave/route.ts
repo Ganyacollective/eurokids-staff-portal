@@ -7,8 +7,8 @@ const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 // Notification destinations — all optional. Set in Vercel env vars.
 const RESEND_API_KEY   = process.env.RESEND_API_KEY;
-const RESEND_FROM      = process.env.RESEND_FROM || "Eurokids Portal <onboarding@resend.dev>";
-const HR_NOTIFY_EMAIL  = process.env.HR_NOTIFY_EMAIL;
+const RESEND_FROM      = process.env.RESEND_FROM || "EuroKids JMD Enclave <admin@eurokidsjmdenclave.org>";
+const HR_NOTIFY_EMAIL  = process.env.HR_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org";
 const SLACK_WEBHOOK    = process.env.SLACK_WEBHOOK_URL;
 const WHATSAPP_PHONE   = process.env.WHATSAPP_PHONE;        // e.g. 919876543210
 const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY;      // CallMeBot key
