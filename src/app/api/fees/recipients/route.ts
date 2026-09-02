@@ -1,31 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { applyFilters, summarise, addressesFor, type Filters, type ScheduleRow } from "@/lib/recipients";
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-// Read eurokids.v_schedule as the signed-in user, not as service role, so the
-// finance gate on the view is the thing deciding who may see fee data.
-export function userClient(token: string) {
-  return createClient(SUPABASE_URL, ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    db: { schema: "eurokids" },
-  });
-}
-
-export function bearer(req: NextRequest): string | null {
-  const m = (req.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i);
-  return m ? m[1] : null;
-}
-
-export async function loadSchedule(token: string): Promise<ScheduleRow[]> {
-  const sb = userClient(token);
-  const { data, error } = await sb.from("v_schedule").select("*").limit(2000);
-  if (error) throw new Error(error.message);
-  return (data || []) as ScheduleRow[];
-}
+import { bearer, loadSchedule } from "@/lib/fee-data";
 
 // POST /api/fees/recipients  { filters }
 // Returns who this send would reach — always shown before anything is sent.

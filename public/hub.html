@@ -977,57 +977,95 @@ let _planUin = null;
 async function tabPlans(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   const s = getSb();
-  const [{ data: kids, error }, { data: plans }] = await Promise.all([
-    s.schema('eurokids').from('v_dues')
-      .select('uin,student_name,father_name,program_name,admission_date,total_invoiced,our_discount')
-      .order('admission_date', { ascending: false }),
-    s.schema('eurokids').from('payment_plan').select('uin,final_fee,welcome_sent_at')
-  ]);
+  // One view now carries the fee, both term dues and the schedule state, so the
+  // list can answer "who owes what, and is their plan set up" in a single read.
+  const { data: kids, error } = await s.schema('eurokids').from('v_schedule')
+    .select('uin,student_name,program_name,admission_date,final_fee,total_fee,'
+          + 'term1_due,term2_due,true_due,welcome_sent_at,has_schedule,schedule_flag,next_due_date')
+    .order('admission_date', { ascending: false, nullsFirst: false })
+    .limit(2000);
   if (error) return el('body').innerHTML = fail(error);
-  const done = Object.fromEntries((plans || []).map(p => [p.uin, p]));
 
-  el('body').innerHTML = head('Payment Plans',
-      'Agree the fee, record any discount out of your margin, set the instalment dates, then send the welcome letter.')
-    + `<div class="panel" style="padding:14px 16px;margin-bottom:14px">
-        <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:320px">
+  const CLASS_ORDER = ['play', 'nur', 'jr', 'sr'];
+  const classRank = n => {
+    const t = (n || '').toLowerCase();
+    const i = CLASS_ORDER.findIndex(c => t.includes(c));
+    return i < 0 ? 9 : i;
+  };
+  const withPlan = (kids || []).filter(k => Number(k.final_fee || 0) > 0).length;
+  const flagChip = k =>
+    !k.has_schedule ? '<span class="chip c-warn">no schedule</span>'
+    : k.schedule_flag === 'OVERDUE' ? '<span class="chip c-crit">overdue</span>'
+    : k.schedule_flag === 'SETTLED' ? '<span class="chip c-good">paid up</span>'
+    : k.schedule_flag === 'DUE SOON' ? '<span class="chip c-mute">due soon</span>' : '';
+
+  el('body').innerHTML = head('Fees &amp; Plans',
+      'Agree the fee, record any discount out of your margin, set the instalment dates, then send the letter.')
+    + `<div class="panel" style="padding:14px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:280px">
+        <select class="in" id="plan-class" style="max-width:180px">
+          <option value="">All classes</option>
+          <option>Play Group</option><option>Nursery</option>
+          <option>Junior KG</option><option>Senior KG</option></select>
+        <select class="in" id="plan-sort" style="max-width:210px">
+          <option value="new">Newest admission first</option>
+          <option value="class">Class, then name</option>
+          <option value="due">Most owed first</option>
+          <option value="missing">Needs a schedule first</option></select>
       </div>
-      <div class="panel"><div class="ptop"><h2>Newest admissions first</h2>
-        <span class="hint">${(plans||[]).length} of ${(kids||[]).length} have a plan</span></div>
-        <div class="tw"><table><thead><tr><th>Child</th><th>Class</th><th>Admitted</th>
-          <th class="r">EPMS fee</th><th>Plan</th><th></th></tr></thead>
+      <div class="panel"><div class="ptop"><h2 id="plan-h">All children</h2>
+        <span class="hint">${withPlan} of ${(kids||[]).length} have a fee agreed</span></div>
+        <div class="tw"><table><thead><tr><th>Child</th><th>Class</th>
+          <th class="r">Fee</th><th class="r">Term 1 due</th><th class="r">Term 2 due</th>
+          <th class="r">Truly due</th><th>Status</th><th></th></tr></thead>
         <tbody id="plan-rows"></tbody></table></div></div>
       <div id="plan-editor"></div>`;
 
-  const paint = (q='') => {
-    const rows = (kids||[]).filter(k => !q ||
-      (k.student_name||'').toLowerCase().includes(q) || (k.uin||'').toLowerCase().includes(q));
-    el('plan-rows').innerHTML = rows.slice(0, 400).map(k => {
-      const p = done[k.uin];
+  const paint = () => {
+    const q = (el('plan-q').value || '').trim().toLowerCase();
+    const cls = el('plan-class').value.toLowerCase();
+    const sort = el('plan-sort').value;
+    let rows = (kids || []).filter(k =>
+      (!q || (k.student_name || '').toLowerCase().includes(q) || (k.uin || '').toLowerCase().includes(q)) &&
+      (!cls || classRank(k.program_name) === classRank(cls)));
+
+    if (sort === 'class')        rows.sort((a,b) => classRank(a.program_name) - classRank(b.program_name) || (a.student_name||'').localeCompare(b.student_name||''));
+    else if (sort === 'due')     rows.sort((a,b) => Number(b.true_due||0) - Number(a.true_due||0));
+    else if (sort === 'missing') rows.sort((a,b) => (a.has_schedule?1:0) - (b.has_schedule?1:0) || Number(b.true_due||0) - Number(a.true_due||0));
+
+    el('plan-h').textContent = `${rows.length} ${rows.length === 1 ? 'child' : 'children'}`;
+    el('plan-rows').innerHTML = rows.map(k => {
+      const fee = Number(k.final_fee || 0);
       return `<tr><td><strong>${esc(k.student_name)}</strong><br>
           <span class="num" style="color:var(--muted);font-size:11px">${esc(k.uin)}</span></td>
-        <td>${esc(k.program_name)}</td>
-        <td class="hint">${k.admission_date ? new Date(k.admission_date+'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit',timeZone:'UTC'}) : '—'}</td>
-        <td class="r num">${money(k.total_invoiced)}</td>
-        <td>${p ? `<span class="chip c-good">${money(p.final_fee)}</span>${p.welcome_sent_at?' <span class="chip c-mute">letter sent</span>':''}`
-                : '<span class="chip c-warn">not set</span>'}</td>
-        <td><a style="color:var(--accent);cursor:pointer" onclick="openPlan('${esc(k.uin)}')">${p?'Edit':'Create'} →</a></td></tr>`;
-    }).join('') || `<tr><td colspan="6" style="padding:22px;text-align:center;color:var(--muted)">No match.</td></tr>`;
+        <td>${esc(k.program_name || '')}</td>
+        <td class="r num">${fee > 0 ? money(fee) : '<span class="chip c-warn">not set</span>'}</td>
+        <td class="r num">${Number(k.term1_due) > 0 ? money(k.term1_due) : '—'}</td>
+        <td class="r num">${Number(k.term2_due) > 0 ? money(k.term2_due) : '—'}</td>
+        <td class="r num" style="font-weight:600">${Number(k.true_due) > 0 ? money(k.true_due) : '—'}</td>
+        <td>${flagChip(k)}${k.welcome_sent_at ? ' <span class="chip c-mute">letter sent</span>' : ''}</td>
+        <td><a style="color:var(--accent);cursor:pointer" onclick="openPlan('${esc(k.uin)}')">${fee > 0 ? 'Open' : 'Set up'} →</a></td></tr>`;
+    }).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No match.</td></tr>`;
   };
   paint();
-  el('plan-q').oninput = e => paint(e.target.value.trim().toLowerCase());
+  ['plan-q','plan-class','plan-sort'].forEach(id => {
+    el(id).oninput = paint; el(id).onchange = paint;
+  });
 }
 
 async function openPlan(uin){
   _planUin = uin;
   const s = getSb();
   const [{ data: kid }, { data: plan }, { data: items }, { data: contact }] = await Promise.all([
-    s.schema('eurokids').from('v_dues').select('student_name,father_name,program_name,total_invoiced').eq('uin', uin).maybeSingle(),
+    s.schema('eurokids').from('v_schedule')
+      .select('student_name,father_name,program_name,epms_invoiced,term1_due,term2_due,true_due,collected,schedule_flag')
+      .eq('uin', uin).maybeSingle(),
     s.schema('eurokids').from('payment_plan').select('*').eq('uin', uin).maybeSingle(),
-    s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date').eq('uin', uin).order('seq'),
+    s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date,label').eq('uin', uin).order('seq'),
     s.schema('eurokids').from('child_contact').select('*').eq('uin', uin).maybeSingle(),
   ]);
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
-  const total = plan?.total_fee ?? kid?.total_invoiced ?? 0;
+  const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
 
   el('plan-editor').innerHTML = `
     <div class="panel" style="padding:20px;margin-top:16px">

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
-  renderEmail, textToHtml, moneyH, money, day, plainFooter, esc,
+  renderEmail, textToHtml, moneyH, money, day, plainFooter,
   SCHOOL_NAME, type ThemeKey,
 } from "@/lib/brand-email";
 import { applyFilters, addressesFor, summarise, type Filters, type ScheduleRow } from "@/lib/recipients";
-import { loadSchedule, bearer } from "../recipients/route";
+import { loadSchedule, bearer } from "@/lib/fee-data";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;

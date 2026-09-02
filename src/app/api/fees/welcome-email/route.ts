@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME } from "@/lib/brand-email";
-import { loadSchedule, bearer } from "../recipients/route";
-import type { ScheduleRow } from "@/lib/recipients";
+import { loadSchedule, bearer } from "@/lib/fee-data";
+import { addressesFor, type ScheduleRow } from "@/lib/recipients";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -46,17 +46,31 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  const to = [child.parent_email1, child.parent_email2]
-    .map((x) => (x || "").trim()).filter((x) => x.includes("@"));
+  const to = addressesFor(child);
   if (!to.length && !body.preview) {
-    return NextResponse.json({ error: "No parent email on file for this child." }, { status: 400 });
+    return NextResponse.json({
+      error: "No usable parent email on file for this child. Placeholder addresses like na@… are ignored on purpose.",
+    }, { status: 400 });
   }
 
   const finalFee = Number(child.final_fee || child.total_fee || 0);
+
+  // A letter quoting a zero fee is worse than no letter — it tells the parent
+  // they owe nothing. Refuse rather than embarrass the school.
+  if (finalFee <= 0 && kind !== "receipt") {
+    return NextResponse.json({
+      error: "This child's fee is still ₹0. Set the agreed fee before sending anything to the parent.",
+    }, { status: 400 });
+  }
+  const scheduled = (items || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+  if (kind !== "receipt" && finalFee > 0 && scheduled < finalFee - 1) {
+    return NextResponse.json({
+      error: `The instalments add up to ₹${scheduled.toLocaleString("en-IN")} but the fee is ₹${finalFee.toLocaleString("en-IN")}. Fix the schedule before sending, or the parent will see a letter that does not add up.`,
+    }, { status: 400 });
+  }
   const discount = Number(child.our_discount || 0);
   const received = Number(child.collected || 0) + Number(child.uncredited_cash || 0);
   const owed = Number(child.true_due || 0);
-  const firstName = (child.student_name || "").split(" ")[0];
 
   // ── the opening paragraph differs by letter; the rest is shared ───────────
   const opening =

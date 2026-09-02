@@ -79,10 +79,29 @@ export function applyFilters(rows: ScheduleRow[], f: Filters): ScheduleRow[] {
   });
 }
 
+// Placeholder addresses that get typed into forms when nobody has a real one.
+// Deliberately a short, exact list — a real parent may well be "abc@gmail.com",
+// so only the unmistakable stand-ins are rejected.
+const PLACEHOLDER_LOCAL = new Set([
+  "na", "n/a", "nil", "none", "no", "noemail", "no-email", "nomail",
+  "dummy", "test", "xx", "xxx", "-", "_",
+]);
+
+export function isRealAddress(raw: string | null | undefined): boolean {
+  const e = (raw || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(e)) return false;
+  const [local, domain] = e.split("@");
+  if (PLACEHOLDER_LOCAL.has(local)) return false;
+  if (domain === "example.com" || domain === "test.com") return false;
+  return true;
+}
+
 export function addressesFor(r: ScheduleRow): string[] {
-  return [r.parent_email1, r.parent_email2]
-    .map((e) => (e || "").trim().toLowerCase())
-    .filter((e) => e.includes("@"));
+  return [...new Set(
+    [r.parent_email1, r.parent_email2]
+      .map((e) => (e || "").trim().toLowerCase())
+      .filter(isRealAddress),
+  )];
 }
 
 export function summarise(rows: ScheduleRow[]) {
