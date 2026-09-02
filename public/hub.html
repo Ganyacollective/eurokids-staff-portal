@@ -82,6 +82,21 @@ td.r,th.r{text-align:right}
 .in{background:var(--bone);border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;width:100%}
 .in:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-wash)}
 .err{background:var(--crit-wash);color:var(--crit);padding:9px 12px;border-radius:9px;font-size:13px;margin-bottom:12px}
+.ok{background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:9px;font-size:13px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
+.lb{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;letter-spacing:.01em}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips .chip{cursor:pointer;border:1px solid var(--line-2);background:var(--bone);user-select:none;padding:5px 10px;font-size:12.5px;transition:.12s}
+.chips .chip:hover{border-color:var(--ink)}
+.chips .chip.on{background:var(--ink);color:var(--bone);border-color:var(--ink)}
+.chips .chip b{opacity:.55;font-weight:600;margin-left:2px}
+.pill-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{display:inline-block;padding:6px 11px;border-radius:999px;background:var(--line);font-size:12.5px;font-weight:500}
+.pill.big{background:var(--ink);color:var(--bone);font-weight:600;font-size:13.5px}
+.pill.warn{background:var(--warn-wash);color:var(--warn)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line-2)}
+.btn.danger{background:var(--crit)}
+code{background:var(--line);padding:1px 5px;border-radius:4px;font-size:12px;font-family:"IBM Plex Mono",ui-monospace,monospace}
 .loading{color:var(--faint);padding:26px 0;font-size:13.5px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -128,6 +143,7 @@ const TABS = {
   overview:   { label: 'Overview', need: () => has('admission') || has('finance') },
   children:   { label: 'Children', need: () => has('finance') },
   plans:      { label: 'Fees & Plans', need: () => has('finance') || has('admission') },
+  compose:    { label: 'Send email', need: () => has('finance') || has('admission') },
   liability:  { label: 'Cash in hand', need: () => has('finance') },
   discounts:  { label: 'Quick discounts', need: () => has('finance') },
   kits:       { label: 'Kits',     need: () => has('kits') },
@@ -378,7 +394,224 @@ function renderApp(){
   document.querySelectorAll('.tab[data-tab]').forEach(b =>
     b.onclick = () => { tab = b.dataset.tab; renderApp(); });
   ({ overview: tabOverview, children: tabChildren, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
-     kits: tabKits, fees: tabFees }[tab] || tabOverview)();
+     compose: tabCompose, kits: tabKits, fees: tabFees }[tab] || tabOverview)();
+}
+
+/* ── schedule coverage: what the coordinator still has to fill ──
+   A child with no payment schedule cannot be chased, invoiced or
+   reconciled, so it is surfaced on the front page rather than buried. */
+async function renderScheduleFlags(){
+  const box = el('sched-flags'); if (!box) return;
+  const { data, error } = await getSb().schema('eurokids').from('v_schedule')
+    .select('uin,student_name,program_name,schedule_flag,days_overdue,true_due,next_due_date')
+    .limit(2000);
+  if (error || !data) return;
+
+  const by = f => data.filter(r => r.schedule_flag === f);
+  const missing = by('NO SCHEDULE'), overdue = by('OVERDUE'), soon = by('DUE SOON');
+  const rupees = rows => money(rows.reduce((s, r) => s + Number(r.true_due || 0), 0));
+  if (!missing.length && !overdue.length && !soon.length) return;
+
+  box.innerHTML = `<div class="panel"><div class="ptop">
+      <h2>Payment schedules</h2>
+      <span class="hint">Every child needs one before fees can be chased.</span></div>
+    <div class="pill-row" style="padding:0 4px 14px">
+      ${missing.length ? `<span class="pill warn">${missing.length} with no schedule · ${rupees(missing)}</span>` : ''}
+      ${overdue.length ? `<span class="pill" style="background:var(--crit-wash);color:var(--crit)">${overdue.length} past their due date · ${rupees(overdue)}</span>` : ''}
+      ${soon.length ? `<span class="pill">${soon.length} due within a fortnight · ${rupees(soon)}</span>` : ''}
+      <button class="btn sm line" id="sf-mail">Email the overdue families →</button>
+    </div>
+    ${missing.length ? `<div class="tw"><table><thead><tr><th>Child</th><th>Class</th><th class="r">Owed</th><th></th></tr></thead><tbody>
+      ${missing.slice(0, 12).map(r => `<tr><td><strong>${esc(r.student_name)}</strong></td>
+        <td>${esc(r.program_name || '')}</td><td class="r num">${money(r.true_due)}</td>
+        <td class="r"><a style="color:var(--accent);cursor:pointer" onclick="tab='plans';renderApp();setTimeout(()=>openPlan('${esc(r.uin)}'),400)">Add schedule →</a></td></tr>`).join('')}
+      </tbody></table></div>
+      ${missing.length > 12 ? `<div class="hint" style="padding:8px 4px">…and ${missing.length - 12} more.</div>` : ''}` : ''}
+  </div>`;
+  el('sf-mail').onclick = () => {
+    tab = 'compose';
+    renderApp();
+    setTimeout(() => { const m = el('cmp-money'); if (m) { m.value = 'overdue'; m.dispatchEvent(new Event('change')); } }, 350);
+  };
+}
+
+/* ── send email: pick a group, write, preview, send ─────────
+   Nothing leaves this screen without the sender first seeing exactly
+   who it reaches. The default action is a preview, never a send.      */
+let _cmp = { filters:{ money:'all' }, attachments:[], recipients:[], facets:null };
+
+async function feesApi(path, body){
+  const { data:{ session:s } } = await getSb().auth.getSession();
+  const r = await fetch(path, { method:'POST',
+    headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${s.access_token}` },
+    body: JSON.stringify(body) });
+  return r.json();
+}
+
+async function tabCompose(){
+  const b = el('body');
+  b.innerHTML = head('Send email to parents',
+    'Choose a group, write once, and every family gets it with the school’s branding.');
+  b.innerHTML += `
+  <div class="card" style="padding:18px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">
+      <div><label class="lb">Class</label><div id="cmp-classes" class="chips">…</div></div>
+      <div><label class="lb">Batch</label><div id="cmp-batches" class="chips">…</div></div>
+      <div>
+        <label class="lb">Who</label>
+        <select id="cmp-money" class="in">
+          <option value="all">Everyone in the selection</option>
+          <option value="owing">Only families who still owe</option>
+          <option value="overdue">Only families past their due date</option>
+          <option value="settled">Only families fully paid</option>
+        </select>
+      </div>
+      <div>
+        <label class="lb">Payment due on or before</label>
+        <input id="cmp-cutoff" type="date" class="in">
+        <div class="hint">Leave blank to ignore. Set it and anyone whose next
+          instalment falls <em>after</em> this date is left out.</div>
+      </div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
+      <input type="checkbox" id="cmp-nosched"> Only families with no payment schedule on file
+    </label>
+    <div id="cmp-count" class="pill-row" style="margin-top:14px">Counting…</div>
+    <div id="cmp-flags" class="hint" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-top:14px">
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px">
+      <div><label class="lb">Subject</label><input id="cmp-subject" class="in" placeholder="e.g. Janmashtami celebration on 6 September"></div>
+      <div><label class="lb">Look</label><select id="cmp-theme" class="in">
+        <option value="school">School blue (default)</option>
+        <option value="celebration">Celebration red</option>
+        <option value="festive">Festive saffron</option>
+        <option value="warm">Warm rose</option>
+        <option value="notice">Payment notice amber</option>
+        <option value="calm">Calm green</option>
+      </select></div>
+    </div>
+    <label class="lb" style="margin-top:12px">Message</label>
+    <textarea id="cmp-message" class="in" rows="9" placeholder="Dear Parent,&#10;&#10;Write normally. Leave a blank line between paragraphs."></textarea>
+    <div class="hint" style="margin-top:6px">
+      Personalise with <code>{{child}}</code>, <code>{{first_name}}</code>, <code>{{class}}</code>,
+      <code>{{amount_due}}</code>, <code>{{due_date}}</code> — each family sees their own.
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
+      <input type="checkbox" id="cmp-fees"> Add each family’s own fee position underneath
+    </label>
+    <label class="lb" style="margin-top:12px">Attachments</label>
+    <input id="cmp-files" type="file" multiple class="in">
+    <div id="cmp-filelist" class="hint"></div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-top:14px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn" id="cmp-preview">Preview</button>
+      <button class="btn ghost" id="cmp-test">Send one test to me</button>
+      <button class="btn danger" id="cmp-send">Send to everyone selected</button>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-left:auto">
+        <input type="checkbox" id="cmp-cc" checked> cc the office
+      </label>
+    </div>
+    <div id="cmp-msg" style="margin-top:12px"></div>
+    <div id="cmp-preview-box" style="margin-top:12px"></div>
+  </div>`;
+
+  const readFilters = () => {
+    const on = sel => [...document.querySelectorAll(sel + ' .chip.on')].map(c => c.dataset.v);
+    return {
+      classes: on('#cmp-classes'), batches: on('#cmp-batches'),
+      money: el('cmp-money').value,
+      dueOnOrBefore: el('cmp-cutoff').value || null,
+      missingSchedule: el('cmp-nosched').checked,
+    };
+  };
+
+  async function refresh(){
+    _cmp.filters = readFilters();
+    el('cmp-count').innerHTML = '<span class="pill">Counting…</span>';
+    const j = await feesApi('/api/fees/recipients', { filters: _cmp.filters });
+    if (!j.ok) { el('cmp-count').innerHTML = `<span class="err">${esc(j.error)}</span>`; return; }
+    _cmp.recipients = j.recipients;
+    if (!_cmp.facets) {
+      _cmp.facets = j.facets;
+      const chips = (list, id) => el(id).innerHTML = list.map(f =>
+        `<span class="chip" data-v="${esc(f.value)}">${esc(f.value)} <b>${f.count}</b></span>`).join('') || '<span class="hint">none</span>';
+      chips(j.facets.classes, 'cmp-classes');
+      chips(j.facets.batches, 'cmp-batches');
+      document.querySelectorAll('#cmp-classes .chip, #cmp-batches .chip').forEach(c =>
+        c.onclick = () => { c.classList.toggle('on'); refresh(); });
+    }
+    const s = j.summary;
+    el('cmp-count').innerHTML =
+      `<span class="pill big">${s.reachable} families will receive this</span>` +
+      `<span class="pill">${s.addresses} email addresses</span>` +
+      (s.unreachable ? `<span class="pill warn">${s.unreachable} have no email on file</span>` : '') +
+      (s.owed ? `<span class="pill">${money(s.owed)} outstanding across them</span>` : '');
+    el('cmp-flags').textContent = 'Across the school: ' +
+      Object.entries(j.flags).map(([k,v]) => `${v} ${k.toLowerCase()}`).join(' · ');
+  }
+
+  ['cmp-money','cmp-cutoff','cmp-nosched'].forEach(id => el(id).onchange = refresh);
+
+  el('cmp-files').onchange = async e => {
+    _cmp.attachments = [];
+    for (const f of e.target.files) {
+      const buf = await f.arrayBuffer();
+      let bin = ''; new Uint8Array(buf).forEach(x => bin += String.fromCharCode(x));
+      _cmp.attachments.push({ filename: f.name, content: btoa(bin) });
+    }
+    const kb = _cmp.attachments.reduce((n,a) => n + a.content.length*0.75, 0)/1024;
+    el('cmp-filelist').textContent = _cmp.attachments.length
+      ? `${_cmp.attachments.length} file(s), ${kb.toFixed(0)} KB total` + (kb > 8000 ? ' — too big, keep under 8 MB' : '') : '';
+  };
+
+  const payload = extra => ({
+    filters: readFilters(),
+    subject: el('cmp-subject').value.trim(),
+    message: el('cmp-message').value.trim(),
+    theme: el('cmp-theme').value,
+    includeFees: el('cmp-fees').checked,
+    ccOffice: el('cmp-cc').checked,
+    attachments: _cmp.attachments,
+    ...extra,
+  });
+  const say = (h, cls='') => el('cmp-msg').innerHTML = cls ? `<div class="${cls}">${h}</div>` : h;
+
+  el('cmp-preview').onclick = async e => {
+    const btn = e.currentTarget; btn.disabled = true; say('Building preview…');
+    const j = await feesApi('/api/fees/bulk-send', payload({}));
+    btn.disabled = false;
+    if (!j.ok) return say(esc(j.error), 'err');
+    say(`This is how it will look for <strong>${esc(j.preview_for||'')}</strong>. ${j.summary.reachable} families would receive it.`);
+    el('cmp-preview-box').innerHTML =
+      `<iframe style="width:100%;height:620px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>`;
+    el('cmp-preview-box').querySelector('iframe').srcdoc = j.preview_html || '';
+  };
+
+  el('cmp-test').onclick = async e => {
+    const to = prompt('Send one test copy to which address?', session?.user?.email || '');
+    if (!to) return;
+    const btn = e.currentTarget; btn.disabled = true; say('Sending test…');
+    const j = await feesApi('/api/fees/bulk-send', payload({ testTo: to }));
+    btn.disabled = false;
+    say(j.ok ? `Test sent to ${esc(to)} using ${esc(j.sample)}’s details.` : esc(j.error), j.ok ? 'ok' : 'err');
+  };
+
+  el('cmp-send').onclick = async e => {
+    const n = _cmp.recipients.length;
+    if (!confirm(`Send this to ${n} families now?\n\nThis cannot be undone.`)) return;
+    const btn = e.currentTarget; btn.disabled = true; say(`Sending to ${n} families — this takes a moment…`);
+    const j = await feesApi('/api/fees/bulk-send', payload({ confirm:true }));
+    btn.disabled = false;
+    if (!j.ok) return say(esc(j.error), 'err');
+    say(`Sent to ${j.sent} families.` + (j.failed ? ` ${j.failed} failed: ` +
+      j.failures.map(f => esc(f.name)).join(', ') : ''), j.failed ? 'err' : 'ok');
+  };
+
+  refresh();
 }
 
 function head(t, s, right){
@@ -413,6 +646,7 @@ async function tabOverview(){
           <div class="m">The bulk of the balance</div></div>
         <div class="stat good"><div class="k">Collected</div><div class="v">${money(sum.collected_total)}</div>
           <div class="m">Royalty ${money(sum.royalty_accrued)} at 20%</div></div></div>
+      <div id="sched-flags"></div>
       <div class="panel" id="recent-pay"></div>
       <div class="panel"><div class="ptop"><h2>Biggest balances</h2>
         <span class="hint">${Number(sum.our_discounts_total) > 0
@@ -449,6 +683,7 @@ async function tabOverview(){
       } catch (_) { box.style.display = 'none'; }
     };
     showRecentPayments();
+    renderScheduleFlags();
 
     // When did data last arrive from EPMS?
     const showLastSync = async () => {
@@ -821,6 +1056,7 @@ async function openPlan(uin){
         <button class="btn" id="pf-save">Save plan</button>
         <button class="btn line" id="pf-send" data-kind="welcome">Save &amp; send welcome letter</button>
         <button class="btn line" id="pf-send2" data-kind="schedule">Send schedule only</button>
+        <button class="btn line" id="pf-send3" data-kind="receipt">Send paid-in-full receipt</button>
         <button class="btn line" onclick="el('plan-editor').innerHTML=''">Close</button>
       </div>
       <div class="hint" style="margin-top:6px">The welcome letter is the warm first email. “Schedule only” is the plainer re-send when a parent asks for the terms again. Both cc admin@eurokidsjmdenclave.org.</div>
@@ -920,6 +1156,7 @@ async function openPlan(uin){
   };
   el('pf-send').onclick  = e => sendLetter(e.currentTarget);
   el('pf-send2').onclick = e => sendLetter(e.currentTarget);
+  el('pf-send3').onclick = e => sendLetter(e.currentTarget);
 
   el('plan-editor').scrollIntoView({ behavior:'smooth', block:'start' });
 }
