@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import {
   renderEmail, textToHtml, moneyH, money, day, plainFooter,
   SCHOOL_NAME, type ThemeKey,
 } from "@/lib/brand-email";
-import { applyFilters, addressesFor, summarise, type Filters, type ScheduleRow } from "@/lib/recipients";
+import { applyFilters, addressesFor, summarise, isRealAddress, type Filters, type ScheduleRow } from "@/lib/recipients";
 import { loadSchedule, bearer } from "@/lib/fee-data";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -14,6 +15,11 @@ const RESEND_FROM = process.env.RESEND_FROM || `${SCHOOL_NAME} <admin@eurokidsjm
 const CC = "admin@eurokidsjmdenclave.org";
 
 export const maxDuration = 300;
+
+// Only used when attachments force one-at-a-time sending. Resend's default
+// allowance is 2 requests a second; the old 120 ms gap issued roughly eight,
+// so most of a large send came back 429.
+const SEND_GAP_MS = 550;
 
 type Attachment = { filename: string; content: string };  // content = base64
 
@@ -68,6 +74,8 @@ export async function POST(req: NextRequest) {
     attachments?: Attachment[]; ccOffice?: boolean;
     testTo?: string;          // send one copy here instead of to parents
     confirm?: boolean;        // must be true to actually send
+    extraEmails?: string[];   // arbitrary addresses, with no child attached
+    sendId?: string;          // idempotency: a retry must not send twice
   };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
@@ -80,8 +88,27 @@ export async function POST(req: NextRequest) {
   try { rows = await loadSchedule(token); }
   catch (e) { return NextResponse.json({ error: "Could not read fee data: " + (e as Error).message }, { status: 403 }); }
 
+  // rows comes from a finance-gated view: an account with no access gets an
+  // empty list. Without this check such an account could still send branded
+  // mail from the school's address through the typed-address path.
+  if (!rows.length && (body.extraEmails || []).length) {
+    return NextResponse.json({
+      error: "You do not have access to send email on behalf of the school.",
+    }, { status: 403 });
+  }
+
   const matched = applyFilters(rows, body.filters || {});
-  const sum = summarise(matched);
+
+  // Addresses typed in by hand belong to nobody in particular — a supplier, a
+  // parent whose child has left, the landlord. They get the school's branding
+  // and nothing else: no merge fields, no fee block, no balance.
+  const extras = [...new Set((body.extraEmails || [])
+    .map((e) => (e || "").trim().toLowerCase())
+    .filter(isRealAddress))];
+
+  const sum = { ...summarise(matched) };
+  sum.reachable += extras.length;
+  sum.addresses += extras.length;
 
   const attachments = (body.attachments || [])
     .filter((a) => a && a.filename && a.content)
@@ -102,22 +129,31 @@ export async function POST(req: NextRequest) {
     };
   };
 
+  // A plain send, with no child to personalise against.
+  const buildPlain = () => ({
+    html: renderEmail({ title: body.title || subject, bodyHtml: textToHtml(message), theme: body.theme }),
+    text: [message, plainFooter()].join("\n"),
+  });
+
   // ── test send ─────────────────────────────────────────────────────────────
   if (body.testTo) {
-    const sample = matched[0] || rows[0];
-    if (!sample) return NextResponse.json({ error: "No children matched, so there is nothing to preview." }, { status: 400 });
-    const { html, text } = build(sample);
+    const sample = matched[0];
+    if (!sample && !extras.length && !rows.length) {
+      return NextResponse.json({ error: "Nobody is selected, so there is nothing to preview." }, { status: 400 });
+    }
+    const { html, text } = sample ? build(sample) : buildPlain();
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
       body: JSON.stringify({
         from: RESEND_FROM, to: [body.testTo],
-        subject: `[TEST — would go to ${sum.reachable} families] ` + merge(subject, sample),
+        subject: `[TEST — would go to ${sum.reachable} recipients] `
+                 + (sample ? merge(subject, sample) : subject),
         html, text, attachments,
       }),
     });
     if (!r.ok) return NextResponse.json({ error: `Resend ${r.status}: ${(await r.text()).slice(0, 300)}` }, { status: 500 });
-    return NextResponse.json({ ok: true, mode: "test", sent_to: body.testTo, sample: sample.student_name, summary: sum });
+    return NextResponse.json({ ok: true, mode: "test", sent_to: body.testTo, sample: sample?.student_name || "a plain copy", summary: sum });
   }
 
   // ── dry run is the default; sending needs an explicit confirm ─────────────
@@ -125,8 +161,8 @@ export async function POST(req: NextRequest) {
     const sample = matched[0];
     return NextResponse.json({
       ok: true, mode: "preview", summary: sum,
-      preview_html: sample ? build(sample).html : null,
-      preview_for: sample?.student_name || null,
+      preview_html: sample ? build(sample).html : (extras.length ? buildPlain().html : null),
+      preview_for: sample?.student_name || (extras.length ? extras[0] : null),
     });
   }
 
@@ -137,26 +173,79 @@ export async function POST(req: NextRequest) {
   const sent: string[] = [];
   const failed: { name: string; error: string }[] = [];
 
-  for (const r of matched) {
-    const to = addressesFor(r);
-    if (!to.length) continue;
-    const { html, text } = build(r);
-    try {
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-        body: JSON.stringify({
-          from: RESEND_FROM, to,
-          ...(body.ccOffice === false ? {} : { cc: [CC] }),
-          subject: merge(subject, r), html, text, attachments,
-        }),
-      });
-      if (res.ok) sent.push(r.uin);
-      else failed.push({ name: r.student_name, error: `Resend ${res.status}: ${(await res.text()).slice(0, 160)}` });
-    } catch (e) {
-      failed.push({ name: r.student_name, error: (e as Error).message });
+  // Every message, already personalised, ready to post.
+  type Outgoing = { label: string; to: string[]; subject: string; html: string; text: string };
+  const queue: Outgoing[] = [
+    ...matched
+      .filter((r) => addressesFor(r).length)
+      .map((r) => {
+        const { html, text } = build(r);
+        return { label: r.student_name, to: addressesFor(r), subject: merge(subject, r), html, text };
+      }),
+    ...extras.map((addr) => {
+      const { html, text } = buildPlain();
+      return { label: addr, to: [addr], subject, html, text };
+    }),
+  ];
+
+  const ccPart = body.ccOffice === false ? {} : { cc: [CC] };
+  // An idempotency key means a retry after a dropped connection cannot send a
+  // second copy — Resend remembers the key for 24 hours.
+  const runId = body.sendId || randomUUID();
+
+  if (!attachments.length) {
+    // Resend's batch endpoint takes 100 messages per call, so a school-wide
+    // send is two requests and a couple of seconds rather than 191 requests
+    // paced against a rate limit. It does not accept attachments, hence the
+    // fallback below.
+    for (let i = 0; i < queue.length; i += 100) {
+      const chunk = queue.slice(i, i + 100);
+      try {
+        const res = await fetch("https://api.resend.com/emails/batch", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+            "Idempotency-Key": `${runId}-${i / 100}`,
+          },
+          body: JSON.stringify(chunk.map((m) => ({
+            from: RESEND_FROM, to: m.to, ...ccPart,
+            subject: m.subject, html: m.html, text: m.text,
+          }))),
+        });
+        if (res.ok) chunk.forEach((m) => sent.push(m.label));
+        else {
+          const why = `Resend ${res.status}: ${(await res.text()).slice(0, 160)}`;
+          chunk.forEach((m) => failed.push({ name: m.label, error: why }));
+        }
+      } catch (e) {
+        chunk.forEach((m) => failed.push({ name: m.label, error: (e as Error).message }));
+      }
     }
-    await new Promise((s) => setTimeout(s, 120));   // stay under Resend's rate limit
+  } else {
+    // With attachments there is no batch endpoint, so send one at a time and
+    // stay inside Resend's 2-per-second allowance.
+    for (const m of queue) {
+      try {
+        const res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+            "Idempotency-Key": `${runId}-${m.to[0]}`,
+          },
+          body: JSON.stringify({
+            from: RESEND_FROM, to: m.to, ...ccPart,
+            subject: m.subject, html: m.html, text: m.text, attachments,
+          }),
+        });
+        if (res.ok) sent.push(m.label);
+        else failed.push({ name: m.label, error: `Resend ${res.status}: ${(await res.text()).slice(0, 160)}` });
+      } catch (e) {
+        failed.push({ name: m.label, error: (e as Error).message });
+      }
+      await new Promise((s) => setTimeout(s, SEND_GAP_MS));
+    }
   }
 
   // Keep a record of what went out, so nobody has to guess later.

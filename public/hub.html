@@ -125,7 +125,7 @@ const SUPABASE_URL = 'https://saqefzgnvznuurupqpsw.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_u8v_dh1zMGdbrIQPMcxrFg_HCPJeUP9';
 
 let sb = null, session = null, modules = [], profile = null;
-let app = null, tab = 'overview';
+let app = null, tab = 'overview', _loadMeFailed = false;
 
 function getSb(){
   if (sb) return sb;
@@ -135,7 +135,38 @@ function getSb(){
   return sb;
 }
 const money = n => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
-const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// Building an Intl formatter is expensive; doing it per row of a 2000-row table
+// is most of the cost of drawing that table. Build each one once.
+const _DF = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', timeZone:'UTC' });
+const _DFY = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' });
+const shortDate = d => d ? _DFY.format(new Date(d + 'T00:00:00Z')) : '—';
+const longDate  = d => d ? _DFY.format(new Date(d + 'T00:00:00Z')) : '—';
+
+// Typing in a search box should filter, not fire a render per keystroke.
+function debounce(fn, ms = 160){
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+// Tab payloads are reused for a short window, so bouncing between tabs stops
+// re-issuing the same queries. Any write clears the cache for correctness.
+const _cache = new Map();
+const CACHE_TTL = 45000;
+async function cached(key, loader){
+  const hit = _cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.val;
+  const val = await loader();
+  _cache.set(key, { at: Date.now(), val });
+  return val;
+}
+const invalidate = (prefix) => {
+  if (!prefix) return _cache.clear();
+  [..._cache.keys()].filter(k => k.startsWith(prefix)).forEach(k => _cache.delete(k));
+};
+// Also escapes quotes: esc() is used inside double-quoted HTML attributes, so a
+// child or parent name containing " would otherwise break out of the attribute.
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const has = m => modules.includes(m);
 const el = id => document.getElementById(id);
 
@@ -152,25 +183,44 @@ const TABS = {
 
 /* ── boot ─────────────────────────────────────────────── */
 async function boot(){
+ try {
   const { data } = await getSb().auth.getSession();
   session = data.session;
   if (session) await loadMe();
   paint();
-  getSb().auth.onAuthStateChange(async (_e, s) => {
+  // Supabase fires this on TOKEN_REFRESHED too, which happens every time the
+  // tab regains focus after being in the background. Repainting on that wiped
+  // whatever the user was in the middle of. Only react when the identity
+  // genuinely changes — a signed-in user is still the same user after their
+  // token quietly renews.
+ } catch (e) {
+    el('stage').innerHTML = `<div class="err" style="margin:40px auto;max-width:520px">
+      Could not start the app: ${esc(e.message)}
+      <div style="margin-top:10px"><button class="btn sm" onclick="location.reload()">Try again</button></div></div>`;
+    return;
+ }
+
+  getSb().auth.onAuthStateChange(async (event, s) => {
     const was = session?.user?.id;
     session = s;
-    if (session && session.user.id !== was) { await loadMe(); }
-    if (!session) { modules = []; profile = null; app = null; }
+    const now = s?.user?.id;
+    if (was === now) return;                       // token refresh, nothing to redraw
+    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
+    if (now) await loadMe();
+    else { modules = []; profile = null; app = null; }
     paint();
   });
 }
 
 async function loadMe(){
   const s = getSb();
-  const [{ data: mods }, { data: prof }] = await Promise.all([
+  const [{ data: mods, error: modErr }, { data: prof }] = await Promise.all([
     s.from('module_access').select('module').eq('user_id', session.user.id),
     s.from('profiles').select('role, full_name').eq('id', session.user.id).maybeSingle()
   ]);
+  // A network blip used to render as "no modules granted", sending the owner to
+  // an administrator to fix a problem that did not exist.
+  _loadMeFailed = !!modErr;
   modules = (mods || []).map(r => r.module);
   profile = prof || null;
 }
@@ -255,7 +305,7 @@ function renderChooser(){
           </button>${d.soon ? '<span class="soon">soon</span>' : ''}
         </div>`).join('')}</div>
       ${(!canAdmissions && !canStaff) ? `<p class="hint" style="margin-top:26px">
-        No modules are granted to this account yet. Ask the administrator to add them.</p>` : ''}
+        ${_loadMeFailed ? 'Could not load your access just now — check your connection and reload.' : 'No modules are granted to this account yet. Ask the administrator to add them.'}</p>` : ''}
     </div>`;
   document.querySelectorAll('.door[data-key]').forEach(b => {
     b.onclick = () => {
@@ -405,7 +455,8 @@ async function renderScheduleFlags(){
   const { data, error } = await getSb().schema('eurokids').from('v_schedule')
     .select('uin,student_name,program_name,schedule_flag,days_overdue,true_due,next_due_date')
     .limit(2000);
-  if (error || !data) return;
+  if (error) { box.innerHTML = `<div class="panel" style="padding:16px">${fail(error)}</div>`; return; }
+  if (!data) return;
 
   const by = f => data.filter(r => r.schedule_flag === f);
   const missing = by('NO SCHEDULE'), overdue = by('OVERDUE'), soon = by('DUE SOON');
@@ -421,12 +472,12 @@ async function renderScheduleFlags(){
       ${soon.length ? `<span class="pill">${soon.length} due within a fortnight · ${rupees(soon)}</span>` : ''}
       <button class="btn sm line" id="sf-mail">Email the overdue families →</button>
     </div>
-    ${missing.length ? `<div class="tw"><table><thead><tr><th>Child</th><th>Class</th><th class="r">Owed</th><th></th></tr></thead><tbody>
-      ${missing.slice(0, 12).map(r => `<tr><td><strong>${esc(r.student_name)}</strong></td>
+    ${missing.length ? `<div class="tw" style="max-height:420px;overflow:auto"><table><thead><tr><th>Child</th><th>Class</th><th class="r">Owed</th><th></th></tr></thead><tbody>
+      ${missing.map(r => `<tr><td><strong>${esc(r.student_name)}</strong></td>
         <td>${esc(r.program_name || '')}</td><td class="r num">${money(r.true_due)}</td>
-        <td class="r"><a style="color:var(--accent);cursor:pointer" onclick="tab='plans';renderApp();setTimeout(()=>openPlan('${esc(r.uin)}'),400)">Add schedule →</a></td></tr>`).join('')}
+        <td class="r"><a style="color:var(--accent);cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">Add schedule →</a></td></tr>`).join('')}
       </tbody></table></div>
-      ${missing.length > 12 ? `<div class="hint" style="padding:8px 4px">…and ${missing.length - 12} more.</div>` : ''}` : ''}
+` : ''}
   </div>`;
   el('sf-mail').onclick = () => {
     tab = 'compose';
@@ -438,17 +489,38 @@ async function renderScheduleFlags(){
 /* ── send email: pick a group, write, preview, send ─────────
    Nothing leaves this screen without the sender first seeing exactly
    who it reaches. The default action is a preview, never a send.      */
-let _cmp = { filters:{ money:'all' }, attachments:[], recipients:[], facets:null };
+let _cmp = { filters:{ money:'all' }, attachments:[], recipients:[], facets:null, picked:[], roll:[] };
 
 async function feesApi(path, body){
   const { data:{ session:s } } = await getSb().auth.getSession();
-  const r = await fetch(path, { method:'POST',
-    headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${s.access_token}` },
-    body: JSON.stringify(body) });
-  return r.json();
+  if (!s) return { ok:false, error:'Your session has expired — please sign in again.' };
+  let r;
+  try {
+    r = await fetch(path, { method:'POST',
+      headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${s.access_token}` },
+      body: JSON.stringify(body) });
+  } catch (e) {
+    return { ok:false, error:'Could not reach the server: ' + e.message };
+  }
+  // A gateway timeout or a body-too-large returns HTML, not JSON. Left
+  // unhandled this rejected mid-send and stranded the button, which invited a
+  // second click and a second email to every parent.
+  const text = await r.text();
+  try { return JSON.parse(text); }
+  catch {
+    return { ok:false, error: r.status === 413
+      ? 'Those attachments are too large for one request. Send a link instead.'
+      : `The server returned ${r.status}. If this was a send, check Resend before retrying — some emails may already have gone out.` };
+  }
 }
 
 async function tabCompose(){
+  // Attachments and hand-picked children used to survive a tab switch
+  // invisibly: the file input looked empty while the old files were still
+  // attached to the next send. Facets and the roll are only caches, so keep
+  // those and rebuild everything the user can see.
+  _cmp = { filters:{ money:'all' }, attachments:[], recipients:[],
+           facets:_cmp.facets || null, picked:[], roll:_cmp.roll || [] };
   const b = el('body');
   b.innerHTML = head('Send email to parents',
     'Choose a group, write once, and every family gets it with the school’s branding.');
@@ -476,6 +548,23 @@ async function tabCompose(){
     <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
       <input type="checkbox" id="cmp-nosched"> Only families with no payment schedule on file
     </label>
+
+    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div>
+        <label class="lb">Or name specific children</label>
+        <input class="in" id="cmp-pick" list="cmp-kids" placeholder="Type a name and press Enter" autocomplete="off">
+        <datalist id="cmp-kids"></datalist>
+        <div id="cmp-picked" class="chips" style="margin-top:8px"></div>
+        <div class="hint">Naming children here overrides the filters above.</div>
+      </div>
+      <div>
+        <label class="lb">Or send to any address</label>
+        <textarea class="in" id="cmp-extra" rows="3" placeholder="someone@example.com, another@example.com"></textarea>
+        <div class="hint">Anyone at all — a supplier, a former parent. They get the branding
+          but no fee details, since there is no child attached.</div>
+      </div>
+    </div>
+
     <div id="cmp-count" class="pill-row" style="margin-top:14px">Counting…</div>
     <div id="cmp-flags" class="hint" style="margin-top:6px"></div>
   </div>
@@ -521,6 +610,9 @@ async function tabCompose(){
 
   const readFilters = () => {
     const on = sel => [...document.querySelectorAll(sel + ' .chip.on')].map(c => c.dataset.v);
+    // A hand-picked list is an instruction, not a hint: honour it exactly and
+    // ignore the filters, so nobody named here is silently dropped.
+    if (_cmp.picked.length) return { uins: _cmp.picked.map(p => p.uin) };
     return {
       classes: on('#cmp-classes'), batches: on('#cmp-batches'),
       money: el('cmp-money').value,
@@ -528,6 +620,8 @@ async function tabCompose(){
       missingSchedule: el('cmp-nosched').checked,
     };
   };
+  const readExtras = () => (el('cmp-extra').value || '')
+    .split(/[,;\s]+/).map(x => x.trim()).filter(x => x.includes('@'));
 
   async function refresh(){
     _cmp.filters = readFilters();
@@ -535,18 +629,34 @@ async function tabCompose(){
     const j = await feesApi('/api/fees/recipients', { filters: _cmp.filters });
     if (!j.ok) { el('cmp-count').innerHTML = `<span class="err">${esc(j.error)}</span>`; return; }
     _cmp.recipients = j.recipients;
-    if (!_cmp.facets) {
+    const freeCount = readExtras().length;
+    // The markup is rebuilt on every visit, so the chips must be too —
+    // otherwise the second visit showed a literal "…" that never recovered.
+    if (!_cmp.chipsDrawn) {
       _cmp.facets = j.facets;
       const chips = (list, id) => el(id).innerHTML = list.map(f =>
         `<span class="chip" data-v="${esc(f.value)}">${esc(f.value)} <b>${f.count}</b></span>`).join('') || '<span class="hint">none</span>';
       chips(j.facets.classes, 'cmp-classes');
       chips(j.facets.batches, 'cmp-batches');
       document.querySelectorAll('#cmp-classes .chip, #cmp-batches .chip').forEach(c =>
-        c.onclick = () => { c.classList.toggle('on'); refresh(); });
+        c.onclick = () => { c.classList.toggle('on'); refreshSoon(); });
+      _cmp.chipsDrawn = true;
     }
+    if (!_cmp.roll.length) {
+      const { data: roll } = await getSb().schema('eurokids').from('v_schedule')
+        .select('uin,student_name,program_name').order('student_name').limit(2000);
+      _cmp.roll = roll || [];
+    }
+    // Always repaint the datalist: without it the "name specific children" box
+    // could never match anything on a second visit.
+    el('cmp-kids').innerHTML = _cmp.roll
+      .map(k => `<option value="${esc(k.student_name)} — ${esc(k.program_name || 'class ?')}">`).join('');
+    drawPicked();
     const s = j.summary;
+    _cmp.lastSummary = { reachable: s.reachable + freeCount };
     el('cmp-count').innerHTML =
-      `<span class="pill big">${s.reachable} families will receive this</span>` +
+      `<span class="pill big">${s.reachable + freeCount} will receive this</span>` +
+      (freeCount ? `<span class="pill">${freeCount} typed address${freeCount === 1 ? '' : 'es'}</span>` : '') +
       `<span class="pill">${s.addresses} email addresses</span>` +
       (s.unreachable ? `<span class="pill warn">${s.unreachable} have no email on file</span>` : '') +
       (s.owed ? `<span class="pill">${money(s.owed)} outstanding across them</span>` : '');
@@ -554,7 +664,23 @@ async function tabCompose(){
       Object.entries(j.flags).map(([k,v]) => `${v} ${k.toLowerCase()}`).join(' · ');
   }
 
-  ['cmp-money','cmp-cutoff','cmp-nosched'].forEach(id => el(id).onchange = refresh);
+  const drawPicked = () => {
+    el('cmp-picked').innerHTML = _cmp.picked.map((p, i) =>
+      `<span class="chip on" data-i="${i}" style="cursor:pointer">${esc(p.student_name)} ✕</span>`).join('');
+    document.querySelectorAll('#cmp-picked .chip').forEach(c => c.onclick = () => {
+      _cmp.picked.splice(Number(c.dataset.i), 1); drawPicked(); refresh();
+    });
+  };
+  el('cmp-pick').onchange = () => {
+    const v = (el('cmp-pick').value || '').trim().toLowerCase();
+    const k = _cmp.roll.find(x => `${x.student_name} — ${x.program_name || 'class ?'}`.toLowerCase() === v);
+    if (k && !_cmp.picked.some(p => p.uin === k.uin)) { _cmp.picked.push(k); drawPicked(); refresh(); }
+    el('cmp-pick').value = '';
+  };
+  el('cmp-extra').oninput = debounce(() => refresh(), 300);
+
+  const refreshSoon = debounce(refresh, 250);
+  ['cmp-money','cmp-cutoff','cmp-nosched'].forEach(id => el(id).onchange = refreshSoon);
 
   el('cmp-files').onchange = async e => {
     _cmp.attachments = [];
@@ -576,14 +702,17 @@ async function tabCompose(){
     includeFees: el('cmp-fees').checked,
     ccOffice: el('cmp-cc').checked,
     attachments: _cmp.attachments,
+    extraEmails: readExtras(),
+    sendId: _cmp.sendId,
     ...extra,
   });
   const say = (h, cls='') => el('cmp-msg').innerHTML = cls ? `<div class="${cls}">${h}</div>` : h;
 
   el('cmp-preview').onclick = async e => {
     const btn = e.currentTarget; btn.disabled = true; say('Building preview…');
-    const j = await feesApi('/api/fees/bulk-send', payload({}));
-    btn.disabled = false;
+    let j;
+    try { j = await feesApi('/api/fees/bulk-send', payload({})); }
+    finally { btn.disabled = false; }
     if (!j.ok) return say(esc(j.error), 'err');
     say(`This is how it will look for <strong>${esc(j.preview_for||'')}</strong>. ${j.summary.reachable} families would receive it.`);
     el('cmp-preview-box').innerHTML =
@@ -595,20 +724,43 @@ async function tabCompose(){
     const to = prompt('Send one test copy to which address?', session?.user?.email || '');
     if (!to) return;
     const btn = e.currentTarget; btn.disabled = true; say('Sending test…');
-    const j = await feesApi('/api/fees/bulk-send', payload({ testTo: to }));
-    btn.disabled = false;
+    let j;
+    try { j = await feesApi('/api/fees/bulk-send', payload({ testTo: to })); }
+    finally { btn.disabled = false; }
     say(j.ok ? `Test sent to ${esc(to)} using ${esc(j.sample)}’s details.` : esc(j.error), j.ok ? 'ok' : 'err');
   };
 
   el('cmp-send').onclick = async e => {
-    const n = _cmp.recipients.length;
-    if (!confirm(`Send this to ${n} families now?\n\nThis cannot be undone.`)) return;
-    const btn = e.currentTarget; btn.disabled = true; say(`Sending to ${n} families — this takes a moment…`);
-    const j = await feesApi('/api/fees/bulk-send', payload({ confirm:true }));
-    btn.disabled = false;
+    // One id per attempt: if the connection drops and the operator retries,
+    // Resend recognises the key and will not deliver a second copy.
+    _cmp.sendId = _cmp.sendId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+    // Count what the server will actually send to, not the on-screen page of
+    // children — those differ once anyone lacks an email or types an address.
+    const n = (_cmp.lastSummary?.reachable ?? _cmp.recipients.length);
+    const subj = el('cmp-subject').value.trim();
+    if (!n) return say('Nobody is selected.', 'err');
+    if (!confirm(`Send “${subj}” to ${n} recipient${n === 1 ? '' : 's'} now?\n\nThis cannot be undone.`)) return;
+
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    say(`Sending to ${n} recipients — this can take a couple of minutes for a large group. Do not close this tab.`);
+    let j;
+    try {
+      j = await feesApi('/api/fees/bulk-send', payload({ confirm:true }));
+    } finally {
+      // Deliberately left disabled on success: re-enabling it here is what
+      // tempts a second click and a second copy to every parent.
+      if (!j || !j.ok) btn.disabled = false;
+    }
     if (!j.ok) return say(esc(j.error), 'err');
-    say(`Sent to ${j.sent} families.` + (j.failed ? ` ${j.failed} failed: ` +
-      j.failures.map(f => esc(f.name)).join(', ') : ''), j.failed ? 'err' : 'ok');
+    _cmp.attachments = []; _cmp.picked = [];
+    btn.textContent = 'Sent';
+    say(`Sent to ${j.sent} recipient${j.sent === 1 ? '' : 's'}.`
+      + (j.failed ? `<br><strong>${j.failed} failed.</strong> ` +
+          j.failures.map(f => `${esc(f.name)} — ${esc(f.error || 'unknown')}`).join('<br>')
+          + '<br>Fix the cause, then send again to just those families.' : '')
+      + '<br><span class="hint">Change the subject or reload the tab before sending anything else.</span>',
+      j.failed ? 'err' : 'ok');
   };
 
   refresh();
@@ -637,7 +789,7 @@ async function tabOverview(){
          <button class="btn line sm" id="sync">Sync from EPMS</button>`)
       + `<div class="stats">
         <div class="stat acc"><div class="k">Active students</div><div class="v">${sum.students_active}</div>
-          <div class="m">${sum.students_in_epms} in EPMS − ${sum.students_quit} quit − ${sum.students_transferred_out} transferred</div></div>
+          <div class="m">Quit and transferred-out children are excluded</div></div>
         <div class="stat crit"><div class="k">Total pending</div><div class="v">${money(sum.true_pending_total)}</div>
           <div class="m">${sum.children_owing} children owe</div></div>
         <div class="stat warn"><div class="k">Term 1 due</div><div class="v">${money(sum.term1_due_total)}</div>
@@ -648,7 +800,7 @@ async function tabOverview(){
           <div class="m">Royalty ${money(sum.royalty_accrued)} at 20%</div></div></div>
       <div id="sched-flags"></div>
       <div class="panel" id="recent-pay"></div>
-      <div class="panel"><div class="ptop"><h2>Biggest balances</h2>
+      <div class="panel"><div class="ptop"><h2>Biggest balances</h2><span class="hint">top 10</span>
         <span class="hint">${Number(sum.our_discounts_total) > 0
           ? money(sum.our_discounts_total) + ' of our own discount applied'
           : 'No discounts of ours entered yet — totals are EPMS figures'}</span></div>
@@ -669,15 +821,15 @@ async function tabOverview(){
           .select('uin,student_name,term,amount_paise,detected_at')
           .order('detected_at', { ascending: false }).limit(12);
         if (!pays || !pays.length) { box.style.display = 'none'; return; }
-        const sum = pays.reduce((a, p) => a + Number(p.amount_paise), 0);
+        const sum = pays.reduce((a, p) => a + Number(p.amount_paise), 0) / 100;
         box.innerHTML = `<div class="ptop"><h2>Payments received</h2>
             <span class="hint">${money(sum)} across the last ${pays.length} · newest first</span></div>
           <div class="tw"><table><thead><tr><th>Child</th><th>UIN</th><th>Term</th>
             <th class="r">Amount</th><th>Noticed</th></tr></thead><tbody>
             ${pays.map(p => `<tr><td>${esc(p.student_name || '')}</td>
               <td class="num" style="color:var(--muted)">${esc(p.uin)}</td>
-              <td>Term ${p.term}</td>
-              <td class="r num" style="font-weight:600;color:var(--good)">${money(p.amount_paise)}</td>
+              <td>${p.term ? "Term " + p.term : "Fees"}</td>
+              <td class="r num" style="font-weight:600;color:var(--good)">${money(p.amount_paise / 100)}</td>
               <td class="hint">${new Date(p.detected_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
             </tr>`).join('')}</tbody></table></div>`;
       } catch (_) { box.style.display = 'none'; }
@@ -742,7 +894,7 @@ async function tabOverview(){
             ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
             : `Synced ${j.invoices} records · ${j.active} active`) + extra + matched;
           b.textContent = 'Synced ✓';
-          setTimeout(() => tabOverview(), 900);          // repaint with new numbers
+          setTimeout(() => { if (tab === 'overview') tabOverview(); }, 900);
         } else {
           el('sync-info').textContent = '';
           alert('Sync failed:\n\n' + (j.error || 'unknown error'));
@@ -773,7 +925,11 @@ async function tabOverview(){
           <td><button class="btn line sm logcall">Log a call</button></td></tr>`).join('')}
       </tbody></table></div></div>`;
   document.querySelectorAll('.logcall').forEach(b =>
-    b.onclick = () => { b.textContent = 'Logged'; b.disabled = true; });
+    b.onclick = () => {
+      // This wrote nothing anywhere and reset on reload, so a coordinator
+      // believed the follow-up was on record when it was not.
+      alert('Call logging is not built yet — please note the follow-up wherever you keep them.');
+    });
 }
 
 /* ── children ─────────────────────────────────────────── */
@@ -790,6 +946,68 @@ async function tabChildren(){
   if (error) return el('body').innerHTML = fail(error);
   _kids = data || [];
   renderChildren();
+}
+
+// Extracted so the roster table can be redrawn on its own. Rebuilding the whole
+// panel per keystroke also destroyed the search box being typed into.
+function kidRowHtml(r){
+  const fmtDate = d => d ? _DFY2.format(new Date(d + 'T00:00:00Z')) : '—';
+
+          const paid = Number(r.true_due) <= 0;
+          const part = !paid && Number(r.total_collected) > 0;
+          const tint = paid ? 'background:var(--good-wash)' : (part ? 'background:var(--warn-wash)' : 'background:var(--crit-wash)');
+          const bar  = paid ? 'var(--good)' : (part ? 'var(--warn)' : 'var(--crit)');
+          const contacts = [r.parent_email1, r.parent_email2].filter(Boolean);
+          const phones   = [r.mobile1, r.mobile2].filter(Boolean);
+          return `<tr style="${tint}">
+          <td style="border-left:3px solid ${bar}">
+            <strong>${esc(r.student_name)}</strong>
+            ${Number(r.our_discount) ? `<span class="chip c-mute" style="margin-left:6px">−${money(r.our_discount)}</span>`:''}
+            ${Number(r.uncredited_cash) ? `<span class="chip c-warn" style="margin-left:4px">${money(r.uncredited_cash)} in hand</span>`:''}
+            <br><span class="num" style="color:var(--muted);font-size:11px">${esc(r.uin)}</span></td>
+          <td style="font-size:12px;color:var(--muted)">${esc(r.father_name || '—')}
+            ${phones.length?`<br>${phones.map(p=>`<a href="tel:${esc(p)}" style="color:var(--muted)">${esc(p)}</a>`).join(' · ')}`:''}
+            ${contacts.length?`<br>${contacts.map(e2=>`<a href="mailto:${esc(e2)}" style="color:var(--accent)">${esc(e2)}</a>`).join(' · ')}`
+                             :'<br><span style="color:var(--faint)">no email on file</span>'}</td>
+          <td>${esc(r.program_name)}</td>
+          <td>${r.batch ? esc(r.batch) : `<select class="in" style="padding:2px 6px;font-size:12px;width:auto" onchange="setBatch('${esc(r.uin)}', this.value)">
+                <option value="">—</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option></select>`}</td>
+          <td class="hint">${fmtDate(r.admission_date)}</td>
+          <td class="r num">${money(r.total_invoiced)}</td>
+          <td class="r num">${money(r.total_collected)}</td>
+          <td class="r num" style="font-weight:700;color:${bar}">${paid ? 'Paid' : money(r.true_due)}</td>
+          <td><a style="color:var(--accent);cursor:pointer;white-space:nowrap" onclick="openPlanFrom('${esc(r.uin)}')">Plan →</a></td>
+        </tr>`;
+}
+const _DFY2 = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', year:'2-digit', timeZone:'UTC' });
+
+function filteredKids(){
+  const q = _kidQ.trim().toLowerCase();
+  let rows = _kids.filter(r => {
+    if (_kidProg !== 'all' && (r.program_name || '') !== _kidProg) return false;
+    if (_kidBatch !== 'all' && (r.batch || 'Unset') !== _kidBatch) return false;
+    if (!q) return true;
+    return (r.student_name || '').toLowerCase().includes(q)
+        || (r.father_name || '').toLowerCase().includes(q)
+        || (r.uin || '').toLowerCase().includes(q);
+  });
+  if (_kidSort === 'newest') rows.sort((a,b) => (b.admission_date||'').localeCompare(a.admission_date||''));
+  else if (_kidSort === 'oldest') rows.sort((a,b) => (a.admission_date||'').localeCompare(b.admission_date||''));
+  else if (_kidSort === 'name')   rows.sort((a,b) => (a.student_name||'').localeCompare(b.student_name||''));
+  else if (_kidSort === 'due')    rows.sort((a,b) => Number(b.true_due) - Number(a.true_due));
+  return rows;
+}
+
+function repaintKidRows(){
+  const rows = filteredKids();
+  const body = el('kid-rows'); if (!body) return;
+  body.innerHTML = rows.length ? rows.map(kidRowHtml).join('')
+    : `<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--muted)">No child matches that search.</td></tr>`;
+  const owing = rows.filter(r => Number(r.true_due) > 0).length;
+  const hint = el('kid-count');
+  if (hint) hint.innerHTML = `<strong>${rows.length}</strong> shown of ${_kids.length} active ·
+      <span style="color:var(--good)">${rows.length-owing} fully paid</span> ·
+      <span style="color:var(--crit)">${owing} still owe</span>`;
 }
 
 function renderChildren(){
@@ -847,45 +1065,21 @@ function renderChildren(){
       </div>
 
       <div class="panel"><div class="ptop"><h2>Roster</h2>
-        <span class="hint"><strong>${rows.length}</strong> shown of ${_kids.length} active ·
+        <span class="hint" id="kid-count"><strong>${rows.length}</strong> shown of ${_kids.length} active ·
           <span style="color:var(--good)">${rows.length-owing} fully paid</span> ·
           <span style="color:var(--crit)">${owing} still owe</span></span></div>
       <div class="tw"><table><thead><tr>
         <th>Child</th><th>Parents</th><th>Class</th><th>Batch</th><th>Admitted</th>
-        <th class="r">Fee</th><th class="r">Collected</th><th class="r">Truly due</th><th></th></tr></thead><tbody>
-        ${rows.length ? rows.map(r => {
-          const paid = Number(r.true_due) <= 0;
-          const part = !paid && Number(r.total_collected) > 0;
-          const tint = paid ? 'background:var(--good-wash)' : (part ? 'background:var(--warn-wash)' : 'background:var(--crit-wash)');
-          const bar  = paid ? 'var(--good)' : (part ? 'var(--warn)' : 'var(--crit)');
-          const contacts = [r.parent_email1, r.parent_email2].filter(Boolean);
-          const phones   = [r.mobile1, r.mobile2].filter(Boolean);
-          return `<tr style="${tint}">
-          <td style="border-left:3px solid ${bar}">
-            <strong>${esc(r.student_name)}</strong>
-            ${Number(r.our_discount) ? `<span class="chip c-mute" style="margin-left:6px">−${money(r.our_discount)}</span>`:''}
-            ${Number(r.uncredited_cash) ? `<span class="chip c-warn" style="margin-left:4px">${money(r.uncredited_cash)} in hand</span>`:''}
-            <br><span class="num" style="color:var(--muted);font-size:11px">${esc(r.uin)}</span></td>
-          <td style="font-size:12px;color:var(--muted)">${esc(r.father_name || '—')}
-            ${phones.length?`<br>${phones.map(p=>`<a href="tel:${esc(p)}" style="color:var(--muted)">${esc(p)}</a>`).join(' · ')}`:''}
-            ${contacts.length?`<br>${contacts.map(e2=>`<a href="mailto:${esc(e2)}" style="color:var(--accent)">${esc(e2)}</a>`).join(' · ')}`
-                             :'<br><span style="color:var(--faint)">no email on file</span>'}</td>
-          <td>${esc(r.program_name)}</td>
-          <td>${r.batch ? esc(r.batch) : `<select class="in" style="padding:2px 6px;font-size:12px;width:auto" onchange="setBatch('${esc(r.uin)}', this.value)">
-                <option value="">—</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option></select>`}</td>
-          <td class="hint">${fmtDate(r.admission_date)}</td>
-          <td class="r num">${money(r.total_invoiced)}</td>
-          <td class="r num">${money(r.total_collected)}</td>
-          <td class="r num" style="font-weight:700;color:${bar}">${paid ? 'Paid' : money(r.true_due)}</td>
-          <td><a style="color:var(--accent);cursor:pointer;white-space:nowrap" onclick="app='admissions';tab='plans';renderApp();setTimeout(()=>openPlan('${esc(r.uin)}'),400)">Plan →</a></td>
-        </tr>`;}).join('')
-        : `<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--muted)">No child matches that search.</td></tr>`}
+        <th class="r">Fee</th><th class="r">Collected</th><th class="r">Truly due</th><th></th></tr></thead><tbody id="kid-rows">
       </tbody></table></div></div>`;
 
   // Wire the controls (preserve caret position in the search box)
+  // Typing used to destroy and rebuild the whole panel — including the input
+  // being typed into, hence the caret-restoring dance. Now only the table body
+  // is redrawn, so the input is never touched and focus takes care of itself.
   const qEl = el('kid-q');
-  qEl.oninput = () => { _kidQ = qEl.value; const pos = qEl.selectionStart; renderChildren();
-    const n = el('kid-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  qEl.oninput = debounce(() => { _kidQ = qEl.value; repaintKidRows(); }, 160);
+  repaintKidRows();
   el('kid-prog').onchange  = e => { _kidProg  = e.target.value; renderChildren(); };
   el('kid-batch').onchange = e => { _kidBatch = e.target.value; renderChildren(); };
   el('kid-sort').onchange  = e => { _kidSort  = e.target.value; renderChildren(); };
@@ -1122,10 +1316,10 @@ async function tabLiability(){
         <td class="r num">${isFee ? (held > 0.01
              ? `<span style="color:var(--crit);font-weight:600">${money(held)}</span>`
              : '<span class="chip c-good">posted</span>') : '—'}</td>
-        <td class="hint">${r.received_on ? new Date(r.received_on+'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',timeZone:'UTC'}) : '—'}</td>
+        <td class="hint">${shortDate(r.received_on)}</td>
         <td class="hint">${esc(r.received_by || '—')}</td>
         <td><input class="in" type="date" value="${r.deposited_on || ''}" style="padding:3px 6px;font-size:12px;width:auto"
-              onchange="setDeposited(${r.id}, this.value)"></td>
+              onchange="setDeposited(${r.id}, this.value, this)"></td>
         <td style="white-space:nowrap">
           ${r.uin ? `<a style="color:var(--accent);cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
           ${r.uin ? `<a style="color:var(--accent);cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
@@ -1134,7 +1328,7 @@ async function tabLiability(){
     }).join('') || `<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
   };
   paintRows();
-  el('lb-q').oninput = paintRows;
+  el('lb-q').oninput = debounce(paintRows, 160);
   el('lb-f').onchange = paintRows;
 
   // ── record ──────────────────────────────────────────────────────────────
@@ -1162,7 +1356,8 @@ async function tabLiability(){
     const { data, error } = await getSb().schema('eurokids').from('receipt_offline').insert({
       uin, student_name: name, purpose, purpose_note: purpose === 'other' ? note : null,
       mode: el('lb-mode').value, amount_rupees: amt,
-      received_on: el('lb-on').value, received_by: el('lb-by').value || null,
+      received_on: el('lb-on').value || new Date().toISOString().slice(0,10),
+      received_by: el('lb-by').value || null,
       payer_email: email, payer_phone: phone,
     }).select('id').maybeSingle();
     if (error) {
@@ -1174,11 +1369,19 @@ async function tabLiability(){
     lbDraftClear();
     const canEmail = el('lb-receipt').checked && data?.id && (uin || email);
     if (canEmail) {
-      const r = await feesApi('/api/fees/payment-receipt', { receipt_id: data.id });
-      say(r.ok ? `Recorded. Receipt emailed to ${esc((r.sent_to || []).join(', '))}.`
-               : `Recorded, but the receipt did not send: ${esc(r.error || '')}`,
-          r.ok ? 'ok' : 'err');
-      setTimeout(tabLiability, 1600);
+      // The money is already committed at this point. If the email fails the
+      // operator must be told it was SAVED, or they re-enter it and the cash
+      // is counted twice.
+      try {
+        const r = await feesApi('/api/fees/payment-receipt', { receipt_id: data.id });
+        say(r.ok ? `Recorded. Receipt emailed to ${esc((r.sent_to || []).join(', '))}.`
+                 : `Recorded — but the receipt email failed: ${esc(r.error || '')}. Use the Receipt link on the row to retry. Do not enter the payment again.`,
+            r.ok ? 'ok' : 'err');
+      } catch (e) {
+        say(`Recorded — but the receipt email failed: ${esc(e.message)}. Use the Receipt link on the row to retry. Do not enter the payment again.`, 'err');
+      } finally {
+        setTimeout(() => { if (tab === 'liability') tabLiability(); }, 2200);
+      }
     } else {
       tabLiability();
     }
@@ -1186,11 +1389,23 @@ async function tabLiability(){
 }
 
 async function sendReceipt(id, a){
-  const was = a.textContent; a.textContent = 'sending…';
-  const r = await feesApi('/api/fees/payment-receipt', { receipt_id: id });
-  a.textContent = r.ok ? 'sent ✓' : 'failed';
-  if (!r.ok) alert(r.error || 'Could not send the receipt.');
-  setTimeout(() => { a.textContent = was; }, 2500);
+  const rec = _liab.recs.find(x => x.id === id);
+  if (!confirm(`Email a receipt for ${money(rec?.amount_rupees || 0)} to ${rec?.student_name || 'this family'}?`
+      + (rec?.receipt_sent_at ? '\n\nOne was already sent. Send another?' : ''))) return;
+  const was = a.textContent;
+  a.textContent = 'sending…';
+  a.style.pointerEvents = 'none';          // a second click sent a second email
+  try {
+    const r = await feesApi('/api/fees/payment-receipt', { receipt_id: id });
+    a.textContent = r.ok ? 'sent ✓' : 'failed';
+    if (!r.ok) alert(r.error || 'Could not send the receipt.');
+    else if (rec) { rec.receipt_sent_at = new Date().toISOString(); }
+  } catch (e) {
+    a.textContent = 'failed';
+    alert('Could not send the receipt: ' + e.message);
+  } finally {
+    setTimeout(() => { a.textContent = was; a.style.pointerEvents = ''; }, 2500);
+  }
 }
 
 /* ── a child's full statement ───────────────────────────────────── */
@@ -1203,7 +1418,9 @@ async function openStatement(uin){
   ]);
   if (!c) return alert('Could not load that child.');
 
-  const fee = Number(c.final_fee || c.total_fee || 0);
+  // Falling back to what EPMS invoiced: without it a child with no plan showed
+  // "Fee for the year ₹0" directly above a real balance due.
+  const fee = Number(c.final_fee || c.total_fee || c.epms_invoiced || 0);
   const disc = Number(c.our_discount || 0);
   const held = Number(c.uncredited_cash || 0);
   const epmsGot = Number(c.collected || 0);
@@ -1280,13 +1497,39 @@ async function setReflected(id, on){
   if (error) return alert(error.message);
   tabLiability();
 }
-async function setDeposited(id, d){
-  await getSb().schema('eurokids').from('receipt_offline').update({ deposited_on: d || null }).eq('id', id);
+async function setDeposited(id, d, box){
+  const { error } = await getSb().schema('eurokids').from('receipt_offline')
+    .update({ deposited_on: d || null }).eq('id', id);
+  if (error) {
+    // Leaving the date sitting in the box made a refused write look saved.
+    alert('Could not record the deposit: ' + error.message);
+    const rec = _liab.recs.find(x => x.id === id);
+    if (box) box.value = rec?.deposited_on || '';
+    return;
+  }
+  const rec = _liab.recs.find(x => x.id === id);
+  if (rec) rec.deposited_on = d || null;
+  tabLiability();          // the "Cash not banked" total has just changed
 }
 async function delReceipt(id){
-  if (!confirm('Remove this receipt?')) return;
-  await getSb().schema('eurokids').from('receipt_offline').delete().eq('id', id);
+  const rec = _liab.recs.find(x => x.id === id);
+  if (rec && Number(rec.remitted || 0) > 0.01) {
+    return alert(`${rec.student_name}'s receipt has already been part-posted to EuroKids (${money(rec.remitted)} of ${money(rec.amount_rupees)}).\n\nRemoving it would leave the books out of step. Correct it in EPMS first.`);
+  }
+  if (!confirm(`Remove the ${money(rec?.amount_rupees || 0)} ${(rec?.mode || '').toLowerCase()} receipt for ${rec?.student_name || 'this payer'}?\n\nThis un-does a recorded liability and cannot be undone.`)) return;
+  const { error } = await getSb().schema('eurokids').from('receipt_offline').delete().eq('id', id);
+  if (error) return alert('Could not remove it: ' + error.message);
   tabLiability();
+}
+
+// Guessing at a 400 ms delay meant the link did nothing whenever the roster
+// query was slower than that. Wait for the tab to actually finish painting.
+async function openPlanFrom(uin){
+  app = 'admissions'; tab = 'plans';
+  el('stage').innerHTML = '<div class="loading">Loading…</div>';
+  renderApp();
+  await tabPlans();
+  openPlan(uin);
 }
 
 /* ── payment plans: agreed fee, our discount, instalments, welcome letter ── */
@@ -1304,12 +1547,16 @@ async function tabPlans(){
     .limit(2000);
   if (error) return el('body').innerHTML = fail(error);
 
-  const CLASS_ORDER = ['play', 'nur', 'jr', 'sr'];
+  // The real EPMS names are 'Play Group', 'Nursery', 'Euro Junior', 'Euro Senior'.
+  // Matching on 'jr'/'sr' never hit either of the last two, so filtering by
+  // Junior returned Senior as well.
+  const CLASS_ORDER = ['play group', 'nursery', 'euro junior', 'euro senior'];
   const classRank = n => {
-    const t = (n || '').toLowerCase();
-    const i = CLASS_ORDER.findIndex(c => t.includes(c));
+    const i = CLASS_ORDER.indexOf((n || '').trim().toLowerCase());
     return i < 0 ? 9 : i;
   };
+  const CLASSES = [...new Set((kids || []).map(k => k.program_name).filter(Boolean))]
+    .sort((a, b) => classRank(a) - classRank(b));
   const withPlan = (kids || []).filter(k => Number(k.final_fee || 0) > 0).length;
   const flagChip = k =>
     !k.has_schedule ? '<span class="chip c-warn">no schedule</span>'
@@ -1323,8 +1570,7 @@ async function tabPlans(){
         <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:280px">
         <select class="in" id="plan-class" style="max-width:180px">
           <option value="">All classes</option>
-          <option>Play Group</option><option>Nursery</option>
-          <option>Junior KG</option><option>Senior KG</option></select>
+          ${CLASSES.map(c => `<option>${esc(c)}</option>`).join('')}</select>
         <select class="in" id="plan-sort" style="max-width:210px">
           <option value="new">Newest admission first</option>
           <option value="class">Class, then name</option>
@@ -1345,7 +1591,7 @@ async function tabPlans(){
     const sort = el('plan-sort').value;
     let rows = (kids || []).filter(k =>
       (!q || (k.student_name || '').toLowerCase().includes(q) || (k.uin || '').toLowerCase().includes(q)) &&
-      (!cls || classRank(k.program_name) === classRank(cls)));
+      (!cls || (k.program_name || '').trim().toLowerCase() === cls));
 
     if (sort === 'class')        rows.sort((a,b) => classRank(a.program_name) - classRank(b.program_name) || (a.student_name||'').localeCompare(b.student_name||''));
     else if (sort === 'due')     rows.sort((a,b) => Number(b.true_due||0) - Number(a.true_due||0));
@@ -1366,9 +1612,9 @@ async function tabPlans(){
     }).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No match.</td></tr>`;
   };
   paint();
-  ['plan-q','plan-class','plan-sort'].forEach(id => {
-    el(id).oninput = paint; el(id).onchange = paint;
-  });
+  const paintSoon = debounce(paint, 160);
+  el('plan-q').oninput = paintSoon;                 // typing: debounced
+  ['plan-class','plan-sort'].forEach(id => el(id).onchange = paint);   // selects: once
 }
 
 async function openPlan(uin){
@@ -1431,7 +1677,13 @@ async function openPlan(uin){
           <input class="in pf-due" data-i="${i}" type="date" value="${r.due_date}"></div>
         <div>${rows.length>1 ? `<button class="btn line sm pf-del" data-i="${i}" style="padding:6px 9px">✕</button>` : ''}</div>
       </div>`).join('');
-    document.querySelectorAll('.pf-amt').forEach(x => x.oninput = e => { rows[+e.target.dataset.i].amount = e.target.value; autoLast(); });
+    // The last amount is worked out from the rest, so recomputing it while the
+    // user is typing INTO it overwrote every keystroke. Leave it alone then.
+    document.querySelectorAll('.pf-amt').forEach(x => x.oninput = e => {
+      const i = +e.target.dataset.i;
+      rows[i].amount = e.target.value;
+      if (i !== rows.length - 1) autoLast();
+    });
     document.querySelectorAll('.pf-due').forEach(x => x.onchange = e => { rows[+e.target.dataset.i].due_date = e.target.value; });
     document.querySelectorAll('.pf-del').forEach(x => x.onclick = e => { rows.splice(+e.target.dataset.i,1); drawItems(); autoLast(); });
   };
@@ -1478,9 +1730,19 @@ async function openPlan(uin){
       .insert(clean.map((r,i) => ({ uin: _planUin, seq: i+1, amount: Number(r.amount), due_date: r.due_date })));
     if (ins.error) { el('pf-msg').innerHTML = `<div class="err">${esc(ins.error.message)}</div>`; return false; }
 
-    // keep the discount tab in step
-    if (disc > 0) await s.schema('eurokids').from('child_discount')
-      .upsert({ uin: _planUin, amount_rupees: disc, reason: 'Payment plan' }, { onConflict: 'uin' });
+    // Always write, never skip: leaving the old row behind meant a discount
+    // could be reduced to zero on screen while the family kept it forever, so
+    // every reminder kept quoting a discount they no longer had.
+    const dres = disc > 0
+      ? await s.schema('eurokids').from('child_discount')
+          .upsert({ uin: _planUin, amount_rupees: disc, reason: 'Payment plan' }, { onConflict: 'uin' })
+      : await s.schema('eurokids').from('child_discount').delete().eq('uin', _planUin);
+    if (dres.error) {
+      // Silently swallowing this meant a coordinator without finance rights saw
+      // "Plan saved" while the discount was refused by the database.
+      el('pf-msg').innerHTML = `<div class="err">The plan saved, but the discount did not: ${esc(dres.error.message)}</div>`;
+      return false;
+    }
 
     await s.schema('eurokids').from('child_contact').upsert({
       uin: _planUin, parent_email1: el('pf-em1').value.trim() || null,
@@ -1495,20 +1757,42 @@ async function openPlan(uin){
 
   const sendLetter = async (btn) => {
     el('pf-msg').innerHTML = '';
-    if (!(await savePlan())) return;
     const kind = btn.dataset.kind, label = btn.textContent;
+    const name = kid?.student_name || 'this child';
+    const owed = Number(kid?.true_due || 0);
+
+    // Nothing goes to a parent without the sender seeing who and what first.
+    const ask =
+      kind === 'welcome'  ? `Send the welcome letter to ${name}'s parents?` +
+                            (plan?.welcome_sent_at ? `\n\nThey were already sent one on ${
+                              new Date(plan.welcome_sent_at).toLocaleDateString('en-IN')}. Send it again?` : '')
+    : kind === 'schedule' ? `Email ${name}'s parents the payment schedule again?`
+    :                       `Tell ${name}'s parents their fees are fully paid?` +
+                            (owed > 1 ? `\n\nCAREFUL — this family still owes ${money(owed)}. The letter will say nothing is outstanding.` : '');
+    if (!confirm(ask)) return;
+
+    // Only the welcome letter is a "save then send". Re-sending the terms or a
+    // receipt must never rewrite the plan, and a fully-paid child often has no
+    // schedule rows at all, which savePlan() would refuse.
+    if (kind === 'welcome' && !(await savePlan())) return;
+
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
       const { data: { session: sess } } = await getSb().auth.getSession();
+      if (!sess) throw new Error('Your session has expired — please sign in again.');
       const r = await fetch('/api/fees/welcome-email', { method:'POST',
         headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sess.access_token}` },
         body: JSON.stringify({ uin: _planUin, kind }) });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({ error: `The server returned ${r.status}. The email may not have been sent — check Resend before trying again.` }));
       el('pf-msg').innerHTML = j.ok
-        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Sent to ${j.sent_to.join(', ')} (cc ${j.cc}).</div>`
+        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Sent to ${esc((j.sent_to||[]).join(', '))} (cc ${esc(j.cc||'')}).</div>`
         : `<div class="err">${esc(j.error||'Could not send')}</div>`;
-    } catch(e) { el('pf-msg').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
-    btn.disabled = false; btn.textContent = label;
+      if (j.ok && kind === 'welcome') openPlan(_planUin);   // refresh the "last sent" stamp
+    } catch(e) {
+      el('pf-msg').innerHTML = `<div class="err">${esc(e.message)}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = label;
+    }
   };
   el('pf-send').onclick  = e => sendLetter(e.currentTarget);
   el('pf-send2').onclick = e => sendLetter(e.currentTarget);
@@ -1522,7 +1806,7 @@ async function tabDiscounts(){
   const s = getSb();
   const [{ data: rows, error }, { data: existing }] = await Promise.all([
     s.schema('eurokids').from('v_dues').select('uin,student_name,program_name,epms_due,our_discount,true_due')
-      .order('student_name').limit(200),
+      .order('student_name').limit(2000),
     s.schema('eurokids').from('child_discount').select('uin,amount_rupees,reason')
   ]);
   if (error) return el('body').innerHTML = fail(error);
@@ -1554,6 +1838,7 @@ async function tabDiscounts(){
     amt.onkeydown = e => { if (e.key === 'Enter') save(); };
     amt.onblur = save;
     reason.onkeydown = e => { if (e.key === 'Enter') save(); };
+    reason.onblur = save;          // typing a reason and clicking away lost it
   });
 }
 
@@ -1571,7 +1856,7 @@ async function tabKits(){
         <span class="chip ${ready ? 'c-warn' : 'c-mute'}">${ready} ready</span></div>
       <div class="tw"><table><thead><tr><th>Child</th><th>Program</th><th>Consignment</th>
         <th>Dispatched</th><th>State</th></tr></thead><tbody>
-        ${(data || []).slice(0, 60).map(r => {
+        ${(data || []).map(r => {
           const [cls, txt] = label[r.state] || ['c-mute', r.state];
           return `<tr><td>${esc(r.student_name)}</td><td>${esc(r.program_name)}</td>
             <td class="num" style="color:var(--muted)">${esc(r.lr_number || '—')}</td>

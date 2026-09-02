@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME } from "@/lib/brand-email";
-import { loadSchedule, bearer } from "@/lib/fee-data";
+import { loadSchedule, bearer, userClient } from "@/lib/fee-data";
 import { addressesFor, isRealAddress, type ScheduleRow } from "@/lib/recipients";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -26,6 +26,15 @@ export async function POST(req: NextRequest) {
   if (!receiptId) return NextResponse.json({ error: "receipt_id required" }, { status: 400 });
   if (!body.preview && !RESEND_API_KEY) {
     return NextResponse.json({ error: "RESEND_API_KEY is not configured in Vercel." }, { status: 400 });
+  }
+
+  // Read the receipt as the caller first, so row-level security decides whether
+  // they may see it. Reading with the service role up front let any signed-in
+  // account email a receipt for a payer who has no child attached.
+  const { data: allowed, error: gateErr } = await userClient(token)
+    .from("receipt_offline").select("id").eq("id", receiptId).maybeSingle();
+  if (gateErr || !allowed) {
+    return NextResponse.json({ error: "You do not have access to this receipt." }, { status: 403 });
   }
 
   const a = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });

@@ -62,6 +62,14 @@ export async function POST(req: NextRequest) {
       error: "This child's fee is still ₹0. Set the agreed fee before sending anything to the parent.",
     }, { status: 400 });
   }
+  // "Nothing further is outstanding" must be true. One mis-click on a family
+  // owing forty thousand would otherwise tell them their fees are settled.
+  if (kind === "receipt" && Number(child.true_due || 0) > 1) {
+    return NextResponse.json({
+      error: `${child.student_name} still owes ₹${Number(child.true_due).toLocaleString("en-IN")}. A paid-in-full receipt would tell the parent they owe nothing.`,
+    }, { status: 400 });
+  }
+
   const scheduled = (items || []).reduce((s, i) => s + Number(i.amount || 0), 0);
   if (kind !== "receipt" && finalFee > 0 && scheduled < finalFee - 1) {
     return NextResponse.json({

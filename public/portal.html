@@ -4,11 +4,25 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Eurokids Staff Portal — HR Console</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="/brand/portal.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
-  tailwind.config = { theme: { extend: { colors: { eurokids: { orange: "#F58220", blue: "#1B9ED9", ink: "#1F2937", paper: "#FAFAFA" }}}}};
+  // The spreadsheet library is 882 KB and is needed once a month, when someone
+  // imports attendance. Loading it in the head made every single page view pay
+  // for it. Fetch it the moment it is actually wanted instead.
+  let _xlsxReady = null;
+  function loadXLSX(){
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (_xlsxReady) return _xlsxReady;
+    _xlsxReady = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = () => { _xlsxReady = null; reject(new Error('Could not load the spreadsheet reader. Check your connection and try again.')); };
+      document.head.appendChild(s);
+    });
+    return _xlsxReady;
+  }
 </script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -504,22 +518,50 @@ function getSb(){
 
 function isHrEmail(email){ return HR_EMAILS.includes((email || '').toLowerCase()); }
 
+// Attendance lives in its own table, one row per month. Reconciliation reaches
+// across months freely, so every month is still held in memory — but a save now
+// rewrites only the month that actually changed rather than a ~900 KB blob.
+let _monthSnapshots = {};
+
 async function loadState(){
   const sb = getSb();
-  const { data, error } = await sb.from('portal_state').select('data, updated_at').eq('id', PORTAL_ROW_ID).maybeSingle();
-  if (error && error.code !== 'PGRST116') {  // PGRST116 = no row found, which is fine on first run
-    console.error('[loadState]', error);
-    alert('Could not fetch portal data: ' + error.message);
+  const [core, months] = await Promise.all([
+    sb.from('portal_state').select('data, updated_at').eq('id', PORTAL_ROW_ID).maybeSingle(),
+    sb.from('attendance_month').select('month, data'),
+  ]);
+
+  if (core.error && core.error.code !== 'PGRST116') {  // PGRST116 = no row yet, fine on first run
+    console.error('[loadState]', core.error);
+    alert('Could not fetch portal data: ' + core.error.message);
     return;
   }
-  if (data && data.data) {
-    state = data.data;
+  if (months.error) {
+    console.error('[loadState:attendance]', months.error);
+    alert('Could not fetch attendance: ' + months.error.message);
+    return;
+  }
+
+  if (core.data && core.data.data) {
+    state = core.data.data;
   } else {
-    // First-ever run on a fresh database — seed with defaults and persist immediately
     state = JSON.parse(JSON.stringify(DEFAULT_STATE));
-    await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+    await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: stripMonths(state), updated_at: new Date().toISOString() });
+  }
+
+  state.attendanceMonths = {};
+  _monthSnapshots = {};
+  for (const row of months.data || []) {
+    state.attendanceMonths[row.month] = row.data;
+    _monthSnapshots[row.month] = JSON.stringify(row.data);
   }
   _stateLoaded = true;
+}
+
+// The core row must never carry attendance again, or the blob grows back.
+function stripMonths(s){
+  const core = { ...s };
+  delete core.attendanceMonths;
+  return core;
 }
 
 function saveState(){
@@ -539,15 +581,38 @@ async function _flushSave(){
   if (indicator) { indicator.textContent = '⟳ Saving…'; indicator.className = 'text-xs text-gray-500'; }
   try {
     const sb = getSb();
-    let { error } = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+    const stamp = new Date().toISOString();
+
+    // Work out which attendance months actually changed. Comparing the
+    // serialised form is a millisecond of work that saves several hundred
+    // kilobytes of upload on almost every edit.
+    const live = state.attendanceMonths || {};
+    const dirty = Object.keys(live).filter(m => JSON.stringify(live[m]) !== _monthSnapshots[m]);
+    const removed = Object.keys(_monthSnapshots).filter(m => !(m in live));
+
+    let { error } = await sb.from('portal_state')
+      .upsert({ id: PORTAL_ROW_ID, data: stripMonths(state), updated_at: stamp });
 
     // If the save failed with an auth-ish error, the JWT probably expired.
     // Force a session refresh and retry once before surfacing the failure.
     if (error && /jwt|token|expired|401|403|auth/i.test(error.message || '')) {
       console.warn('[saveState] auth-ish failure, refreshing session and retrying…', error.message);
       try { await sb.auth.refreshSession(); } catch (_) {}
-      const retry = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+      const retry = await sb.from('portal_state')
+        .upsert({ id: PORTAL_ROW_ID, data: stripMonths(state), updated_at: stamp });
       error = retry.error;
+    }
+
+    if (!error && dirty.length) {
+      const res = await sb.from('attendance_month').upsert(
+        dirty.map(m => ({ month: m, data: live[m], updated_at: stamp })));
+      if (res.error) error = res.error;
+      else dirty.forEach(m => { _monthSnapshots[m] = JSON.stringify(live[m]); });
+    }
+    if (!error && removed.length) {
+      const res = await sb.from('attendance_month').delete().in('month', removed);
+      if (res.error) error = res.error;
+      else removed.forEach(m => { delete _monthSnapshots[m]; });
     }
 
     if (error) {
@@ -571,8 +636,13 @@ async function resetAllData(){
   state = JSON.parse(JSON.stringify(DEFAULT_STATE));
   try {
     const sb = getSb();
-    const { error } = await sb.from('portal_state').upsert({ id: PORTAL_ROW_ID, data: state, updated_at: new Date().toISOString() });
+    const { error } = await sb.from('portal_state')
+      .upsert({ id: PORTAL_ROW_ID, data: stripMonths(state), updated_at: new Date().toISOString() });
     if (error) return alert('Reset failed: ' + error.message);
+    // Attendance lives in its own table now, so it has to be cleared too.
+    const wipe = await sb.from('attendance_month').delete().neq('month', '');
+    if (wipe.error) return alert('Reset failed while clearing attendance: ' + wipe.error.message);
+    _monthSnapshots = {};
   } catch (e) { return alert('Reset failed: ' + e.message); }
   renderAll();
 }
@@ -668,8 +738,9 @@ async function initApp(){
   const boot = document.getElementById('boot-overlay');
   boot.style.display = 'flex';
   try {
-    await loadState();
-    await loadInbox();
+    // The inbox does not depend on portal state, so waiting for one before
+    // starting the other just added a round trip to every cold start.
+    await Promise.all([loadState(), loadInbox()]);
     runMigrations();
     renderAll();
   } catch (e) {
@@ -1204,6 +1275,7 @@ async function runReconciliation(){
       const arr = data.data || data;
       rawRows = arr.map(r => ({ raw_name: String(r.name||""), attendance_date: String(r.attandance_date || r.attendance_date || r.date || "").slice(0,10), first_punch: r.first_punch || null, last_punch: r.last_punch || null, petpooja_status: r.status || null }));
     } else {
+      const XLSX = await loadXLSX();
       const wb = XLSX.read(buf, { type:"array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json(sheet, { defval: null });

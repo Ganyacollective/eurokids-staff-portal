@@ -50,8 +50,11 @@ export function applyFilters(rows: ScheduleRow[], f: Filters): ScheduleRow[] {
   const batches = (f.batches || []).map(norm).filter(Boolean);
   const pick = new Set((f.uins || []).map((u) => u.trim()).filter(Boolean));
 
+  // A hand-picked list wins outright: if the sender named the children, no
+  // other filter should quietly drop one of them.
+  if (pick.size) return rows.filter((r) => pick.has(r.uin));
+
   return rows.filter((r) => {
-    if (pick.size) return pick.has(r.uin);
 
     if (classes.length && !classes.includes(norm(r.program_name))) return false;
     if (batches.length && !batches.includes(norm(r.batch))) return false;
