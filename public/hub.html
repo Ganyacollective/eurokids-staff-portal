@@ -910,6 +910,25 @@ async function setBatch(uin, batch){
    all and never touches a fee.                                            */
 let _liab = { recs: [], kids: [], byLabel: {} };
 
+// A half-typed receipt must survive a trip to another tab. Kept in memory for
+// the session and mirrored to localStorage so a stray refresh doesn't lose it.
+const LB_FIELDS = ['lb-child','lb-name','lb-email','lb-phone','lb-purpose',
+                   'lb-purpose-note','lb-mode','lb-amt','lb-on','lb-by'];
+const lbDraftSave = () => {
+  const d = { who: _liab.who };
+  LB_FIELDS.forEach(id => { const e = el(id); if (e) d[id] = e.value; });
+  _liab.draft = d;
+  try { localStorage.setItem('ek-liab-draft', JSON.stringify(d)); } catch (_) {}
+};
+const lbDraftLoad = () => {
+  if (_liab.draft) return _liab.draft;
+  try { return JSON.parse(localStorage.getItem('ek-liab-draft') || 'null'); } catch (_) { return null; }
+};
+const lbDraftClear = () => {
+  _liab.draft = null;
+  try { localStorage.removeItem('ek-liab-draft'); } catch (_) {}
+};
+
 async function tabLiability(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   const s = getSb();
@@ -966,11 +985,13 @@ async function tabLiability(){
               <option value="other">Something else…</option></select></div>
         </div>
 
-        <div id="lb-other-row" style="display:none;grid-template-columns:2fr 1fr;gap:10px;align-items:end">
+        <div id="lb-other-row" style="display:none;grid-template-columns:1.4fr 1.4fr 1fr;gap:10px;align-items:end">
           <div class="fld" style="margin:0"><label>Who paid — name</label>
             <input class="in" id="lb-name" placeholder="e.g. Aarav (day care only)"></div>
-          <div class="fld" style="margin:0"><label class="lb" style="margin:0">&nbsp;</label>
-            <div class="hint">Not on the school roll, so this never touches any fee balance.</div></div>
+          <div class="fld" style="margin:0"><label>Their email — for the receipt</label>
+            <input class="in" id="lb-email" type="email" placeholder="optional"></div>
+          <div class="fld" style="margin:0"><label>Phone</label>
+            <input class="in" id="lb-phone" placeholder="optional"></div>
         </div>
 
         <div class="fld" id="lb-purpose-note-wrap" style="display:none;margin:10px 0 0">
@@ -985,8 +1006,8 @@ async function tabLiability(){
           <div class="fld" style="margin:0"><label>Received on</label><input class="in" id="lb-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
           <div class="fld" style="margin:0"><label>Received by</label><input class="in" id="lb-by" placeholder="who took it"></div>
         </div>
-        <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
-          <input type="checkbox" id="lb-receipt" checked> Email the parent a receipt straight away
+        <label id="lb-receipt-label" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
+          <input type="checkbox" id="lb-receipt" checked> Email a receipt straight away<span id="lb-receipt-hint" class="hint"></span>
         </label>
         <div id="lb-msg" style="margin-top:10px"></div>
         <button class="btn" id="lb-add" style="margin-top:12px">Record it</button>
@@ -1021,15 +1042,47 @@ async function tabLiability(){
     // Someone off the roll can never be paying EuroKids tuition.
     if (who !== 'child') { el('lb-purpose').value = 'other'; }
     togglePurposeNote();
+    refreshReceiptTick();
+  };
+  // Don't offer to email a receipt when there is nowhere to send it.
+  const refreshReceiptTick = () => {
+    const box = el('lb-receipt'); if (!box) return;
+    const hasAddress = _liab.who === 'child'
+      ? !!_liab.byLabel[(el('lb-child').value || '').trim().toLowerCase()]
+      : !!(el('lb-email').value || '').trim();
+    box.disabled = !hasAddress;
+    if (!hasAddress) box.checked = false;
+    el('lb-receipt-label').style.opacity = hasAddress ? '1' : '.5';
+    el('lb-receipt-hint').textContent = hasAddress ? ''
+      : (_liab.who === 'child' ? ' — pick a child first'
+                               : ' — add their email above to enable this');
   };
   const togglePurposeNote = () => {
     const other = _liab.who !== 'child' || el('lb-purpose').value === 'other';
     el('lb-purpose-note-wrap').style.display = other ? 'block' : 'none';
   };
-  el('lb-t-child').onclick = () => setWho('child');
-  el('lb-t-other').onclick = () => setWho('other');
-  el('lb-purpose').onchange = togglePurposeNote;
-  setWho('child');
+  el('lb-t-child').onclick = () => { setWho('child'); lbDraftSave(); };
+  el('lb-t-other').onclick = () => { setWho('other'); lbDraftSave(); };
+  el('lb-purpose').onchange = () => { togglePurposeNote(); lbDraftSave(); };
+
+  // Restore anything half-typed before the user wandered off.
+  const draft = lbDraftLoad();
+  setWho(draft?.who || 'child');
+  if (draft) {
+    LB_FIELDS.forEach(id => { const e = el(id); if (e && draft[id] != null) e.value = draft[id]; });
+    togglePurposeNote();
+    if (LB_FIELDS.some(id => id !== 'lb-on' && id !== 'lb-mode' && (draft[id] || '').trim())) {
+      el('lb-msg').innerHTML = `<div class="hint" style="background:var(--warn-wash);color:var(--warn);padding:8px 11px;border-radius:8px">
+        Picked up where you left off. <a href="#" id="lb-clear" style="color:inherit;font-weight:600">Clear it</a></div>`;
+      el('lb-clear').onclick = ev => { ev.preventDefault(); lbDraftClear(); tabLiability(); };
+    }
+  }
+  LB_FIELDS.forEach(id => {
+    const e = el(id); if (!e) return;
+    if (!e.oninput)  e.oninput  = lbDraftSave;
+    if (!e.onchange) e.onchange = lbDraftSave;
+  });
+  refreshReceiptTick();
 
   el('lb-child').oninput = e => {
     const k = _liab.byLabel[(e.target.value || '').trim().toLowerCase()];
@@ -1037,7 +1090,10 @@ async function tabLiability(){
       ? `${k.student_name} · ${k.program_name || 'class ?'}`
       : `${_liab.kids.length} children on the roll`;
     el('lb-child-hint').style.color = k ? 'var(--good)' : 'var(--muted)';
+    refreshReceiptTick();
+    lbDraftSave();
   };
+  el('lb-email').oninput = () => { refreshReceiptTick(); lbDraftSave(); };
 
   // ── the list ────────────────────────────────────────────────────────────
   const paintRows = () => {
@@ -1088,7 +1144,7 @@ async function tabLiability(){
     const say = (h, c='err') => el('lb-msg').innerHTML = `<div class="${c}">${h}</div>`;
     if (amt <= 0) return say('Enter an amount.');
 
-    let uin = null, name = null, purpose = 'other';
+    let uin = null, name = null, purpose = 'other', email = null, phone = null;
     if (_liab.who === 'child') {
       const k = _liab.byLabel[(el('lb-child').value || '').trim().toLowerCase()];
       if (!k) return say('Pick a child from the list — start typing and choose a suggestion.');
@@ -1096,6 +1152,8 @@ async function tabLiability(){
     } else {
       name = (el('lb-name').value || '').trim();
       if (!name) return say('Whose money is this? Enter a name.');
+      email = (el('lb-email').value || '').trim().toLowerCase() || null;
+      phone = (el('lb-phone').value || '').trim() || null;
     }
     const note = (el('lb-purpose-note').value || '').trim();
     if (purpose === 'other' && !note) return say('Say what this payment is for.');
@@ -1105,15 +1163,22 @@ async function tabLiability(){
       uin, student_name: name, purpose, purpose_note: purpose === 'other' ? note : null,
       mode: el('lb-mode').value, amount_rupees: amt,
       received_on: el('lb-on').value, received_by: el('lb-by').value || null,
+      payer_email: email, payer_phone: phone,
     }).select('id').maybeSingle();
-    if (error) { btn.disabled = false; return say(esc(error.message)); }
+    if (error) {
+      btn.disabled = false;
+      // Surface the real reason — a silent failure here loses real money records.
+      return say(`Could not save: ${esc(error.message)}${error.hint ? ' — ' + esc(error.hint) : ''}`);
+    }
 
-    if (el('lb-receipt').checked && uin && data?.id) {
+    lbDraftClear();
+    const canEmail = el('lb-receipt').checked && data?.id && (uin || email);
+    if (canEmail) {
       const r = await feesApi('/api/fees/payment-receipt', { receipt_id: data.id });
-      say(r.ok ? `Recorded. Receipt emailed to ${esc((r.sent_to||[]).join(', '))}.`
+      say(r.ok ? `Recorded. Receipt emailed to ${esc((r.sent_to || []).join(', '))}.`
                : `Recorded, but the receipt did not send: ${esc(r.error || '')}`,
           r.ok ? 'ok' : 'err');
-      setTimeout(tabLiability, 1400);
+      setTimeout(tabLiability, 1600);
     } else {
       tabLiability();
     }
