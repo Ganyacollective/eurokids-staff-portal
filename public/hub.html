@@ -144,7 +144,7 @@ const TABS = {
   children:   { label: 'Children', need: () => has('finance') },
   plans:      { label: 'Fees & Plans', need: () => has('finance') || has('admission') },
   compose:    { label: 'Send email', need: () => has('finance') || has('admission') },
-  liability:  { label: 'Cash in hand', need: () => has('finance') },
+  liability:  { label: 'Liabilities', need: () => has('finance') },
   discounts:  { label: 'Quick discounts', need: () => has('finance') },
   kits:       { label: 'Kits',     need: () => has('kits') },
   fees:       { label: 'Fee Reference', need: () => has('fees') || has('finance') }
@@ -726,9 +726,21 @@ async function tabOverview(){
             if (j2.ok) extra = ` · ${j2.with_email} parent emails`;
           } catch (_) { /* the main sync already succeeded */ }
 
+          // Third pass: money EPMS has just recognised for a family whose cash
+          // we are holding is us posting it onward. Consume the held amount by
+          // exactly that much, so the payment is counted once rather than twice.
+          let matched = '';
+          try {
+            const { data: m } = await getSb().schema('eurokids').rpc('auto_match_remittances');
+            const row = Array.isArray(m) ? m[0] : m;
+            if (row && Number(row.matched_amount) > 0) {
+              matched = ` · ₹${Number(row.matched_amount).toLocaleString('en-IN')} of held cash settled`;
+            }
+          } catch (_) { /* matching is a convenience, never a blocker */ }
+
           el('sync-info').textContent = (j.new_payments
             ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
-            : `Synced ${j.invoices} records · ${j.active} active`) + extra;
+            : `Synced ${j.invoices} records · ${j.active} active`) + extra + matched;
           b.textContent = 'Synced ✓';
           setTimeout(() => tabOverview(), 900);          // repaint with new numbers
         } else {
@@ -889,71 +901,312 @@ async function setBatch(uin, batch){
 }
 
 /* ── cash in hand: money received but not yet posted into EPMS ─────────── */
+/* ── liabilities: everything we have physically taken in ──────────
+   Two obligations attach to money the moment it reaches us, and they move
+   independently: cash has to reach the bank, and tuition has to reach
+   EuroKids. Until tuition is posted onward, EPMS still shows it as due while
+   we are the ones holding it — so only the un-posted part is netted off the
+   parent's balance. Day care, uniform and event money never enters EPMS at
+   all and never touches a fee.                                            */
+let _liab = { recs: [], kids: [], byLabel: {} };
+
 async function tabLiability(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   const s = getSb();
   const [{ data: recs, error }, { data: kids }] = await Promise.all([
-    s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }),
-    s.schema('eurokids').from('v_dues').select('uin,student_name').order('student_name'),
+    s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }).limit(2000),
+    s.schema('eurokids').from('v_schedule').select('uin,student_name,program_name').order('student_name').limit(2000),
   ]);
   if (error) return el('body').innerHTML = fail(error);
-  const open = (recs||[]).filter(r => !r.reflected_in_epms);
-  const held = open.reduce((a,r) => a + Number(r.amount_rupees), 0);
-  const opts = (kids||[]).map(k => `<option value="${esc(k.uin)}">${esc(k.student_name)}</option>`).join('');
+  _liab.recs = recs || [];
+  _liab.kids = kids || [];
 
-  el('body').innerHTML = head('Cash in hand',
-      'Money a parent has given us that has not yet been posted into EPMS. Until it is, EPMS keeps showing it as due and we are holding it.')
+  // "Name — Class" keeps two children of the same name apart.
+  _liab.byLabel = {};
+  const dupe = {};
+  (kids || []).forEach(k => { dupe[k.student_name] = (dupe[k.student_name] || 0) + 1; });
+  const options = (kids || []).map(k => {
+    const label = `${k.student_name} — ${k.program_name || 'class ?'}`;
+    _liab.byLabel[label.toLowerCase()] = k;
+    return `<option value="${esc(label)}">`;
+  }).join('');
+
+  const sum = f => _liab.recs.filter(f).reduce((a, r) => a + Number(r.amount_rupees), 0);
+  const heldForEuro = _liab.recs.filter(r => r.purpose === 'tuition')
+    .reduce((a, r) => a + (Number(r.amount_rupees) - Number(r.remitted || 0)), 0);
+  const notBanked = sum(r => r.mode === 'Cash' && !r.deposited_on);
+  const otherMoney = sum(r => r.purpose !== 'tuition');
+
+  el('body').innerHTML = head('Liabilities',
+      'Money already in our hands. Cash still to reach the bank, fees still to reach EuroKids, and collections that were never EuroKids’ to begin with.')
     + `<div class="stats" style="margin-bottom:16px">
-        <div class="stat crit"><div class="k">Not yet deposited</div><div class="v">${money(held)}</div>
-          <div class="m">${open.length} receipt${open.length===1?'':'s'} outstanding</div></div>
-        <div class="stat good"><div class="k">Settled</div><div class="v">${money((recs||[]).filter(r=>r.reflected_in_epms).reduce((a,r)=>a+Number(r.amount_rupees),0))}</div>
-          <div class="m">Already reflected in EPMS</div></div>
+        <div class="stat crit"><div class="k">Owed to EuroKids</div><div class="v">${money(heldForEuro)}</div>
+          <div class="m">Fee money taken but not yet posted</div></div>
+        <div class="stat warn"><div class="k">Cash not banked</div><div class="v">${money(notBanked)}</div>
+          <div class="m">Physically with us</div></div>
+        <div class="stat"><div class="k">Other collections</div><div class="v">${money(otherMoney)}</div>
+          <div class="m">Day care, uniform, events — ours, not EuroKids’</div></div>
       </div>
 
       <div class="panel" style="padding:18px">
-        <h3 style="margin-bottom:10px">Record money received</h3>
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.4fr;gap:10px;align-items:end">
-          <div class="fld" style="margin:0"><label>Child</label>
-            <select class="in" id="lb-uin"><option value="">— pick —</option>${opts}</select></div>
+        <h3 style="margin-bottom:12px">Record money received</h3>
+        <div class="pill-row" style="margin-bottom:12px">
+          <span class="chip on" id="lb-t-child" data-who="child" style="cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--bone);padding:5px 11px">A school child</span>
+          <span class="chip" id="lb-t-other" data-who="other" style="cursor:pointer;border:1px solid var(--line-2);padding:5px 11px">Someone else (day care, guest)</span>
+        </div>
+
+        <div id="lb-child-row" style="display:grid;grid-template-columns:2fr 1fr;gap:10px;align-items:end">
+          <div class="fld" style="margin:0"><label>Child — type to search</label>
+            <input class="in" id="lb-child" list="lb-kids" placeholder="Start typing a name…" autocomplete="off">
+            <datalist id="lb-kids">${options}</datalist>
+            <div class="hint" id="lb-child-hint">${(kids || []).length} children on the roll</div></div>
+          <div class="fld" style="margin:0"><label>What is this for?</label>
+            <select class="in" id="lb-purpose">
+              <option value="tuition">Tuition / term fees</option>
+              <option value="other">Something else…</option></select></div>
+        </div>
+
+        <div id="lb-other-row" style="display:none;grid-template-columns:2fr 1fr;gap:10px;align-items:end">
+          <div class="fld" style="margin:0"><label>Who paid — name</label>
+            <input class="in" id="lb-name" placeholder="e.g. Aarav (day care only)"></div>
+          <div class="fld" style="margin:0"><label class="lb" style="margin:0">&nbsp;</label>
+            <div class="hint">Not on the school roll, so this never touches any fee balance.</div></div>
+        </div>
+
+        <div class="fld" id="lb-purpose-note-wrap" style="display:none;margin:10px 0 0">
+          <label>What is it for?</label>
+          <input class="in" id="lb-purpose-note" placeholder="e.g. Day care August · Uniform · Class photographs · Annual function">
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:10px;align-items:end;margin-top:10px">
           <div class="fld" style="margin:0"><label>Mode</label>
-            <select class="in" id="lb-mode"><option>Cash</option><option>Cheque</option><option>UPI</option><option>Other</option></select></div>
-          <div class="fld" style="margin:0"><label>Amount</label><input class="in num" id="lb-amt" type="number"></div>
+            <select class="in" id="lb-mode"><option>Cash</option><option>UPI</option><option>Cheque</option><option>Other</option></select></div>
+          <div class="fld" style="margin:0"><label>Amount</label><input class="in num" id="lb-amt" type="number" min="1"></div>
           <div class="fld" style="margin:0"><label>Received on</label><input class="in" id="lb-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
           <div class="fld" style="margin:0"><label>Received by</label><input class="in" id="lb-by" placeholder="who took it"></div>
         </div>
-        <div id="lb-msg"></div>
-        <button class="btn" id="lb-add" style="margin-top:12px">Add receipt</button>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
+          <input type="checkbox" id="lb-receipt" checked> Email the parent a receipt straight away
+        </label>
+        <div id="lb-msg" style="margin-top:10px"></div>
+        <button class="btn" id="lb-add" style="margin-top:12px">Record it</button>
       </div>
 
-      <div class="panel" style="margin-top:16px"><div class="ptop"><h2>Receipts</h2>
-        <span class="hint">Tick “In EPMS” once you have posted it — the child's balance corrects at once</span></div>
-        <div class="tw"><table><thead><tr><th>Child</th><th>Mode</th><th class="r">Amount</th>
-          <th>Received</th><th>By</th><th>Deposited</th><th>In EPMS</th><th></th></tr></thead><tbody>
-          ${(recs||[]).map(r => `<tr style="${r.reflected_in_epms?'':'background:var(--crit-wash)'}">
-            <td>${esc(r.student_name || r.uin)}</td>
-            <td><span class="chip ${r.mode==='Cash'?'c-warn':'c-mute'}">${esc(r.mode)}</span></td>
-            <td class="r num" style="font-weight:600">${money(r.amount_rupees)}</td>
-            <td class="hint">${r.received_on ? new Date(r.received_on+'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',timeZone:'UTC'}) : '—'}</td>
-            <td class="hint">${esc(r.received_by||'—')}</td>
-            <td><input class="in" type="date" value="${r.deposited_on||''}" style="padding:3px 6px;font-size:12px;width:auto"
-                  onchange="setDeposited(${r.id}, this.value)"></td>
-            <td style="text-align:center"><input type="checkbox" ${r.reflected_in_epms?'checked':''}
-                  onchange="setReflected(${r.id}, this.checked)">
-                ${r.reflected_at?`<div class="hint" style="font-size:10px">${new Date(r.reflected_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>`:''}</td>
-            <td><a style="color:var(--crit);cursor:pointer" onclick="delReceipt(${r.id})">Remove</a></td>
-          </tr>`).join('') || `<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">Nothing recorded yet.</td></tr>`}
-        </tbody></table></div></div>`;
+      <div class="panel" style="margin-top:16px;padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <input class="in" id="lb-q" placeholder="Search a name…" style="max-width:260px">
+        <select class="in" id="lb-f" style="max-width:230px">
+          <option value="">Everything</option>
+          <option value="owed">Still owed to EuroKids</option>
+          <option value="cash">Cash not yet banked</option>
+          <option value="other">Other collections</option>
+          <option value="done">Fully posted</option>
+        </select>
+      </div>
 
-  el('lb-add').onclick = async () => {
-    const uin = el('lb-uin').value, amt = Number(el('lb-amt').value)||0;
-    if (!uin || amt <= 0) { el('lb-msg').innerHTML = '<div class="err">Pick a child and an amount.</div>'; return; }
-    const name = (kids||[]).find(k=>k.uin===uin)?.student_name || null;
-    const { error } = await getSb().schema('eurokids').from('receipt_offline').insert({
-      uin, student_name: name, mode: el('lb-mode').value, amount_rupees: amt,
-      received_on: el('lb-on').value, received_by: el('lb-by').value || null });
-    if (error) { el('lb-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return; }
-    tabLiability();
+      <div class="panel" style="margin-top:14px"><div class="ptop"><h2 id="lb-h">Receipts</h2>
+        <span class="hint">Posting to EuroKids is matched automatically on the next sync</span></div>
+        <div class="tw"><table><thead><tr><th>Who</th><th>For</th><th>Mode</th><th class="r">Amount</th>
+          <th class="r">Still held</th><th>Received</th><th>By</th><th>Banked</th><th></th></tr></thead>
+        <tbody id="lb-rows"></tbody></table></div></div>`;
+
+  // ── who-is-paying toggle ────────────────────────────────────────────────
+  const setWho = who => {
+    _liab.who = who;
+    const on = id => { const e = el(id); e.style.background = 'var(--ink)'; e.style.color = 'var(--bone)'; e.style.borderColor = 'var(--ink)'; };
+    const off = id => { const e = el(id); e.style.background = 'transparent'; e.style.color = 'var(--ink)'; e.style.borderColor = 'var(--line-2)'; };
+    if (who === 'child') { on('lb-t-child'); off('lb-t-other'); }
+    else                 { on('lb-t-other'); off('lb-t-child'); }
+    el('lb-child-row').style.display = who === 'child' ? 'grid' : 'none';
+    el('lb-other-row').style.display = who === 'child' ? 'none' : 'grid';
+    // Someone off the roll can never be paying EuroKids tuition.
+    if (who !== 'child') { el('lb-purpose').value = 'other'; }
+    togglePurposeNote();
   };
+  const togglePurposeNote = () => {
+    const other = _liab.who !== 'child' || el('lb-purpose').value === 'other';
+    el('lb-purpose-note-wrap').style.display = other ? 'block' : 'none';
+  };
+  el('lb-t-child').onclick = () => setWho('child');
+  el('lb-t-other').onclick = () => setWho('other');
+  el('lb-purpose').onchange = togglePurposeNote;
+  setWho('child');
+
+  el('lb-child').oninput = e => {
+    const k = _liab.byLabel[(e.target.value || '').trim().toLowerCase()];
+    el('lb-child-hint').textContent = k
+      ? `${k.student_name} · ${k.program_name || 'class ?'}`
+      : `${_liab.kids.length} children on the roll`;
+    el('lb-child-hint').style.color = k ? 'var(--good)' : 'var(--muted)';
+  };
+
+  // ── the list ────────────────────────────────────────────────────────────
+  const paintRows = () => {
+    const q = (el('lb-q').value || '').trim().toLowerCase();
+    const f = el('lb-f').value;
+    let rows = _liab.recs.filter(r => {
+      const held = Number(r.amount_rupees) - Number(r.remitted || 0);
+      if (q && !((r.student_name || '') + ' ' + (r.purpose_note || '')).toLowerCase().includes(q)) return false;
+      if (f === 'owed'  && !(r.purpose === 'tuition' && held > 0.01)) return false;
+      if (f === 'cash'  && !(r.mode === 'Cash' && !r.deposited_on)) return false;
+      if (f === 'other' && r.purpose === 'tuition') return false;
+      if (f === 'done'  && !(r.purpose === 'tuition' && held <= 0.01)) return false;
+      return true;
+    });
+    el('lb-h').textContent = `${rows.length} receipt${rows.length === 1 ? '' : 's'}`;
+    el('lb-rows').innerHTML = rows.map(r => {
+      const held = Number(r.amount_rupees) - Number(r.remitted || 0);
+      const isFee = r.purpose === 'tuition';
+      return `<tr>
+        <td><strong>${esc(r.student_name || '—')}</strong>${r.uin ? '' : ' <span class="chip c-mute">not on roll</span>'}
+          ${r.receipt_sent_at ? '<br><span class="hint" style="font-size:10.5px">receipt emailed</span>' : ''}</td>
+        <td>${isFee ? '<span class="chip c-good">Fees</span>'
+                    : `<span class="chip c-mute">${esc(r.purpose_note || 'Other')}</span>`}</td>
+        <td><span class="chip ${r.mode === 'Cash' ? 'c-warn' : 'c-mute'}">${esc(r.mode)}</span></td>
+        <td class="r num" style="font-weight:600">${money(r.amount_rupees)}</td>
+        <td class="r num">${isFee ? (held > 0.01
+             ? `<span style="color:var(--crit);font-weight:600">${money(held)}</span>`
+             : '<span class="chip c-good">posted</span>') : '—'}</td>
+        <td class="hint">${r.received_on ? new Date(r.received_on+'T00:00:00Z').toLocaleDateString('en-IN',{day:'2-digit',month:'short',timeZone:'UTC'}) : '—'}</td>
+        <td class="hint">${esc(r.received_by || '—')}</td>
+        <td><input class="in" type="date" value="${r.deposited_on || ''}" style="padding:3px 6px;font-size:12px;width:auto"
+              onchange="setDeposited(${r.id}, this.value)"></td>
+        <td style="white-space:nowrap">
+          ${r.uin ? `<a style="color:var(--accent);cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
+          ${r.uin ? `<a style="color:var(--accent);cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
+          <a style="color:var(--crit);cursor:pointer" onclick="delReceipt(${r.id})">Remove</a></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
+  };
+  paintRows();
+  el('lb-q').oninput = paintRows;
+  el('lb-f').onchange = paintRows;
+
+  // ── record ──────────────────────────────────────────────────────────────
+  el('lb-add').onclick = async e => {
+    const btn = e.currentTarget;
+    const amt = Number(el('lb-amt').value) || 0;
+    const say = (h, c='err') => el('lb-msg').innerHTML = `<div class="${c}">${h}</div>`;
+    if (amt <= 0) return say('Enter an amount.');
+
+    let uin = null, name = null, purpose = 'other';
+    if (_liab.who === 'child') {
+      const k = _liab.byLabel[(el('lb-child').value || '').trim().toLowerCase()];
+      if (!k) return say('Pick a child from the list — start typing and choose a suggestion.');
+      uin = k.uin; name = k.student_name; purpose = el('lb-purpose').value;
+    } else {
+      name = (el('lb-name').value || '').trim();
+      if (!name) return say('Whose money is this? Enter a name.');
+    }
+    const note = (el('lb-purpose-note').value || '').trim();
+    if (purpose === 'other' && !note) return say('Say what this payment is for.');
+
+    btn.disabled = true; say('Saving…', 'hint');
+    const { data, error } = await getSb().schema('eurokids').from('receipt_offline').insert({
+      uin, student_name: name, purpose, purpose_note: purpose === 'other' ? note : null,
+      mode: el('lb-mode').value, amount_rupees: amt,
+      received_on: el('lb-on').value, received_by: el('lb-by').value || null,
+    }).select('id').maybeSingle();
+    if (error) { btn.disabled = false; return say(esc(error.message)); }
+
+    if (el('lb-receipt').checked && uin && data?.id) {
+      const r = await feesApi('/api/fees/payment-receipt', { receipt_id: data.id });
+      say(r.ok ? `Recorded. Receipt emailed to ${esc((r.sent_to||[]).join(', '))}.`
+               : `Recorded, but the receipt did not send: ${esc(r.error || '')}`,
+          r.ok ? 'ok' : 'err');
+      setTimeout(tabLiability, 1400);
+    } else {
+      tabLiability();
+    }
+  };
+}
+
+async function sendReceipt(id, a){
+  const was = a.textContent; a.textContent = 'sending…';
+  const r = await feesApi('/api/fees/payment-receipt', { receipt_id: id });
+  a.textContent = r.ok ? 'sent ✓' : 'failed';
+  if (!r.ok) alert(r.error || 'Could not send the receipt.');
+  setTimeout(() => { a.textContent = was; }, 2500);
+}
+
+/* ── a child's full statement ───────────────────────────────────── */
+async function openStatement(uin){
+  const s = getSb();
+  const [{ data: c }, { data: led }, { data: items }] = await Promise.all([
+    s.schema('eurokids').from('v_schedule').select('*').eq('uin', uin).maybeSingle(),
+    s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date'),
+    s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date,label').eq('uin', uin).order('seq'),
+  ]);
+  if (!c) return alert('Could not load that child.');
+
+  const fee = Number(c.final_fee || c.total_fee || 0);
+  const disc = Number(c.our_discount || 0);
+  const held = Number(c.uncredited_cash || 0);
+  const epmsGot = Number(c.collected || 0);
+  const owed = Number(c.true_due || 0);
+  const fees = (led || []).filter(l => l.counts_to_fees);
+  const other = (led || []).filter(l => !l.counts_to_fees);
+  const d = x => x ? new Date(x + 'T00:00:00Z').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' }) : '—';
+
+  const row = (k, v, style='') => `<tr><td style="padding:7px 0;color:var(--muted);${style}">${k}</td>
+    <td class="r num" style="padding:7px 0;${style}">${v}</td></tr>`;
+
+  let bal = fee - disc;
+  const movement = fees.map(l => {
+    bal -= Number(l.amount);
+    return `<tr><td class="hint">${d(l.on_date)}</td>
+      <td>${esc(l.description)}${l.source === 'offline' ? ` <span class="chip c-mute">${esc(l.mode)}</span>` : ''}
+        ${Number(l.still_held) > 0.01 ? ` <span class="chip c-warn">${money(l.still_held)} not yet posted</span>` : ''}</td>
+      <td class="r num" style="color:var(--good)">− ${money(l.amount)}</td>
+      <td class="r num">${money(Math.max(0, bal))}</td></tr>`;
+  }).join('');
+
+  el('plan-editor') || document.body.insertAdjacentHTML('beforeend', '<div id="plan-editor"></div>');
+  const box = el('stmt') || (() => {
+    document.body.insertAdjacentHTML('beforeend', '<div id="stmt"></div>'); return el('stmt');
+  })();
+  box.innerHTML = `
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow:auto;padding:28px"
+       onclick="if(event.target===this)this.remove()">
+    <div style="max-width:760px;margin:0 auto;background:var(--card);border-radius:14px;padding:26px">
+      <div class="ph" style="margin-bottom:16px"><div>
+        <h1 style="font-size:22px">${esc(c.student_name)}</h1>
+        <div class="s">${esc(c.program_name || '')}${c.batch ? ' · ' + esc(c.batch) : ''} · ${esc(uin)}</div></div>
+        <button class="btn sm line" onclick="el('stmt').remove()">Close</button></div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        ${row('Fee for the year', money(c.total_fee || fee))}
+        ${disc > 0 ? row('Our discount (out of our margin)', '<span style="color:var(--good)">− ' + money(disc) + '</span>') : ''}
+        ${row('<strong>Final payable</strong>', '<strong>' + money(fee) + '</strong>', 'border-top:1px solid var(--line)')}
+      </table>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px">Payments received</div>
+      <div class="tw"><table><thead><tr><th>Date</th><th>What</th><th class="r">Amount</th><th class="r">Balance</th></tr></thead>
+        <tbody>${movement || `<tr><td colspan="4" style="padding:16px;text-align:center;color:var(--muted)">Nothing received yet.</td></tr>`}</tbody></table></div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:16px">
+        ${row('Recorded by EuroKids', money(epmsGot))}
+        ${held > 0 ? row('With us, not yet posted to EuroKids', '<span style="color:var(--warn)">' + money(held) + '</span>') : ''}
+        <tr><td style="padding:11px 0;border-top:2px solid var(--ink);font-weight:700">Balance due</td>
+            <td class="r num" style="padding:11px 0;border-top:2px solid var(--ink);font-weight:700;font-size:17px">${money(owed)}</td></tr>
+        ${c.next_due_date && owed > 1 ? `<tr><td colspan="2" class="hint" style="padding-top:6px">Next instalment due ${d(c.next_due_date)}</td></tr>` : ''}
+      </table>
+
+      ${held > 0 ? `<div class="hint" style="background:var(--warn-wash);color:var(--warn);padding:10px 13px;border-radius:9px;margin-top:12px">
+        EuroKids still shows ${money(c.epms_due)} outstanding because ${money(held)} of this family's money has not been posted to them yet.
+        The balance above is the honest one — do not chase them for it.</div>` : ''}
+
+      ${other.length ? `<div style="font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px">Other collections — not fees</div>
+        <div class="tw"><table><thead><tr><th>Date</th><th>What</th><th>Mode</th><th class="r">Amount</th></tr></thead><tbody>
+        ${other.map(l => `<tr><td class="hint">${d(l.on_date)}</td><td>${esc(l.description)}</td>
+          <td><span class="chip c-mute">${esc(l.mode)}</span></td>
+          <td class="r num">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+
+      ${items && items.length ? `<div style="font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px">Agreed schedule</div>
+        <div class="tw"><table><thead><tr><th>Instalment</th><th>Due on</th><th class="r">Amount</th></tr></thead><tbody>
+        ${items.map(i => `<tr><td>${esc(i.label || 'Payment ' + i.seq)}</td><td class="hint">${d(i.due_date)}</td>
+          <td class="r num">${money(i.amount)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    </div>
+  </div>`;
 }
 
 async function setReflected(id, on){
