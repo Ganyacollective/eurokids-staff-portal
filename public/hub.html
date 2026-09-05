@@ -1653,12 +1653,24 @@ async function openPlan(uin){
       <div class="fld" style="max-width:640px"><label>Note for the letter (optional)</label>
         <input class="in" id="pf-note" value="${esc(plan?.note||'')}" placeholder="e.g. Booking amount covers the welcome kit."></div>
 
-      <div id="pf-msg"></div>
+      <div id="pf-warn"></div><div id="pf-msg"></div>
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
         <button class="btn" id="pf-save">Save plan</button>
         <button class="btn line" id="pf-send" data-kind="welcome">Save &amp; send welcome letter</button>
         <button class="btn line" id="pf-send2" data-kind="schedule">Send schedule only</button>
         <button class="btn line" id="pf-send3" data-kind="receipt">Send paid-in-full receipt</button>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;
+                    border-top:1px solid var(--line);padding-top:12px;width:100%">
+          <input class="in" id="pf-test-to" type="email" placeholder="your@email.com"
+                 value="${esc(session?.user?.email || '')}" style="max-width:260px">
+          <select class="in" id="pf-test-kind" style="max-width:190px">
+            <option value="welcome">Welcome letter</option>
+            <option value="schedule">Schedule only</option>
+            <option value="receipt">Paid-in-full receipt</option>
+          </select>
+          <button class="btn line sm" id="pf-test">Send a test to me</button>
+          <span class="hint">Goes only to this address — the parents are not copied.</span>
+        </div>
         <button class="btn line" onclick="el('plan-editor').innerHTML=''">Close</button>
       </div>
       <div class="hint" style="margin-top:6px">The welcome letter is the warm first email. “Schedule only” is the plainer re-send when a parent asks for the terms again. Both cc admin@eurokidsjmdenclave.org.</div>
@@ -1693,6 +1705,18 @@ async function openPlan(uin){
     const t = Number(el('pf-total').value)||0, d = Number(el('pf-disc').value)||0;
     el('pf-final').value = Math.max(0, t - d);
   };
+  const warnMismatch = () => {
+    const box = el('pf-warn'); if (!box) return;
+    const final = Number(el('pf-final').value) || 0;
+    const sum = rows.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const gap = Math.round(sum - final);
+    box.innerHTML = (final > 0 && Math.abs(gap) > 1)
+      ? `<div style="background:var(--warn-wash);color:var(--warn);padding:9px 12px;border-radius:8px;margin-top:10px;font-size:13px">
+           The instalments add up to ${money(sum)} but the final payable is ${money(final)} —
+           <strong>${gap > 0 ? money(gap) + ' too much' : money(-gap) + ' short'}</strong>.
+           A letter cannot be sent until these agree.</div>` : '';
+  };
+
   const autoLast = () => {
     recalcFinal();
     const final = Number(el('pf-final').value)||0;
@@ -1700,12 +1724,13 @@ async function openPlan(uin){
       const f = document.querySelector('.pf-amt[data-i="0"]'); if (f) f.value = final; } return; }
     const head = rows.slice(0,-1).reduce((a,r)=>a + (Number(r.amount)||0), 0);
     const last = Math.max(0, final - head);
+    setTimeout(warnMismatch, 0);
     rows[rows.length-1].amount = last;
     const lastEl = document.querySelector(`.pf-amt[data-i="${rows.length-1}"]`);
     if (lastEl) lastEl.value = last;
   };
 
-  drawItems(); autoLast();
+  drawItems(); autoLast(); warnMismatch();
   el('pf-total').oninput = autoLast;
   el('pf-disc').oninput  = autoLast;
   el('pf-add').onclick = () => { if (rows.length >= 5) return alert('Five instalments is the maximum.');
@@ -1797,6 +1822,25 @@ async function openPlan(uin){
   el('pf-send').onclick  = e => sendLetter(e.currentTarget);
   el('pf-send2').onclick = e => sendLetter(e.currentTarget);
   el('pf-send3').onclick = e => sendLetter(e.currentTarget);
+
+  el('pf-test').onclick = async e => {
+    const btn = e.currentTarget, to = (el('pf-test-to').value || '').trim();
+    if (!to.includes('@')) { el('pf-msg').innerHTML = '<div class="err">Enter an email address to test with.</div>'; return; }
+    const label = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const { data: { session: sess } } = await getSb().auth.getSession();
+      if (!sess) throw new Error('Your session has expired — please sign in again.');
+      const r = await fetch('/api/fees/welcome-email', { method:'POST',
+        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sess.access_token}` },
+        body: JSON.stringify({ uin: _planUin, kind: el('pf-test-kind').value, testTo: to }) });
+      const j = await r.json().catch(() => ({ error: `The server returned ${r.status}.` }));
+      el('pf-msg').innerHTML = j.ok
+        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Test sent to ${esc(to)}. For real it would go to ${esc((j.would_go_to||[]).join(', ') || 'nobody — no parent email on file')}.</div>`
+        : `<div class="err">${esc(j.error || 'Could not send the test')}</div>`;
+    } catch (err) {
+      el('pf-msg').innerHTML = `<div class="err">${esc(err.message)}</div>`;
+    } finally { btn.disabled = false; btn.textContent = label; }
+  };
 
   el('plan-editor').scrollIntoView({ behavior:'smooth', block:'start' });
 }

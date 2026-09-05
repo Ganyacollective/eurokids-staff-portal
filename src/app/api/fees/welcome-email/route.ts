@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const token = bearer(req);
   if (!token) return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
 
-  let body: { uin?: string; kind?: string; preview?: boolean };
+  let body: { uin?: string; kind?: string; preview?: boolean; testTo?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   const uin = (body.uin || "").trim();
   if (!uin) return NextResponse.json({ error: "uin required" }, { status: 400 });
@@ -70,14 +70,20 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
+  // The schedule must equal the fee. Too little and the letter under-bills;
+  // too much and it bills for money never agreed. Either way the parent gets a
+  // letter whose own numbers disagree.
   const scheduled = (items || []).reduce((s, i) => s + Number(i.amount || 0), 0);
-  if (kind !== "receipt" && finalFee > 0 && scheduled < finalFee - 1) {
+  if (kind !== "receipt" && finalFee > 0 && Math.abs(scheduled - finalFee) > 1) {
+    const over = scheduled > finalFee;
     return NextResponse.json({
-      error: `The instalments add up to ₹${scheduled.toLocaleString("en-IN")} but the fee is ₹${finalFee.toLocaleString("en-IN")}. Fix the schedule before sending, or the parent will see a letter that does not add up.`,
+      error: `The instalments add up to ₹${scheduled.toLocaleString("en-IN")} but the agreed fee is ₹${finalFee.toLocaleString("en-IN")} — ${over ? "₹" + (scheduled - finalFee).toLocaleString("en-IN") + " too much" : "₹" + (finalFee - scheduled).toLocaleString("en-IN") + " short"}. Fix the schedule before sending, or the parent receives a letter that contradicts itself.`,
     }, { status: 400 });
   }
   const discount = Number(child.our_discount || 0);
-  const received = Number(child.collected || 0) + Number(child.uncredited_cash || 0);
+  // Everything the family has actually paid us: what EuroKids has recorded plus
+  // cash we are holding that has not been posted to them yet.
+  const received = Number(child.paid_so_far ?? (Number(child.collected || 0) + Number(child.uncredited_cash || 0)));
   const owed = Number(child.true_due || 0);
 
   // ── the opening paragraph differs by letter; the rest is shared ───────────
@@ -112,7 +118,7 @@ export async function POST(req: NextRequest) {
     : `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
          ${line("Total fee", moneyH(Number(child.total_fee || finalFee)))}
          ${discount > 0 ? line("Special discount", `<span style="color:#15803D">− ${moneyH(discount)}</span>`) : ""}
-         <tr><td style="padding:10px 0;border-top:2px solid #1A202C;font-weight:700">Final payable</td>
+         <tr><td style="padding:10px 0;border-top:2px solid #1A202C;font-weight:700">${discount > 0 ? "Final payable after discount" : "Final payable"}</td>
              <td style="padding:10px 0;border-top:2px solid #1A202C;text-align:right;font-weight:700;font-size:16px">${moneyH(finalFee)}</td></tr>
          ${received > 0 ? line("Received so far", `<span style="color:#15803D">− ${moneyH(received)}</span>`) : ""}
          ${received > 0 ? `<tr><td style="padding:8px 0;font-weight:700">Balance</td>
@@ -179,13 +185,26 @@ export async function POST(req: NextRequest) {
     : kind === "receipt" ? `Fees fully paid — thank you | ${child.student_name}`
     : `Fee Payment Schedule for ${child.student_name} | ${SCHOOL_NAME}`;
 
+  // A test goes to one chosen address and nowhere near the parents, so the
+  // exact letter can be checked before it is sent for real.
+  const isTest = !!(body.testTo || "").trim();
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-    body: JSON.stringify({ from: RESEND_FROM, to, cc: [CC], subject, text, html }),
+    body: JSON.stringify({
+      from: RESEND_FROM,
+      to: isTest ? [body.testTo!.trim()] : to,
+      ...(isTest ? {} : { cc: [CC] }),
+      subject: isTest ? `[TEST — would go to ${to.join(", ")}] ${subject}` : subject,
+      text, html,
+    }),
   });
   if (!r.ok) {
     return NextResponse.json({ error: `Resend ${r.status}: ${(await r.text()).slice(0, 220)}` }, { status: 500 });
+  }
+
+  if (isTest) {
+    return NextResponse.json({ ok: true, kind, test: true, sent_to: [body.testTo!.trim()], would_go_to: to });
   }
 
   if (kind === "welcome") {

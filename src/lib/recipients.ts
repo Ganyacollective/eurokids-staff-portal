@@ -24,7 +24,12 @@ export type ScheduleRow = {
   epms_due: number | null;
   our_discount: number | null;
   uncredited_cash: number | null;
-  true_due: number | null;
+  other_collections: number | null;
+  agreed_fee: number | null;      // what we agreed, after our discount
+  paid_so_far: number | null;     // EPMS collections + cash we still hold
+  true_due: number | null;        // agreed_fee − paid_so_far
+  scheduled_total: number | null;
+  schedule_mismatch: boolean | null;
   instalments: number;
   has_schedule: boolean;
   next_seq: number | null;
