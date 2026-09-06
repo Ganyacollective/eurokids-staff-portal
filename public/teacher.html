@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#FF2217">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="EuroKids Hub">
+<link rel="apple-touch-icon" href="/brand/icons/apple-touch-icon.png">
+<link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids — My Portal</title>
 <link rel="stylesheet" href="/brand/portal.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -820,6 +828,7 @@ function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,
 // Apply leave
 // ============================================================
 function openLeaveModal(){
+  { const b = document.getElementById('lr-submit'); if (b) { b.disabled = false; b.textContent = 'Submit'; } }
   document.getElementById('lr-type').value = 'CL';
   document.getElementById('lr-start').value = '';
   document.getElementById('lr-end').value = '';
@@ -921,6 +930,13 @@ async function submitLeave(ev){
     alert('Could not initialise: ' + e.message);
   }
 })();
+</script>
+<script>
+  // Installable: registers the service worker that caches the app shell so the
+  // hub opens instantly from a phone or desktop home screen.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
 </script>
 </body>
 </html>

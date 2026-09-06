@@ -82,10 +82,9 @@ export async function POST(req: NextRequest) {
     source_details: "Submitted without login from teacher portal",
   };
 
-  const leaves = [...(data.leaves || []), newLeave];
-  const updated = { ...data, leaves };
-
-  const { error: updErr } = await admin.from("portal_state").upsert({ id: "main", data: updated, updated_at: new Date().toISOString() });
+  // Appended inside Postgres, atomically. Rewriting the whole blob from here
+  // raced with the HR console's own saves and lost applications.
+  const { error: updErr } = await admin.rpc("append_portal_leave", { p_leave: newLeave });
   if (updErr) return NextResponse.json({ ok: false, error: "Could not save application: " + updErr.message }, { status: 500 });
 
   // ─── Notifications (fire-and-forget in parallel) ─────────────────────────

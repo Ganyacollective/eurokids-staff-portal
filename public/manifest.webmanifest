@@ -1,0 +1,23 @@
+{
+  "name": "EuroKids JMD Enclave — Hub",
+  "short_name": "EuroKids Hub",
+  "description": "Admissions, fees, receipts, reminders and staff for EuroKids JMD Enclave.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FF2217",
+  "lang": "en-IN",
+  "icons": [
+    { "src": "/brand/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/brand/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/brand/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Record money received", "url": "/?open=liability", "icons": [{ "src": "/brand/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Send email", "url": "/?open=compose", "icons": [{ "src": "/brand/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Staff portal", "url": "/staff", "icons": [{ "src": "/brand/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

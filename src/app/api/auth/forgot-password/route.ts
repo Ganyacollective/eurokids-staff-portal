@@ -24,6 +24,16 @@ export async function POST(req: NextRequest) {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
+  // Rate limit: one reset per address per ten minutes. Without this anyone
+  // who knows a teacher's login could lock her out by resetting it on a loop.
+  const { data: recent } = await admin.from("audit_log")
+    .select("created_at").eq("action", "forgot_password").eq("entity_id", email)
+    .gte("created_at", new Date(Date.now() - 10 * 60 * 1000).toISOString()).limit(1);
+  if (recent && recent.length) {
+    return NextResponse.json({ ok: false, error: "A reset was requested for this address a few minutes ago. Check your email and WhatsApp, or try again in ten minutes." }, { status: 429 });
+  }
+  await admin.from("audit_log").insert({ action: "forgot_password", entity_type: "auth", entity_id: email }).then(() => {}, () => {});
+
   // 1) Locate the auth user
   let target: { id: string; email?: string | null } | undefined;
   for (let page = 1; page <= 20 && !target; page++) {
@@ -67,8 +77,12 @@ export async function POST(req: NextRequest) {
     }, { status: 422 });
   }
 
-  // 3) Generate a fresh, memorable password
-  const newPassword = "eurokids" + Math.floor(100 + Math.random() * 900);
+  // 3) Generate a fresh password. "eurokids" + three digits was only 900
+  //    possibilities — guessable in minutes against the login endpoint. Still
+  //    readable over the phone: two short words and four digits.
+  const WORDS = ["mango","lotus","river","cloud","tiger","pearl","maple","coral","sunny","lemon","zebra","ocean","daisy","panda","honey","apple"];
+  const pick = () => WORDS[Math.floor(Math.random() * WORDS.length)];
+  const newPassword = `${pick()}-${pick()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   // 4) Apply the password
   const { error: updErr } = await admin.auth.admin.updateUserById(target.id, { password: newPassword });

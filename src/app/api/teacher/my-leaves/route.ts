@@ -36,14 +36,28 @@ export async function GET(req: NextRequest) {
   const requestRows = requests || [];
 
   // 3) Fetch portal_state and pluck this employee's leaves + leave_credits
-  const { data: portal } = await admin.from("portal_state").select("data").eq("id", "main").maybeSingle();
+  // Leave credits live with each month's reconciliation, which is now in
+
+  // attendance_month rather than the portal_state blob.
+
+  const [{ data: portal }, { data: monthRows }] = await Promise.all([
+
+    admin.from("portal_state").select("data").eq("id", "main").maybeSingle(),
+
+    admin.from("attendance_month").select("month, data"),
+
+  ]);
+
+  const attendanceMonths: Record<string, unknown> = {};
+
+  for (const r of monthRows || []) attendanceMonths[r.month] = r.data;
   const blobLeaves = ((portal?.data?.leaves as Array<{ id: string; employee_id: string; leave_type: string; start_date: string; end_date: string; total_days: number; reason?: string; status: string; reviewer_note?: string; applied_at?: string; reviewed_at?: string; source?: string; source_id?: string }>) || [])
     .filter((L) => L.employee_id === link.employee_id);
 
   // Aggregate leave credits across all reconciled months for this employee
   type Credit = { employee_id: string; leave_id: string; leave_type: string; date: string; days?: number };
   const credits: Credit[] = [];
-  const months = (portal?.data?.attendanceMonths as Record<string, { leave_credits?: Credit[] }>) || {};
+  const months = (attendanceMonths as Record<string, { leave_credits?: Credit[] }>) || {};
   for (const monthKey of Object.keys(months)) {
     const monthData = months[monthKey];
     for (const c of (monthData.leave_credits || [])) {

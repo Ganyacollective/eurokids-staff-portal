@@ -25,7 +25,15 @@ export async function GET(req: NextRequest) {
   const { data: link } = await admin.from("teacher_links").select("employee_id, display_name").eq("user_id", userId).maybeSingle();
   if (!link) return NextResponse.json({ error: "No employee link for this account." }, { status: 404 });
 
-  const { data: portal } = await admin.from("portal_state").select("data").eq("id", "main").maybeSingle();
+  // Attendance moved out of the portal_state blob into attendance_month, one
+  // row per month. Reading the blob for it now returns nothing and told every
+  // teacher "nothing published yet".
+  const [{ data: portal }, { data: monthRows }] = await Promise.all([
+    admin.from("portal_state").select("data").eq("id", "main").maybeSingle(),
+    admin.from("attendance_month").select("month, data"),
+  ]);
+  const attendanceMonths: Record<string, unknown> = {};
+  for (const r of monthRows || []) attendanceMonths[r.month] = r.data;
 
   // Pluck the employee record so we have monthly_salary for cut calculations
   type Emp = { id: string; monthly_salary?: number; reporting_minutes?: number; display_name?: string };
@@ -34,7 +42,7 @@ export async function GET(req: NextRequest) {
   const monthlySalary = Number(empRecord?.monthly_salary || 0);
   const empReportingMinutes = Number(empRecord?.reporting_minutes || 480);
 
-  const months = (portal?.data?.attendanceMonths as Record<string, {
+  const months = (attendanceMonths as Record<string, {
     reconciledDays?: Array<{ employee_id: string; date: string; dow?: number; status: string; in?: number | null; out?: number | null; late?: number; note?: string; forgiven?: boolean; is_overridden?: boolean; override_note?: string; override_prev_status?: string; scheduledMin?: number; isStrike?: boolean; leave_credit?: { leave_type: string }; }>;
     summaries?: Array<{ employee_id: string; fd?: number; lateStrikes?: number; halfLwp?: number; lwpDays?: number; clDays?: number; elDays?: number; weekOffs?: number; holidays?: number; vacationDays?: number; strikeHalfDays?: number; totalCutDays?: number }>;
     leave_credits?: Array<{ employee_id: string; date: string; leave_type: string }>;

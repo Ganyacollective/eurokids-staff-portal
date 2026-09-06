@@ -45,3 +45,23 @@ export async function requireHr(req: NextRequest): Promise<
 
   return { ok: true, userId: data.user.id, email };
 }
+
+/**
+ * HR may manage TEACHER accounts only. Without this check the HR login could
+ * reset the owner's password, or any finance/hub account's, and walk straight
+ * through the "HR cannot see money" boundary. A protected account is anything
+ * on the HR/owner list, anything holding a hub module, or anything with a
+ * profile role — i.e. everyone who is not a plain teacher.
+ */
+export async function isProtectedAccount(admin: SupabaseClient, email: string, userId?: string | null): Promise<boolean> {
+  const e = (email || "").toLowerCase();
+  if (HR_EMAILS.has(e) || e === "admin@eurokidsjmdenclave.org") return true;
+  if (!userId) return false;
+  const [{ data: mods }, { data: prof }] = await Promise.all([
+    admin.from("module_access").select("module").eq("user_id", userId).limit(1),
+    admin.from("profiles").select("role").eq("id", userId).maybeSingle(),
+  ]);
+  if (mods && mods.length) return true;
+  if (prof && prof.role && prof.role !== "teacher") return true;
+  return false;
+}

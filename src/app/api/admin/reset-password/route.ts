@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminClient, requireHr } from "../_lib";
+import { getAdminClient, requireHr, isProtectedAccount } from "../_lib";
 
 // POST /api/admin/reset-password
 // Body: { email, new_password? }
@@ -20,6 +20,9 @@ export async function POST(req: NextRequest) {
   const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
   const target = list?.users?.find((u) => (u.email || "").toLowerCase() === email);
   if (!target) return NextResponse.json({ error: "No user with that email" }, { status: 404 });
+  if (await isProtectedAccount(admin, email, target.id)) {
+    return NextResponse.json({ error: "That account is not a teacher account and cannot be changed from here." }, { status: 403 });
+  }
 
   const { error } = await admin.auth.admin.updateUserById(target.id, { password: new_password });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#FF2217">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="EuroKids Hub">
+<link rel="apple-touch-icon" href="/brand/icons/apple-touch-icon.png">
+<link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids Staff Portal — HR Console</title>
 <link rel="stylesheet" href="/brand/portal.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -590,6 +598,21 @@ async function _flushSave(){
     const dirty = Object.keys(live).filter(m => JSON.stringify(live[m]) !== _monthSnapshots[m]);
     const removed = Object.keys(_monthSnapshots).filter(m => !(m in live));
 
+    // Teachers apply for leave without signing in, and that path appends to the
+    // blob on the server. Before overwriting it with what this browser holds,
+    // pull in any application that arrived since we loaded — otherwise HR's
+    // next save silently erased it.
+    try {
+      const { data: fresh } = await sb.from('portal_state').select('data->leaves').eq('id', PORTAL_ROW_ID).maybeSingle();
+      const remote = (fresh && fresh.leaves) || [];
+      const have = new Set((state.leaves || []).map(l => l.id));
+      const missing = remote.filter(l => l && l.id && !have.has(l.id) && l.source === 'anonymous_portal');
+      if (missing.length) {
+        state.leaves = [...(state.leaves || []), ...missing];
+        console.info(`[saveState] merged ${missing.length} leave application(s) submitted while this page was open`);
+      }
+    } catch (_) { /* best effort — never block a save on this */ }
+
     let { error } = await sb.from('portal_state')
       .upsert({ id: PORTAL_ROW_ID, data: stripMonths(state), updated_at: stamp });
 
@@ -604,10 +627,13 @@ async function _flushSave(){
     }
 
     if (!error && dirty.length) {
-      const res = await sb.from('attendance_month').upsert(
-        dirty.map(m => ({ month: m, data: live[m], updated_at: stamp })));
+      // Serialise BEFORE the upload. A re-run that replaced a month object
+      // mid-flight would otherwise be snapshotted as "already saved".
+      const payload = dirty.map(m => ({ month: m, data: live[m], updated_at: stamp }));
+      const snap = Object.fromEntries(dirty.map(m => [m, JSON.stringify(live[m])]));
+      const res = await sb.from('attendance_month').upsert(payload);
       if (res.error) error = res.error;
-      else dirty.forEach(m => { _monthSnapshots[m] = JSON.stringify(live[m]); });
+      else Object.assign(_monthSnapshots, snap);
     }
     if (!error && removed.length) {
       const res = await sb.from('attendance_month').delete().in('month', removed);
@@ -817,18 +843,26 @@ function reconcile(rawRows, month){
   function leavesFor(empId, date){ return approvedLeaves.find(L => L.employee_id === empId && date >= L.start_date && date <= L.end_date); }
 
   const reconciledDays = []; const anomalies = []; const empSummary = new Map();
+  const monthStart = month + "-01";
+  const monthEnd = month + `-${String(daysInMonth(month)).padStart(2,'0')}`;
   function ensure(emp){
     let s = empSummary.get(emp.id);
     if (!s) { s = { employee_id: emp.id, employee: emp, fd:0, lateStrikes:0, halfLwp:0, lwpDays:0, clDays:0, elDays:0, weekOffs:0, holidays:0, vacationDays:0, satAbsences:0, satRefunds:0, satExcess:0, strikeHalfDays:0, totalCutDays:0, lateDetails:[] }; empSummary.set(emp.id, s); }
     return s;
   }
 
+  // One anomaly per unknown name, with a row count — not one per row, which
+  // produced hundreds and made the Anomalies page unreadable.
+  const unmatchedNames = new Map();
+  let outsideRows = 0;
   rawRows.forEach((row, idx) => {
     const emp = empByName(row.raw_name);
-    if (!emp) { anomalies.push({ id: uid(), kind:"name_mismatch", description:`PetPooja name "${row.raw_name}" doesn't match any employee. Add them under Employees, or correct spelling.` }); return; }
-    if (!emp.is_active) return;
-
+    if (!emp) { unmatchedNames.set(row.raw_name, (unmatchedNames.get(row.raw_name) || 0) + 1); return; }
     const date = row.attendance_date;
+    if (date < monthStart || date > monthEnd) { outsideRows++; return; }
+    // Archived staff still worked up to their leaving date; dropping every row
+    // deleted their final month's pay from the salary sheet on any re-run.
+    if (!emp.is_active && (!emp.left_date || date > emp.left_date)) return;
     // Days before the employee joined are ignored entirely — no LWP, no strikes,
     // no phantom absences for months before they existed on the roster.
     if (emp.joining_date && date < emp.joining_date) return;
@@ -1081,8 +1115,16 @@ function reconcile(rawRows, month){
       s.lateStrikes--;
       s.lateDetails = s.lateDetails.filter(ld => ld.date !== adj.date);
     } else if (adj.kind === 'forgive_lwp' && day.status === "LWP") {
+      // Change the status itself. Adjusting only the counter meant a later
+      // recount (triggered by any day override for this employee) restored
+      // the cut — a teacher was told she lost half a day HR had forgiven.
+      day.forgiven_from = day.status;
+      day.status = "FullDay";
       s.lwpDays--;
+      s.fd++;
     } else if (adj.kind === 'forgive_halflwp' && day.status === "HalfLWP") {
+      day.forgiven_from = day.status;
+      day.status = "FullDay";
       s.halfLwp--;
       s.fd += 0.5; // promote half day back to full
       s.lateDetails = s.lateDetails.filter(ld => ld.date !== adj.date);
@@ -1093,6 +1135,19 @@ function reconcile(rawRows, month){
   for (const s of empSummary.values()) {
     s.strikeHalfDays = Math.floor(s.lateStrikes / STRIKE_TO_HALF_DAY);
     s.totalCutDays = s.lwpDays + 0.5 * (s.strikeHalfDays + s.halfLwp);
+  }
+  for (const [name, rows] of unmatchedNames) {
+    anomalies.push({ id: uid(), kind:"name_mismatch", description:`PetPooja name "${name}" (${rows} row${rows===1?'':'s'}) doesn't match any employee. Add them under Employees, or correct the spelling.` });
+  }
+  if (outsideRows) {
+    anomalies.push({ id: uid(), kind:"name_mismatch", description:`${outsideRows} row${outsideRows===1?'':'s'} in the file fell outside ${month} and were ignored. Check the month selected before importing.` });
+  }
+  // An active employee with no rows at all used to vanish from the salary
+  // sheet entirely — no summary, no anomaly, no pay line. Make them visible.
+  for (const emp of state.employees.filter(e => e.is_active)) {
+    if (empSummary.has(emp.id)) continue;
+    if (emp.joining_date && emp.joining_date > monthEnd) continue;
+    ensure(emp);
   }
   for (const s of empSummary.values()) {
     if (s.fd === 0 && s.clDays === 0 && s.elDays === 0 && s.vacationDays === 0)
@@ -1128,8 +1183,6 @@ function reconcile(rawRows, month){
   // the leave was misdated (i.e. should be moved to the LWP date). The two
   // anomalies coexist and don't suppress each other.
   const leave_credits = [];
-  const monthStart = month + "-01";
-  const monthEnd = month + `-${String(daysInMonth(month)).padStart(2,'0')}`;
   for (const L of state.leaves.filter(x => x.status === "Approved" && x.start_date <= monthEnd && x.end_date >= monthStart)) {
     const empReconciled = reconciledDays.filter(d => d.employee_id === L.employee_id);
     const start = new Date(L.start_date+"T00:00:00Z").getTime();
@@ -1285,7 +1338,12 @@ async function runReconciliation(){
   if (rawRows.length === 0) return showResult("No rows parsed.", "err");
 
   const result = reconcile(rawRows, month);
-  state.attendanceMonths[month] = { rawRows, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], importedAt: new Date().toISOString() };
+  // A fresh import must not silently un-publish a month teachers can already
+  // see. Keep the publish stamp, and make the overwrite an explicit choice.
+  const prev = state.attendanceMonths[month];
+  if (prev && prev.published_at && !confirm(`${month} is already published to teachers. Re-import and replace it?`)) return;
+  state.attendanceMonths[month] = { rawRows, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], importedAt: new Date().toISOString(),
+    ...(prev && prev.published_at ? { published_at: prev.published_at, published_by: prev.published_by } : {}) };
   state.activeMonth = month;
   saveState();
   showResult(`✓ Imported ${rawRows.length} rows · ${result.summaries.length} per-employee summaries · ${result.anomalies.length} anomalies flagged`, "ok");
@@ -1514,7 +1572,7 @@ function renderDashboard(){
   const pendList = state.leaves.filter(L => L.status === "Pending").slice(0, 5);
   const pendEl = document.getElementById('pending-leaves-preview');
   if (pendList.length === 0) pendEl.innerHTML = '<div class="text-gray-400 italic">All caught up.</div>';
-  else pendEl.innerHTML = pendList.map(L => { const e = empById(L.employee_id); return `<div class="py-2 border-b border-gray-100 last:border-0"><div class="flex items-center justify-between"><div><span class="font-medium">${e?.display_name||"?"}</span> · <span class="badge ${L.leave_type==='EL'?'b-el':L.leave_type==='CL'?'b-cl':'b-lwp'}">${L.leave_type}</span></div><div class="text-xs text-gray-500">${fmtDateShort(L.start_date)} → ${fmtDateShort(L.end_date)}</div></div><div class="text-xs text-gray-500 mt-1">${L.reason||''}</div></div>`; }).join('');
+  else pendEl.innerHTML = pendList.map(L => { const e = empById(L.employee_id); return `<div class="py-2 border-b border-gray-100 last:border-0"><div class="flex items-center justify-between"><div><span class="font-medium">${e?.display_name||"?"}</span> · <span class="badge ${L.leave_type==='EL'?'b-el':L.leave_type==='CL'?'b-cl':'b-lwp'}">${L.leave_type}</span></div><div class="text-xs text-gray-500">${fmtDateShort(L.start_date)} → ${fmtDateShort(L.end_date)}</div></div><div class="text-xs text-gray-500 mt-1">${escapeHtml(L.reason||'')}</div></div>`; }).join('');
 
   // Anomalies preview
   const anomList = (m?.anomalies||[]).slice(0, 5);
@@ -1947,7 +2005,7 @@ function renderLeaves(){
       <td><span class="badge ${L.leave_type==='EL'?'b-el':L.leave_type==='CL'?'b-cl':'b-lwp'}">${L.leave_type}</span></td>
       <td class="text-gray-600">${fmtDateShort(L.start_date)} → ${fmtDateShort(L.end_date)}</td>
       <td>${L.total_days}</td>
-      <td class="text-gray-600 text-xs max-w-xs">${L.reason||''}</td>
+      <td class="text-gray-600 text-xs max-w-xs">${escapeHtml(L.reason||'')}</td>
       <td><span class="badge ${L.status==='Approved'?'b-approved':L.status==='Rejected'?'b-rejected':'b-pending'}">${L.status}</span></td>
       <td>${editButton}${actionButtons}${deleteButton}</td>
     </tr>`;
@@ -2219,7 +2277,7 @@ function renderReports(){
       const labelsMap = { forgive_late: "Late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP" };
       return `<div class="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6">
         <h3 class="text-sm font-semibold text-green-800 mb-2">✓ Forgiven this month (${empAdj.length})</h3>
-        <ul class="text-sm text-green-900 space-y-1">${empAdj.map(a => `<li>• ${labelsMap[a.kind]||'Cut'} on <b>${fmtDate(a.date)}</b> — ${a.reason} <button onclick="openForgiveModal('${viewingEmployeeId}','${a.date}','${a.kind}')" class="btn-link" style="margin-left:8px;font-size:12px">undo</button></li>`).join('')}</ul>
+        <ul class="text-sm text-green-900 space-y-1">${empAdj.map(a => `<li>• ${labelsMap[a.kind]||'Cut'} on <b>${fmtDate(a.date)}</b> — ${escapeHtml(a.reason)} <button onclick="openForgiveModal('${viewingEmployeeId}','${a.date}','${a.kind}')" class="btn-link" style="margin-left:8px;font-size:12px">undo</button></li>`).join('')}</ul>
       </div>`;
     })()}
     ${lateDetails.length ? `
@@ -3016,7 +3074,7 @@ function openLeaveForm(id){
         <div><label class="text-xs font-medium text-gray-700 block mb-1">End date *</label><input id="lf-end" type="date" class="input" value="${L?.end_date||''}" /></div>
       </div>
       <div><label class="text-xs font-medium text-gray-700 block mb-1">Total days</label><input id="lf-days" type="number" step="0.5" class="input" value="${L?.total_days||1}" /></div>
-      <div><label class="text-xs font-medium text-gray-700 block mb-1">Reason</label><input id="lf-reason" class="input" value="${L?.reason||''}" /></div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Reason</label><input id="lf-reason" class="input" value="${escapeHtml(L?.reason||'')}" /></div>
       <div><label class="text-xs font-medium text-gray-700 block mb-1">Reviewer note (for rejections)</label><input id="lf-note" class="input" value="${L?.reviewer_note||''}" /></div>
       <div class="flex gap-2 pt-3">
         <button onclick="saveLeave('${id||''}')" class="btn-primary flex-1">${isEdit?'Save changes':'Create'}</button>
@@ -3139,6 +3197,13 @@ document.querySelectorAll('.nav-link').forEach(a => a.addEventListener('click', 
     alert('Could not initialise the portal: ' + e.message);
   }
 })();
+</script>
+<script>
+  // Installable: registers the service worker that caches the app shell so the
+  // hub opens instantly from a phone or desktop home screen.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
 </script>
 </body>
 </html>

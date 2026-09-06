@@ -51,6 +51,6 @@ export const config = {
     // Static assets must never touch the auth check: it costs a Supabase round
     // trip per request, and a stylesheet redirected to /login silently breaks
     // the page it was meant to style.
-    "/((?!api|_next/static|_next/image|brand/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|woff|woff2|ttf)$).*)",
+    "/((?!api|_next/static|_next/image|brand/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|woff|woff2|ttf|webmanifest)$).*)",
   ],
 };

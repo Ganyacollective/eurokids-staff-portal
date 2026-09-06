@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminClient, requireHr } from "../_lib";
+import { getAdminClient, requireHr, isProtectedAccount } from "../_lib";
 
 // POST /api/admin/create-teacher
 // Body: { email, password, employee_id, display_name, department, designation }
@@ -71,6 +71,9 @@ export async function POST(req: NextRequest) {
       userId = found.id;
 
       // Update the password on the existing user
+      if (await isProtectedAccount(admin, email, userId)) {
+        return NextResponse.json({ error: "That email belongs to a hub or HR account, not a teacher. It cannot be changed from here." }, { status: 403 });
+      }
       const { error: updErr } = await admin.auth.admin.updateUserById(userId, {
         password,
         user_metadata: { display_name, employee_id, department },
