@@ -400,3 +400,18 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 .heatn{font-size:var(--fs-sub);color:var(--label-2);margin-left:6px;font-weight:600}
 #eq-table td{vertical-align:top}
 #eq-table .chip{margin:1px 2px 1px 0}
+
+/* the sheet can take the whole screen when a record needs room */
+.drawer.wide{width:min(1100px,100vw)}
+.drawer.narrow{width:min(400px,100vw)}
+#drawer-wide{font-size:13px}
+@media(max-width:767px){.drawer,.drawer.wide{width:100vw}#drawer-wide{display:none}}
+
+/* filter cards: name on top, operator + value on one line under it */
+.fcard .fhead{margin-bottom:8px}
+.fcard .fdel{font-size:12px;width:24px;height:24px;border-radius:50%;background:var(--fill);display:inline-flex;align-items:center;justify-content:center}
+.fcard .frow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fcard .frow select.fop{flex:0 0 auto;max-width:52%;border:1px solid rgba(0,0,0,.12);background:var(--field);border-radius:8px;padding:6px 8px;font-size:var(--fs-co);color:var(--label);appearance:auto}
+.fcard .frow .in{flex:1 1 120px;min-width:0;margin-top:0}
+.fcard .seg{margin-top:0}
+.fand{font-size:var(--fs-sub);text-transform:uppercase;letter-spacing:.06em}

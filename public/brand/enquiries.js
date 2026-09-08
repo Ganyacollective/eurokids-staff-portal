@@ -274,7 +274,7 @@ function eqRun(){
 
 // The filter panel: one card per condition, add as many as you like.
 function openEnqFilter(){
-  const dr = el('drawer'); const body = openDrawer('Filter', ''); dr.classList.add('narrow');
+  const body = openDrawer('Filter', ''); const dr = el('drawer'); dr.classList.add('narrow');
   _afterDrawerClose = () => dr.classList.remove('narrow');
   const paint = () => {
     el('drawer-sub').textContent = `${_eq.last.length} of ${_eq.rows.length} enquiries`;
@@ -465,7 +465,7 @@ async function openEnquiry(id){
       ...(calls || []).map(c => ({ at: c.started_at, kind: c.status === 'missed' ? 'missed_call' : c.direction === 'outbound' ? 'call_out' : 'call_in', summary: `${c.status === 'missed' ? 'Missed call' : c.direction === 'outbound' ? 'We called' : 'They called'}${c.agent ? ' · ' + c.agent : ''}${c.duration_s ? ' · ' + c.duration_s + 's' : ''}`, actor: c.agent, rec: c.recording_url })),
     ].sort((a, z) => (z.at || '').localeCompare(a.at || ''));
     el('en-timeline').innerHTML = items.map(x => `<div class="note"><span style="margin-right:6px">${EVENT_ICON[x.kind] || '•'}</span>${esc(x.summary || x.kind)}${x.rec ? ` <a href="${esc(x.rec)}" target="_blank" rel="noopener">▶︎ recording</a>` : ''}
-        <div class="who"><span>${esc(x.actor || '')} · ${dtLocal(x.at)}</span>${x.noteId ? `<a href="#" class="en-delnote" data-id="${x.noteId}">Remove</a>` : ''}</div></div>`).join('') || '<div class="note hint">Nothing yet.</div>';
+        <div class="who"><span>${x.noteId ? 'Added by <strong>' + esc(x.actor || 'someone') + '</strong>' : esc(x.actor || 'system')} · ${dtLocal(x.at)}</span>${x.noteId ? `<a href="#" class="en-delnote" data-id="${x.noteId}">Remove</a>` : ''}</div></div>`).join('') || '<div class="note hint">Nothing yet.</div>';
     el('en-timeline').querySelectorAll('.en-delnote').forEach(a => a.onclick = async ev => { ev.preventDefault(); if (!confirm('Remove this note?')) return; await s.from('enquiry_note').delete().eq('id', Number(a.dataset.id)); enqRefresh(); openEnquiry(id); });
   };
   drawTimeline();

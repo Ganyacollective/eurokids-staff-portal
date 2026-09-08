@@ -595,7 +595,10 @@ const describeCond = c => {
 // Coda-style filter panel: one card per filter, a control that fits the
 // field's type, a searchable list to add another. Live count at the top.
 function openFilterPanel(){
-  const dr = el('drawer'); const body = openDrawer('Filter', ''); dr.classList.add('narrow');
+  // openDrawer builds the drawer on first use, so the element must be read
+  // *after* it, not before — otherwise the very first Filter of a session
+  // threw on a null and left the panel saying "Loading…" forever.
+  const body = openDrawer('Filter', ''); const dr = el('drawer'); dr.classList.add('narrow');
   _afterDrawerClose = () => { dr.classList.remove('narrow'); };
   const enumVals = k => [...new Set(_views.rows.map(r => r[k]).filter(v => v != null && v !== ''))].sort();
   const paint = () => {
@@ -616,11 +619,12 @@ function openFilterPanel(){
       }
       const opSel = (f.t === 'bool' || f.t === 'exists') ? '' :
         `<select class="fop fopsel" data-i="${i}">${ops.map(o => `<option value="${o[0]}" ${o[0]===c.op?'selected':''}>${o[1]}</option>`).join('')}</select>`;
-      return `${i ? '<div class="fand">And</div>' : ''}
-        <div class="fcard"><div class="fhead"><div><div class="fname">${esc(f.l)}</div>${opSel}</div>
-          <button class="fdel" data-i="${i}" title="Remove">🗑</button></div>${ctl}</div>`;
+      return `${i ? '<div class="fand">and</div>' : ''}
+        <div class="fcard"><div class="fhead"><div class="fname">${esc(f.l)}</div>
+          <button class="fdel" data-i="${i}" aria-label="Remove this filter">✕</button></div>
+          <div class="frow">${opSel}${ctl}</div></div>`;
     }).join('');
-    body.innerHTML = `${cards || '<div class="hint" style="margin-top:12px">No filters — showing everyone.</div>'}
+    body.innerHTML = `${cards || '<div class="empty" style="padding:26px 8px"><div class="ic">⚲</div><h3>No filters</h3><div>Showing all ' + total + ' children. Add one to narrow it down.</div></div>'}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
         <button class="btn line sm" id="fadd">+ Add filter</button>
         ${_views.conds.length ? '<a href="#" id="fclear" class="hint">Remove all</a>' : ''}</div>
@@ -2137,15 +2141,28 @@ function openDrawer(title, subtitle){
       `<div id="drawer-bg" class="drawer-bg"></div>
        <aside id="drawer" class="drawer" role="dialog" aria-modal="true">
          <div class="drawer-hd"><div><h2 id="drawer-title"></h2><div class="hint" id="drawer-sub"></div></div>
-           <button class="drawer-x" id="drawer-x" aria-label="Close">×</button></div>
+           <div style="display:flex;gap:6px;flex:none">
+             <button class="drawer-x" id="drawer-wide" aria-label="Expand" title="Expand to full width">⤢</button>
+             <button class="drawer-x" id="drawer-x" aria-label="Close">×</button></div></div>
          <div class="drawer-body" id="drawer-body"></div>
          <div class="drawer-foot" id="drawer-foot"></div>
        </aside>`);
     bg = el('drawer-bg'); dr = el('drawer');
     bg.onclick = closeDrawer; el('drawer-x').onclick = closeDrawer;
+    // Wide is a preference, not a per-child decision, so it is remembered.
+    el('drawer-wide').onclick = () => {
+      const on = !dr.classList.contains('wide');
+      dr.classList.toggle('wide', on);
+      el('drawer-wide').textContent = on ? '⤡' : '⤢';
+      el('drawer-wide').title = on ? 'Back to the side panel' : 'Expand to full width';
+      try { localStorage.setItem('ek-drawer-wide', on ? '1' : ''); } catch (_) {}
+    };
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
   }
   el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
+  let wide = false; try { wide = localStorage.getItem('ek-drawer-wide') === '1'; } catch (_) {}
+  dr.classList.toggle('wide', wide);
+  el('drawer-wide').textContent = wide ? '⤡' : '⤢';
   el('drawer-body').innerHTML = '<div class="loading">Loading…</div>';
   el('drawer-foot').innerHTML = '';
   requestAnimationFrame(() => { bg.classList.add('on'); dr.classList.add('on'); });
@@ -2442,7 +2459,7 @@ async function openPlan(uin){
       .select('id,body,author,created_at').eq('uin', uin).order('created_at', { ascending: false });
     el('cn-list').innerHTML = (notes || []).map(x => `
       <div class="note">${esc(x.body)}<div class="who">
-          <span>${esc(x.author || '')} · ${new Date(x.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+          <span>Added by <strong>${esc(x.author || 'someone')}</strong> · ${new Date(x.created_at).toLocaleString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
           <a href="#" data-id="${x.id}" class="cn-del">Remove</a></div></div>`).join('');
     document.querySelectorAll('.cn-del').forEach(a => a.onclick = async ev => {
       ev.preventDefault();
