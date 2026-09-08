@@ -1376,7 +1376,7 @@ async function tabCompose(){
       <code>{{amount_due}}</code>, <code>{{due_date}}</code> — each family sees their own.
     </div>
     <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
-      <input type="checkbox" id="cmp-fees"> Add each family’s own fee position underneath
+      <input type="checkbox" id="cmp-fees"> Add each family’s full fee statement underneath — every payment received, what’s left
     </label>
     <label class="lb" style="margin-top:12px">Attachments</label>
     <input id="cmp-files" type="file" multiple class="in">
@@ -2434,6 +2434,7 @@ async function openPlan(uin){
         <button class="btn line" id="pf-send" data-kind="welcome">Save &amp; send welcome letter</button>
         <button class="btn line" id="pf-send2" data-kind="schedule">Send schedule only</button>
         <button class="btn line" id="pf-send3" data-kind="receipt">Send paid-in-full receipt</button>
+        <button class="btn line" id="pf-send4" data-kind="statement">Send statement</button>
         <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;
                     border-top:1px solid var(--line);padding-top:12px;width:100%">
           <input class="in" id="pf-test-to" type="email" placeholder="your@email.com"
@@ -2442,6 +2443,7 @@ async function openPlan(uin){
             <option value="welcome">Welcome letter</option>
             <option value="schedule">Schedule only</option>
             <option value="receipt">Paid-in-full receipt</option>
+            <option value="statement">Fee statement</option>
           </select>
           <button class="btn line sm" id="pf-test">Send a test to me</button>
           <span class="hint">Goes only to this address — the parents are not copied.</span>
@@ -2595,6 +2597,7 @@ async function openPlan(uin){
                             (plan?.welcome_sent_at ? `\n\nThey were already sent one on ${
                               new Date(plan.welcome_sent_at).toLocaleDateString('en-IN')}. Send it again?` : '')
     : kind === 'schedule' ? `Email ${name}'s parents the payment schedule again?`
+    : kind === 'statement' ? `Email ${name}'s parents their fee statement — every payment received and ${owed > 1 ? money(owed) + ' still due' : 'nothing outstanding'}?`
     :                       `Tell ${name}'s parents their fees are fully paid?` +
                             (owed > 1 ? `\n\nCAREFUL — this family still owes ${money(owed)}. The letter will say nothing is outstanding.` : '');
     if (!confirm(ask)) return;
@@ -2625,6 +2628,7 @@ async function openPlan(uin){
   el('pf-send').onclick  = e => sendLetter(e.currentTarget);
   el('pf-send2').onclick = e => sendLetter(e.currentTarget);
   el('pf-send3').onclick = e => sendLetter(e.currentTarget);
+  el('pf-send4').onclick = e => sendLetter(e.currentTarget);
 
   // ── notes ──
   const drawNotes = async () => {

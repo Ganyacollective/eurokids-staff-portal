@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import {
-  renderEmail, textToHtml, moneyH, money, day, plainFooter,
-  SCHOOL_NAME, type ThemeKey,
+  renderEmail, textToHtml, money, day, plainFooter,
+  SCHOOL_NAME, statementHtml, statementText, type ThemeKey, type LedgerLine,
 } from "@/lib/brand-email";
 import { applyFilters, addressesFor, summarise, isRealAddress, type Filters, type ScheduleRow } from "@/lib/recipients";
 import { loadSchedule, bearer } from "@/lib/fee-data";
@@ -39,28 +39,6 @@ function merge(text: string, r: ScheduleRow) {
   return Object.entries(map).reduce((s, [k, v]) => s.split(k).join(v), String(text || ""));
 }
 
-// An optional per-child fee block appended under the message.
-function feeBlock(r: ScheduleRow) {
-  const owed = Number(r.true_due || 0);
-  if (owed <= 1) {
-    return `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px">
-      <tr><td style="padding:14px 16px">
-        <div style="font-weight:700;color:#15803D">All fees received — thank you</div>
-        <div style="color:#166534;font-size:13px;margin-top:2px">Balance outstanding: <strong>${moneyH(0)}</strong></div>
-      </td></tr></table>`;
-  }
-  const rows = [
-    ["Fee for the year", moneyH(r.final_fee || r.total_fee || 0)],
-    ...(Number(r.our_discount || 0) > 0 ? [["Special discount", "− " + moneyH(r.our_discount)]] : []),
-    ["Received so far", "− " + moneyH(Number(r.collected || 0) + Number(r.uncredited_cash || 0))],
-  ];
-  return `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
-    ${rows.map(([k, v]) => `<tr><td style="padding:6px 0;color:#4B5563">${k}</td><td style="padding:6px 0;text-align:right">${v}</td></tr>`).join("")}
-    <tr><td style="padding:10px 0;border-top:2px solid #1A202C;font-weight:700">Amount now due</td>
-        <td style="padding:10px 0;border-top:2px solid #1A202C;text-align:right;font-weight:700;font-size:16px">${moneyH(r.true_due)}</td></tr>
-    ${r.next_due_date ? `<tr><td colspan="2" style="padding-top:8px;color:#4B5563;font-size:13px">Due on <strong>${day(r.next_due_date)}</strong></td></tr>` : ""}
-  </table>`;
-}
 
 // POST /api/fees/bulk-send
 export async function POST(req: NextRequest) {
@@ -110,21 +88,32 @@ export async function POST(req: NextRequest) {
   sum.reachable += extras.length;
   sum.addresses += extras.length;
 
+  // Each family's dated payments, for the statement block.
+  const ledgerBy = new Map<string, LedgerLine[]>();
+  if (body.includeFees && matched.length) {
+    const admin0 = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: led } = await admin0.schema("eurokids").from("v_child_ledger")
+      .select("uin,on_date,description,mode,amount,counts_to_fees,still_held,source")
+      .in("uin", matched.map((r) => r.uin));
+    for (const l of (led || []) as (LedgerLine & { uin: string })[]) {
+      if (!ledgerBy.has(l.uin)) ledgerBy.set(l.uin, []);
+      ledgerBy.get(l.uin)!.push(l);
+    }
+  }
+
   const attachments = (body.attachments || [])
     .filter((a) => a && a.filename && a.content)
     .map((a) => ({ filename: a.filename, content: a.content }));
 
   const build = (r: ScheduleRow) => {
-    const bodyHtml = textToHtml(merge(message, r)) + (body.includeFees ? feeBlock(r) : "");
+    const bodyHtml = textToHtml(merge(message, r)) + (body.includeFees ? statementHtml(r, ledgerBy.get(r.uin) || []) : "");
     return {
       html: renderEmail({
         title: merge(body.title || subject, r),
         subtitle: `${r.student_name}${r.program_name ? " · " + r.program_name : ""}`,
         bodyHtml, theme: body.theme,
       }),
-      text: [merge(message, r), ...(body.includeFees && Number(r.true_due || 0) > 1
-        ? ["", `Amount now due: ${money(r.true_due)}`,
-           ...(r.next_due_date ? [`Due on: ${day(r.next_due_date)}`] : [])] : []),
+      text: [merge(message, r), ...(body.includeFees ? ["", statementText(r, ledgerBy.get(r.uin) || [])] : []),
         plainFooter()].join("\n"),
     };
   };

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME } from "@/lib/brand-email";
+import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME, statementHtml, statementText, type LedgerLine } from "@/lib/brand-email";
 import { loadSchedule, bearer } from "@/lib/fee-data";
 import { addressesFor, type ScheduleRow } from "@/lib/recipients";
 
@@ -10,7 +10,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || `${SCHOOL_NAME} <admin@eurokidsjmdenclave.org>`;
 const CC = "admin@eurokidsjmdenclave.org";
 
-type Kind = "welcome" | "schedule" | "receipt";
+type Kind = "welcome" | "schedule" | "receipt" | "statement";
 
 // POST /api/fees/welcome-email  { uin, kind }
 //  welcome  — the warm first letter, sent once when a child joins
@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   const uin = (body.uin || "").trim();
   if (!uin) return NextResponse.json({ error: "uin required" }, { status: 400 });
-  const kind: Kind = body.kind === "schedule" ? "schedule" : body.kind === "receipt" ? "receipt" : "welcome";
+  const kind: Kind = body.kind === "schedule" ? "schedule" : body.kind === "receipt" ? "receipt"
+                   : body.kind === "statement" ? "statement" : "welcome";
   if (!body.preview && !RESEND_API_KEY) {
     return NextResponse.json({ error: "RESEND_API_KEY is not configured in Vercel." }, { status: 400 });
   }
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   const { data: items } = await a.schema("eurokids").from("payment_plan_item")
     .select("seq, amount, due_date, label").eq("uin", uin).order("seq");
 
-  if (kind !== "receipt" && !items?.length) {
+  if (kind !== "receipt" && kind !== "statement" && !items?.length) {
     return NextResponse.json({
       error: "This child has no payment schedule yet. Add the instalments first — that is the coordinator's job before any letter goes out.",
     }, { status: 400 });
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   // A letter quoting a zero fee is worse than no letter — it tells the parent
   // they owe nothing. Refuse rather than embarrass the school.
-  if (finalFee <= 0 && kind !== "receipt") {
+  if (finalFee <= 0 && kind !== "receipt" && kind !== "statement") {
     return NextResponse.json({
       error: "This child's fee is still ₹0. Set the agreed fee before sending anything to the parent.",
     }, { status: 400 });
@@ -74,12 +75,16 @@ export async function POST(req: NextRequest) {
   // too much and it bills for money never agreed. Either way the parent gets a
   // letter whose own numbers disagree.
   const scheduled = (items || []).reduce((s, i) => s + Number(i.amount || 0), 0);
-  if (kind !== "receipt" && finalFee > 0 && Math.abs(scheduled - finalFee) > 1) {
+  if (kind !== "receipt" && kind !== "statement" && finalFee > 0 && Math.abs(scheduled - finalFee) > 1) {
     const over = scheduled > finalFee;
     return NextResponse.json({
       error: `The instalments add up to ₹${scheduled.toLocaleString("en-IN")} but the agreed fee is ₹${finalFee.toLocaleString("en-IN")} — ${over ? "₹" + (scheduled - finalFee).toLocaleString("en-IN") + " too much" : "₹" + (finalFee - scheduled).toLocaleString("en-IN") + " short"}. Fix the schedule before sending, or the parent receives a letter that contradicts itself.`,
     }, { status: 400 });
   }
+  const { data: ledgerRows } = await a.schema("eurokids").from("v_child_ledger")
+    .select("on_date,description,mode,amount,counts_to_fees,still_held,source").eq("uin", uin).order("on_date");
+  const ledger = (ledgerRows || []) as LedgerLine[];
+
   const discount = Number(child.our_discount || 0);
   // Everything the family has actually paid us: what EuroKids has recorded plus
   // cash we are holding that has not been posted to them yet.
@@ -98,6 +103,9 @@ export async function POST(req: NextRequest) {
       <p>Dear Parent,</p>
       <p>Thank you — the fees for <strong>${esc(child.student_name)}</strong> are fully settled for this academic year. Nothing further is outstanding.</p>
       <p>Please keep this email as your record of payment.</p>`
+    : kind === "statement" ? `
+      <p>Dear Parent,</p>
+      <p>Here is the fee statement for <strong>${esc(child.student_name)}</strong> (${esc(child.program_name)}) for this academic year, showing every payment we have received and what remains.</p>`
     : `
       <p>Dear Parent,</p>
       <p>As requested, here is the payment schedule for <strong>${esc(child.student_name)}</strong> (${esc(child.program_name)}) for this academic year.</p>
@@ -107,7 +115,9 @@ export async function POST(req: NextRequest) {
   const line = (k: string, v: string, strong = false) =>
     `<tr><td style="padding:6px 0;color:#4B5563">${k}</td><td style="padding:6px 0;text-align:right${strong ? ";font-weight:700" : ""}">${v}</td></tr>`;
 
-  const summary = kind === "receipt"
+  const summary = kind === "statement"
+    ? statementHtml(child, ledger)
+    : kind === "receipt"
     ? `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
          ${line("Fee for the year", moneyH(Number(child.total_fee || finalFee)))}
          ${discount > 0 ? line("Special discount", `<span style="color:#15803D">− ${moneyH(discount)}</span>`) : ""}
@@ -134,7 +144,7 @@ export async function POST(req: NextRequest) {
     </tr>`;
   }).join("");
 
-  const schedule = kind === "receipt" || !rowsHtml ? "" : `
+  const schedule = kind === "receipt" || kind === "statement" || !rowsHtml ? "" : `
     <div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6B7280;margin:22px 0 8px">Payment schedule</div>
     <table style="width:100%;border-collapse:collapse;font-size:14px;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden">
       <thead><tr style="background:#F3F6FB">
@@ -145,20 +155,26 @@ export async function POST(req: NextRequest) {
       <tbody>${rowsHtml}</tbody>
     </table>`;
 
-  const terms = kind === "receipt" ? "" : `
+  const terms = (kind === "receipt" || kind === "statement") ? "" : `
     <p style="margin-top:20px">Payments are due within 10 days of the invoice being generated. Late payments attract a late fee, and all fees are non-refundable.</p>
     ${discount > 0 ? `<p style="font-size:13px;background:#FFF9E6;border-left:3px solid #FFC737;padding:10px 14px;border-radius:0 8px 8px 0">Please note: the invoice generated by EuroKids will display the standard fee. <strong>The discounted amounts in this letter are what apply to you.</strong></p>` : ""}`;
 
   const html = renderEmail({
     title: kind === "welcome" ? `Welcome to ${SCHOOL_NAME}`
          : kind === "receipt" ? "Fees fully paid — thank you"
+         : kind === "statement" ? "Your fee statement"
          : "Your fee payment schedule",
     subtitle: `${child.student_name} · ${child.program_name}`,
     theme: kind === "receipt" ? "calm" : "school",
+    footerNote: kind === "statement" ? `Statement as of ${day(new Date().toISOString().slice(0,10))}. Cash or UPI paid at the school may take a few days to reflect on EuroKids' own records; this statement already includes it.` : undefined,
     bodyHtml: opening + summary + schedule + terms,
   });
 
-  const text = [
+  const text = kind === "statement" ? [
+    "Your fee statement", "", "Dear Parent,", "",
+    `Fee statement for ${child.student_name} (${child.program_name}):`, "",
+    statementText(child, ledger), plainFooter(),
+  ].join("\n") : [
     kind === "welcome" ? `Welcome to ${SCHOOL_NAME}`
       : kind === "receipt" ? "Fees fully paid — thank you" : "Your fee payment schedule", "",
     `Dear Parent,`, "",
@@ -183,6 +199,7 @@ export async function POST(req: NextRequest) {
   const subject =
     kind === "welcome" ? `Welcome to ${SCHOOL_NAME} | Fee Payment Schedule for ${child.student_name}`
     : kind === "receipt" ? `Fees fully paid — thank you | ${child.student_name}`
+    : kind === "statement" ? `Fee statement for ${child.student_name} | ${SCHOOL_NAME}`
     : `Fee Payment Schedule for ${child.student_name} | ${SCHOOL_NAME}`;
 
   // A test goes to one chosen address and nowhere near the parents, so the
