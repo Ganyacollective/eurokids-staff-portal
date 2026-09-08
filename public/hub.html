@@ -15,467 +15,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<style>
-:root{
-  --bone:#FFFFFF; --card:#FFF; --ink:#1A1A1A; --muted:#6B6B6B; --faint:#9A968F;
-  --line:#E8EAED; --line-2:#CBD0D6; --brand:#FF2217; --accent:#1F4FD8; --accent-wash:#EAF0FF; --bar:#000;
-  --good:#1E7A4B; --good-wash:#E8F3ED; --warn:#9A6410; --warn-wash:#FAF0DF;
-  --crit:#B32519; --crit-wash:#FBEBE9; --r:12px;
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bone);color:var(--ink);font-family:Inter,-apple-system,"Helvetica Neue",system-ui,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
-h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.02em}
-button,input,select{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
-.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
-.topbar{height:26px;background:var(--bar)}
-.chrome{display:flex;align-items:center;justify-content:space-between;padding:18px 34px;gap:16px;flex-wrap:wrap}
-@media(max-width:560px){.chrome{padding:14px 18px}}
-.brand{display:flex;align-items:center;gap:11px;font-weight:600;font-size:15px}
-.dot{width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#FF7A5C,var(--brand) 62%,#A81E12);filter:blur(.4px)}
-.chromeR{display:flex;align-items:center;gap:20px;font-size:13.5px;color:var(--muted)}
-.chromeR a{color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
-.stage{max-width:1180px;margin:0 auto;padding:0 34px 90px}
-@media(max-width:560px){.stage{padding:0 18px 60px}}
-.chooser{min-height:60vh;display:flex;flex-direction:column;justify-content:center;max-width:940px}
-.hello{font-size:46px;font-weight:700;letter-spacing:-.035em}
-.askline{color:var(--muted);font-size:16px;margin-top:6px}
-.deck{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:22px;margin-top:38px}
-.door{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:26px 26px 22px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:9px;box-shadow:0 1px 3px rgba(26,26,26,.06),0 4px 14px -6px rgba(26,26,26,.08);transition:box-shadow .18s,transform .18s,border-color .18s;width:100%}
-.door:hover:not(.shut){box-shadow:0 6px 22px rgba(26,26,26,.09);transform:translateY(-2px);border-color:var(--line-2)}
-.door h3{font-size:19px;font-weight:600}
-.door p{margin:0;color:var(--muted);font-size:14px}
-.door .open{color:var(--accent);font-weight:500;margin-top:8px}
-.door.shut{background:transparent;cursor:not-allowed;box-shadow:none}
-.door.shut h3,.door.shut p,.door.shut .open{color:var(--faint)}
-.doorwrap{position:relative;display:flex}
-.soon{position:absolute;top:22px;right:22px;font-size:11.5px;color:var(--faint);background:var(--bone);border-radius:999px;padding:3px 11px}
-.crumb{display:flex;align-items:center;gap:9px;padding:22px 0 6px;font-size:13.5px;color:var(--muted)}
-.crumb button{background:none;border:0;color:var(--accent);cursor:pointer;padding:0;font-weight:500}
-.tabs{display:flex;gap:5px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:26px}
-.tab{background:none;border:0;border-bottom:2px solid transparent;padding:9px 13px;cursor:pointer;color:var(--muted);font-weight:500;margin-bottom:-1px}
-.tab:hover{color:var(--ink)} .tab.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
-.ph{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:22px}
-.ph h1{font-size:28px;font-weight:700}
-.ph .s{color:var(--muted);font-size:14px;margin-top:4px;max-width:62ch}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(172px,1fr));gap:14px;margin-bottom:24px}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 17px}
-.stat .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600}
-.stat .v{font-family:"IBM Plex Mono",monospace;font-size:24px;font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin-top:7px}
-.stat .m{font-size:12px;color:var(--muted);margin-top:4px}
-.stat.acc .v{color:var(--accent)} .stat.good .v{color:var(--good)}
-.stat.warn .v{color:var(--warn)} .stat.crit .v{color:var(--crit)}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:20px;overflow:hidden}
-.ptop{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
-.ptop h2{font-size:15px;font-weight:600}
-.pbody{padding:18px}
-.hint{font-size:12.5px;color:var(--muted);line-height:1.55}
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:13.5px}
-th{text-align:left;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);font-weight:600;padding:10px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:11px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
-tr:last-child td{border-bottom:0}
-tbody tr:hover{background:var(--bone)}
-td.r,th.r{text-align:right}
-.chip{display:inline-block;font-size:11.5px;font-weight:500;padding:3px 9px;border-radius:999px}
-.c-good{background:var(--good-wash);color:var(--good)} .c-warn{background:var(--warn-wash);color:var(--warn)}
-.c-crit{background:var(--crit-wash);color:var(--crit)} .c-mute{background:var(--bone);color:var(--faint)}
-.c-acc{background:var(--accent-wash);color:var(--accent)}
-.btn{background:var(--ink);color:var(--bone);border:0;border-radius:9px;padding:11px 18px;font-weight:500;cursor:pointer}
-.btn:hover{opacity:.87} .btn:disabled{opacity:.5;cursor:default}
-.btn.line{background:transparent;color:var(--ink);border:1px solid var(--line-2)}
-.btn.sm{padding:7px 12px;font-size:13px;border-radius:8px}
-.fld{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
-.fld label{font-size:12.5px;font-weight:500;color:var(--muted)}
-.in{background:var(--bone);border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;width:100%}
-.in:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-wash)}
-.err{background:var(--crit-wash);color:var(--crit);padding:9px 12px;border-radius:9px;font-size:13px;margin-bottom:12px}
-.ok{background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:9px;font-size:13px;margin-bottom:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
-.lb{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;letter-spacing:.01em}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chips .chip{cursor:pointer;border:1px solid var(--line-2);background:var(--bone);user-select:none;padding:5px 10px;font-size:12.5px;transition:.12s}
-.chips .chip:hover{border-color:var(--ink)}
-.chips .chip.on{background:var(--ink);color:var(--bone);border-color:var(--ink)}
-.chips .chip b{opacity:.55;font-weight:600;margin-left:2px}
-.pill-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.pill{display:inline-block;padding:6px 11px;border-radius:999px;background:var(--line);font-size:12.5px;font-weight:500}
-.pill.big{background:var(--ink);color:var(--bone);font-weight:600;font-size:13.5px}
-.pill.warn{background:var(--warn-wash);color:var(--warn)}
-.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line-2)}
-.btn.danger{background:var(--crit)}
-code{background:var(--line);padding:1px 5px;border-radius:4px;font-size:12px;font-family:"IBM Plex Mono",ui-monospace,monospace}
-.loading{color:var(--faint);padding:26px 0;font-size:13.5px}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
-
-/* ═══════════════════════════════════════════════════════════════════
-   Design system pass — Sept 2026
-   Rules adopted (Apple HIG, WCAG 2.2, Stripe/Linear dashboards):
-   · one primary action per view; secondary actions visibly bordered;
-     destructive actions red and never in the primary slot
-   · 44px minimum touch target on phones, 40px row rhythm on desktop
-   · text ≥ 4.5:1 contrast, controls ≥ 3:1 — no grey-on-white hints
-     for anything the user must read to act
-   · tables: tabular numerals, sticky header, status as chips
-   · tabs scroll horizontally on phones instead of wrapping into a cloud
-   ═══════════════════════════════════════════════════════════════════ */
-:root{ --muted:#5B5B5B; --faint:#8A8680; --line-2:#C9CDD3; }
-
-/* buttons — secondary actions were transparent on white and disappeared */
-.btn{min-height:44px;padding:10px 18px;font-weight:600;font-size:14px;line-height:1.2;
-     display:inline-flex;align-items:center;justify-content:center;gap:6px;
-     transition:background .12s,box-shadow .12s,transform .06s}
-.btn:active{transform:translateY(1px)}
-.btn.line{background:#F6F6F7;color:var(--ink);border:1.5px solid var(--line-2)}
-.btn.line:hover{background:#ECECEE;border-color:var(--ink);opacity:1}
-.btn.ghost{background:#F6F6F7;color:var(--ink);border:1.5px solid var(--line-2)}
-.btn.danger{background:#FFFFFF;color:var(--crit);border:1.5px solid var(--crit)}
-.btn.danger:hover{background:var(--crit);color:#fff;opacity:1}
-.btn.sm{min-height:36px;padding:6px 12px;font-size:13px}
-.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-
-/* inputs — same height as buttons so rows line up */
-.in{min-height:44px;font-size:15px}
-select.in{padding-right:32px}
-
-/* tabs — a scrolling strip on phones, underline on desktop */
-.tabs{flex-wrap:wrap;overflow:visible;gap:2px;position:sticky;top:0;background:var(--bone);z-index:5;padding-top:4px}
-.tab{white-space:nowrap;min-height:44px;padding:10px 14px;font-size:14px}
-.tab.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:700}
-
-/* chips that are controls must look pressable; status chips must not */
-.chips .chip{min-height:36px;display:inline-flex;align-items:center;font-size:13px;padding:6px 12px}
-.chips .chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-
-/* tables */
-table{font-variant-numeric:tabular-nums}
-thead th{position:sticky;top:0;background:var(--card);z-index:1}
-.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
-td,th{white-space:nowrap}
-td:first-child{white-space:normal;min-width:160px}
-
-/* readable hints — the old #9A968F was ~2.6:1 on white */
-.hint{color:var(--muted)}
-.err,.ok{font-size:14px;line-height:1.45}
-
-/* links that act like buttons get a real hit area */
-a[onclick]{display:inline-block;padding:6px 2px;min-height:32px;font-weight:600}
-
-/* ─────────────────────────────────────────────────────────────────
-   Visual pass 2 — quieter, denser, one voice.
-   · numbers in the UI face with tabular figures; mono only for codes
-   · red means brand or danger, never "click here"
-   · rows are the target: hover, chevron, no red CTA on every line
-   · headers stop shouting; panels stop nesting borders
-   ───────────────────────────────────────────────────────────────── */
-body{font-size:14px;letter-spacing:-.005em}
-.num{font-family:inherit;font-variant-numeric:tabular-nums;letter-spacing:0}
-.code,.uin{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--faint);letter-spacing:.01em}
-
-/* header */
-.chrome{padding:14px 34px;border-bottom:1px solid var(--line)}
-.crumb{margin:18px 0 6px;font-size:13px}
-.crumb button{color:var(--muted);background:none;border:0;padding:0;cursor:pointer;font-weight:500}
-.crumb button:hover{color:var(--ink)}
-.ph{margin:22px 0 16px;align-items:center}
-.ph h1{font-size:20px;font-weight:650;letter-spacing:-.01em}
-.ph .s{font-size:13.5px;margin-top:2px;max-width:70ch}
-.ph-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-
-/* tabs */
-.tabs{gap:0;border-bottom:1px solid var(--line);margin-bottom:0}
-.tab{padding:12px 14px;font-size:14px;color:var(--muted);border-bottom:2px solid transparent}
-.tab:hover{color:var(--ink);background:#FAFAFA}
-.tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
-.more{position:relative;margin-left:auto}
-.menu{display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line-2);
-      border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.08);min-width:200px;padding:6px;z-index:20}
-.menu.open{display:block}
-.menu button{display:block;width:100%;text-align:left;background:none;border:0;padding:10px 12px;border-radius:7px;cursor:pointer;font-size:14px}
-.menu button:hover,.menu button.on{background:#F3F4F6}
-
-/* cards & panels — one border, no nesting */
-.card,.panel,.stat{border:1px solid var(--line);box-shadow:none;border-radius:12px}
-.panel{margin-bottom:16px}
-.ptop{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-.ptop h2{font-size:15px;font-weight:600}
-.stats{gap:12px;margin-bottom:16px}
-.stat{padding:14px 16px}
-.stat .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
-.stat .v{font-size:24px;font-weight:650;letter-spacing:-.02em;color:var(--ink);margin-top:6px;font-family:inherit;font-variant-numeric:tabular-nums}
-.stat .m{font-size:12.5px;color:var(--muted);margin-top:4px}
-.stat.crit .v{color:var(--crit)}
-.stat.good .v,.stat.warn .v,.stat.acc .v{color:var(--ink)}   /* only the critical number gets colour */
-
-/* tables — the row is the control */
-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px}
-thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;
-         padding:10px 14px;background:#FAFAFA;border-bottom:1px solid var(--line)}
-tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.35}
-tbody tr:last-child td{border-bottom:0}
-tbody tr:hover td{background:#FAFBFC}
-td strong{font-weight:600}
-td .num,td.num{font-variant-numeric:tabular-nums}
-td.r,th.r{text-align:right}
-
-/* in-row actions: quiet by default, clear on hover */
-a[onclick]{color:var(--ink);font-weight:500;text-decoration:none;padding:6px 0;border-radius:6px}
-a[onclick]:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
-td:last-child a[onclick]{color:var(--muted);font-weight:500}
-td:last-child a[onclick]:hover{color:var(--accent)}
-tbody tr:hover td:last-child a[onclick]{color:var(--ink)}
-
-/* status chips: soft fills, no borders, one size */
-.chip{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;letter-spacing:.01em}
-.c-good{background:#E6F4EC;color:#146C3A} .c-warn{background:#FCF1DA;color:#8A5A00}
-.c-crit{background:#FDE8E6;color:#A3231A} .c-mute{background:#F1F2F4;color:#4B5563}
-
-/* buttons */
-.btn{border-radius:10px;font-size:14px}
-.btn.line,.btn.ghost{background:#fff;border:1px solid var(--line-2);color:var(--ink);font-weight:500}
-.btn.line:hover,.btn.ghost:hover{background:#F6F7F8;border-color:#9CA3AF}
-.btn.sm{border-radius:8px}
-
-/* inputs */
-.in{border-color:var(--line-2);border-radius:10px;font-size:14px}
-.in::placeholder{color:#9CA3AF}
-
-/* hints & messages */
-.hint{font-size:12.5px}
-.err{background:#FDE8E6;color:#A3231A;border:0}
-.ok{background:#E6F4EC;color:#146C3A;border:0}
-.pill{background:#F1F2F4;font-weight:500}
-.pill.big{background:var(--ink);color:#fff}
-
-/* the sync line on the overview */
-#sync-info{font-size:12.5px}
-
-/* Users & access — chips wrapped into the next column and overlapped the date */
-#users-table td:nth-child(2){white-space:normal;max-width:520px}
-#users-table td:nth-child(2) .chip{margin:2px 4px 2px 0;display:inline-block}
-#users-table td:nth-child(3){white-space:nowrap;color:var(--muted)}
-#users-table td:last-child{white-space:nowrap}
-.user-edit{background:#FAFBFC;border-top:1px solid var(--line);padding:14px 18px}
-.user-edit label{margin-right:14px;font-size:14px}
-
-/* ── the child drawer: opens on the right, list stays put ── */
-.drawer-bg{position:fixed;inset:0;background:rgba(17,17,17,.28);z-index:60;opacity:0;transition:opacity .15s}
-.drawer-bg.on{opacity:1}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100vw);background:#fff;z-index:61;
-        box-shadow:-12px 0 40px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .18s ease-out;
-        display:flex;flex-direction:column}
-.drawer.on{transform:none}
-.drawer.narrow{width:min(400px,100vw)}
-.fcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;background:#fff}
-.fcard .fhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.fcard .fname{font-weight:650;font-size:15px}
-.fcard .fop{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 0;display:inline-flex;align-items:center;gap:4px}
-.fcard .fop:hover{color:var(--ink)}
-.fcard .fdel{background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px;padding:4px 6px;border-radius:6px}
-.fcard .fdel:hover{background:#F3F4F6;color:var(--crit)}
-.fand{display:flex;align-items:center;gap:10px;margin:12px 0 0;color:var(--muted);font-size:13px}
-.fand::before,.fand::after{content:'';flex:1;border-top:1px solid var(--line)}
-.seg{display:inline-flex;border:1.5px solid var(--line-2);border-radius:9px;overflow:hidden;margin-top:8px}
-.seg button{background:#fff;border:0;padding:8px 14px;font-size:14px;cursor:pointer;color:var(--muted)}
-.seg button+button{border-left:1.5px solid var(--line-2)}
-.seg button.on{background:#F1F2F4;color:var(--ink);font-weight:600}
-.flist{border:1px solid var(--line);border-radius:12px;margin-top:8px;max-height:320px;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.08);background:#fff}
-.flist button{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:10px 12px;font-size:14px;cursor:pointer}
-.flist button:hover{background:#F3F4F6}
-.flist .ic{width:18px;text-align:center;color:var(--muted);font-size:13px}
-.drawer-hd{padding:18px 22px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.drawer-hd h2{font-size:18px;font-weight:650;margin:0}
-.drawer-body{overflow:auto;padding:0 22px 40px;flex:1}
-.drawer-x{background:none;border:0;font-size:22px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:8px}
-.drawer-x:hover{background:#F3F4F6;color:var(--ink)}
-.dsec{margin-top:22px}
-.dsec h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px}
-
-/* row tints — the eye should find the problem rows without reading */
-tr.t-crit td{background:#FFF5F4} tr.t-warn td{background:#FFFAF0} tr.t-good td{background:#F4FBF6}
-tr.t-crit td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
-tr.t-warn td:first-child{box-shadow:inset 3px 0 0 #D97706}
-tr.t-good td:first-child{box-shadow:inset 3px 0 0 #16A34A}
-tbody tr.t-crit:hover td{background:#FFEDEB} tbody tr.t-warn:hover td{background:#FFF3DC} tbody tr.t-good:hover td{background:#E9F7ED}
-.money-due{color:var(--crit);font-weight:650} .money-ok{color:#146C3A;font-weight:600} .money-disc{color:#146C3A}
-
-/* phones */
-@media(max-width:640px){
-  .stage{padding:0 14px 40px}
-  .ph h1{font-size:23px}
-  .stats{grid-template-columns:repeat(2,1fr);gap:10px}
-  .stat{padding:12px 13px}
-  .stat .v{font-size:20px}
-  .btn{width:100%}
-  .btn.sm{width:auto}
-  .card,.panel{border-radius:12px}
-  [style*="grid-template-columns"]{grid-template-columns:1fr!important}
-  .pill-row{gap:6px}
-  .pill{font-size:12px;padding:6px 10px}
-  td:first-child{min-width:130px}
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   Apple pass — Sept 2026
-   The philosophy, borrowed from the Human Interface Guidelines:
-   · one primary action per screen, filled blue; everything else is a
-     tinted grey button or a menu
-   · content is grouped into inset lists: a small grey caption, a white
-     rounded group, hairline separators that start at the text
-   · the most important number is the biggest thing on the screen
-   · settings and actions do not float about — they live where the eye
-     expects them: actions at the bottom, lists on the left, tools top-right
-   · system font, tabular numerals, no decoration that does not carry
-     meaning
-   ═══════════════════════════════════════════════════════════════════ */
-:root{ --accent:#0A7AFF; --accent-wash:#EAF3FF; --ios-bg:#F5F5F7; --sep:rgba(60,60,67,.14);
-       --label2:#6E6E73; --fill:rgba(120,120,128,.12); --fill-2:rgba(120,120,128,.2); }
-body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Inter,"Helvetica Neue",system-ui,sans-serif}
-
-/* buttons: primary filled, secondary tinted, both pill-cornered */
-.btn{background:var(--accent);color:#fff;border-radius:11px;font-weight:600;letter-spacing:-.01em;border:0}
-.btn:hover{opacity:1;background:#0068E0}
-.btn.line,.btn.ghost{background:var(--fill);color:var(--accent);border:0;font-weight:600}
-.btn.line:hover,.btn.ghost:hover{background:var(--fill-2);border:0;color:var(--accent)}
-.btn.sm{border-radius:9px;min-height:34px;padding:5px 12px;font-size:13.5px}
-.btn.danger{background:transparent;color:var(--crit);border:0}
-.btn.danger:hover{background:var(--crit-wash);color:var(--crit)}
-.in{border-radius:10px;border-color:var(--sep)}
-.tab.on{border-bottom-color:var(--accent)}
-.chips .chip.on{background:var(--accent);border-color:var(--accent)}
-.chips .chip{border-color:var(--sep)}
-
-/* ── the sheet ── */
-.drawer{background:var(--ios-bg);width:min(600px,100vw);box-shadow:-1px 0 0 rgba(0,0,0,.05),-24px 0 60px rgba(0,0,0,.14);
-        transition:transform .28s cubic-bezier(.32,.72,0,1)}
-.drawer-bg{background:rgba(0,0,0,.22)}
-.drawer-hd{padding:22px 24px 6px;border-bottom:0;align-items:center}
-.drawer-hd h2{font-size:22px;font-weight:700;letter-spacing:-.022em;line-height:1.2}
-.drawer-hd .hint{font-size:13px;color:var(--label2);margin-top:2px}
-.drawer-x{width:30px;height:30px;border-radius:50%;background:var(--fill);color:#3C3C43;font-size:15px;font-weight:600;
-          display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none}
-.drawer-x:hover{background:var(--fill-2);color:#1A1A1A}
-.drawer-body{padding:0 24px 28px}
-.drawer-foot{background:rgba(245,245,247,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-             border-top:1px solid var(--sep);padding:12px 24px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.drawer-foot:empty{display:none}
-.drawer-foot .btn{flex:1;min-width:120px}
-.drawer-foot .more{flex:1;display:flex;min-width:120px}
-.drawer-foot .more .btn{width:100%}
-.drawer-foot #pf-msg{width:100%;order:-1}
-.drawer-foot #pf-msg:empty{display:none}
-.drawer-foot .err,.drawer-foot .ok{margin-bottom:0}
-.drawer.narrow .drawer-foot{display:none}
-.drawer .dsec h3{font-size:13px;font-weight:400;letter-spacing:.01em;text-transform:uppercase;color:var(--label2);margin:0 0 6px 16px}
-
-/* hero: the number that matters, then the one line that explains it */
-.hero{padding:18px 4px 4px;text-align:left}
-.hero .k{font-size:13px;color:var(--label2);font-weight:500;text-transform:uppercase;letter-spacing:.02em}
-.hero .v{font-size:40px;font-weight:700;letter-spacing:-.035em;line-height:1.1;margin-top:2px;font-variant-numeric:tabular-nums}
-.hero.due .v{color:var(--crit)} .hero.paid .v{color:#146C3A} .hero.credit .v{color:#146C3A}
-.hero .m{font-size:14px;color:var(--label2);margin-top:6px}
-
-/* inset grouped list */
-.grp{margin-top:22px}
-.grp>h3{font-size:13px;font-weight:400;letter-spacing:.01em;text-transform:uppercase;color:var(--label2);margin:0 0 6px 16px}
-.box{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 0 0 .5px rgba(0,0,0,.04)}
-.row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:46px;padding:10px 16px 10px 0;margin-left:16px;font-size:15px}
-.row+.row,.row+.rowx,.rowx+.row{border-top:1px solid var(--sep)}
-.rowx{margin-left:16px;padding:10px 16px 10px 0}
-.row .l{color:var(--ink);min-width:0}
-.row .l .sub{display:block;font-size:12.5px;color:var(--label2);margin-top:1px}
-.row .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink)}
-.row .v.credit{color:#146C3A} .row .v.due{color:var(--crit)}
-.row .v.mute{color:var(--label2)}
-.row.total{font-weight:700} .row.total .v{font-size:17px}
-.row .in{border:0;background:transparent;text-align:right;padding:4px 0;min-height:0;font-size:15px;width:150px;max-width:45vw;border-radius:0;font-variant-numeric:tabular-nums}
-.row .in:focus{box-shadow:none;outline:none;background:var(--accent-wash);border-radius:6px;padding:4px 8px;margin-right:-8px}
-.row .in[readonly]{font-weight:700;pointer-events:none}
-.row input[type=date].in{width:160px}
-.row .in.wide{width:100%;max-width:none;text-align:left}
-.row .l.grow{flex:1}
-.box .foot{font-size:12.5px;color:var(--label2);padding:8px 16px 0;margin:0 0 0 0}
-.grp .foot{font-size:12.5px;color:var(--label2);margin:6px 16px 0}
-.grp .foot.warn{color:var(--warn);background:var(--warn-wash);border-radius:10px;padding:9px 12px;margin:8px 0 0}
-.grp .foot.warn a{color:inherit;font-weight:700}
-.linkrow{display:block;width:100%;text-align:left;background:none;border:0;color:var(--accent);font-weight:500;font-size:15px;
-         padding:12px 16px;cursor:pointer;border-top:1px solid var(--sep)}
-.linkrow:hover{background:#FAFAFA}
-.linkrow:first-child{border-top:0}
-.xbtn{width:26px;height:26px;border-radius:50%;background:var(--fill);border:0;color:#3C3C43;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none}
-.xbtn:hover{background:var(--crit-wash);color:var(--crit)}
-.inst{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.note{padding:10px 16px 10px 0;margin-left:16px;border-top:1px solid var(--sep);font-size:14.5px;white-space:pre-wrap}
-.note:first-child{border-top:0}
-.note .who{display:flex;justify-content:space-between;font-size:12.5px;color:var(--label2);margin-top:4px;white-space:normal}
-.note .who a{color:var(--label2)}
-.note-in{display:flex;gap:8px;align-items:flex-end;padding:10px 12px 10px 16px}
-.note-in textarea.in{flex:1;border:0;background:transparent;padding:6px 0;min-height:0;resize:vertical;font-size:15px}
-.note-in textarea.in:focus{box-shadow:none;outline:none}
-
-/* action-sheet style menu (opens upward from the footer) */
-.menu.up{top:auto;bottom:calc(100% + 8px);left:0;right:auto;min-width:280px;border-radius:14px;padding:6px;
-         box-shadow:0 12px 40px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.06);border:0}
-.menu.up button{padding:11px 12px;border-radius:9px;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:10px}
-.menu.up button .sub{font-size:12.5px;color:var(--label2)}
-.menu .msep{border-top:1px solid var(--sep);margin:6px -6px}
-.menu .mrow{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:14px;cursor:pointer}
-.menu .mrow input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
-.menu .in{margin:4px 6px 4px;width:calc(100% - 12px);min-height:38px;font-size:14px}
-.more{position:relative}
-
-/* ── views: a sidebar of lists, one toolbar, the table ── */
-.vwrap{display:grid;grid-template-columns:232px 1fr;gap:22px;align-items:start}
-.side{position:sticky;top:64px}
-.side-h{font-size:12px;font-weight:600;color:var(--label2);text-transform:uppercase;letter-spacing:.03em;margin:14px 0 6px 12px}
-.side-h:first-child{margin-top:2px}
-.side-i{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;background:none;border:0;
-        padding:8px 12px;border-radius:9px;font-size:14.5px;cursor:pointer;text-align:left;color:var(--ink)}
-.side-i:hover{background:var(--fill)}
-.side-i.on{background:var(--accent);color:#fff}
-.side-i b{font-weight:500;font-size:13px;color:var(--label2);font-variant-numeric:tabular-nums}
-.side-i.on b{color:rgba(255,255,255,.85)}
-.side-i .dot{width:8px;height:8px;border-radius:50%;flex:none;filter:none;background:var(--faint)}
-.side-add{background:none;border:0;color:var(--accent);font-weight:500;font-size:14px;padding:8px 12px;cursor:pointer;text-align:left;width:100%;border-radius:9px}
-.side-add:hover{background:var(--fill)}
-.vhead{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:12px}
-.vhead h2{font-size:24px;font-weight:700;letter-spacing:-.025em}
-.vhead .meta{font-size:13.5px;color:var(--label2);margin-top:2px}
-.vtools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.dirty{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--accent-wash);color:var(--accent);border-radius:10px;padding:9px 14px;font-size:13.5px;margin-bottom:12px}
-.dirty a{color:var(--accent);font-weight:600;cursor:pointer;text-decoration:none}
-.dirty a:hover{text-decoration:underline}
-.dirty .sp{flex:1}
-.fdesc{font-size:13px;color:var(--label2);margin:0 0 10px 2px}
-.fdesc:empty{display:none}
-.menu button .chk{width:16px;color:var(--accent);font-weight:700}
-#vw-sortmenu button,#vw-moremenu button{display:flex;align-items:center;gap:8px;white-space:nowrap}
-#vw-sortmenu,#vw-moremenu{min-width:200px;border-radius:12px;border:0;box-shadow:0 12px 40px rgba(0,0,0,.16),0 0 0 .5px rgba(0,0,0,.06)}
-/* filter panel cards sit on the grey sheet like grouped rows */
-.fcard{border:0;box-shadow:0 0 0 .5px rgba(0,0,0,.04);padding:12px 16px;margin-top:10px}
-.fcard .fop{color:var(--accent)}
-.fcard .fdel{font-size:13px}
-.flist{border:0;box-shadow:0 12px 40px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.06);border-radius:14px}
-.drawer.narrow #fadd{background:none;color:var(--accent);padding-left:0}
-@media(max-width:760px){
-  .vwrap{grid-template-columns:1fr;gap:12px}
-  .side{position:static;display:flex;gap:4px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
-  .side-h{display:none}
-  .side-i{width:auto;white-space:nowrap;background:var(--fill);padding:7px 12px;border-radius:999px;font-size:13.5px}
-  .side-add{width:auto;white-space:nowrap}
-  .drawer-foot .btn{flex:1 1 40%}
-  .row{flex-wrap:wrap} .row .in{width:100%;max-width:none;text-align:left}
-  .row .inst{width:100%;justify-content:flex-start}
-}
-</style>
+<link rel="stylesheet" href="/brand/hub.css">
 </head>
 <body>
-<div class="topbar"></div>
-<div class="chrome">
-  <div class="brand"><span class="dot"></span><span>Eurokids JMD</span></div>
-  <div class="chromeR" id="chromeR"></div>
-</div>
-<div class="stage" id="stage"><div class="loading">Loading…</div></div>
+<div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
@@ -538,18 +81,42 @@ const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 const has = m => modules.includes(m);
 const el = id => document.getElementById(id);
 
-const TABS = {
-  overview:   { label: 'Overview', need: () => has('admission') || has('finance') },
-  children:   { label: 'Children', need: () => has('finance') || has('admission') },
-  views:      { label: 'Views', need: () => has('finance') || has('admission') },
-  plans:      { label: 'Fees & Plans', need: () => has('finance') || has('admission') },
-  compose:    { label: 'Send email', need: () => has('finance') || has('admission') },
-  reminders:  { label: 'Reminders', need: () => has('finance') },
-  liability:  { label: 'Liabilities', need: () => has('finance') },
-  discounts:  { label: 'Quick discounts', need: () => has('finance') },
-  kits:       { label: 'Kits',     need: () => has('kits') },
-  fees:       { label: 'Fee Reference', need: () => has('fees') || has('finance') }
+// Outline symbols for the sidebar, drawn in the spirit of SF Symbols: one
+// stroke weight, 16 px, tinted with the accent. Each is a tiny path.
+const ICON = {
+  house:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 8.5 8 3l6 5.5"/><path d="M3.5 7.5V13h3V9.5h3V13h3V7.5"/></svg>',
+  people:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><circle cx="11.5" cy="6" r="2"/><path d="M12 9.8c1.6.3 2.7 1.5 2.7 3.2"/></svg>',
+  list:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5.5 4h8M5.5 8h8M5.5 12h8"/><circle cx="2.5" cy="4" r=".9" fill="currentColor" stroke="none"/><circle cx="2.5" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="2.5" cy="12" r=".9" fill="currentColor" stroke="none"/></svg>',
+  rupee:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 5h5M5.5 7.3h5M5.5 5h1.6a2 2 0 0 1 0 4.2H5.5l3.5 3.3"/></svg>',
+  tray:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 9.5V13h12V9.5M2 9.5h3.2l1 1.8h3.6l1-1.8H14M2 9.5l1.8-6h8.4l1.8 6"/></svg>',
+  mail:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="m2.5 4.5 5.5 4.3 5.5-4.3"/></svg>',
+  bell:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M4 11V7.5a4 4 0 0 1 8 0V11l1.2 1.5H2.8L4 11Z"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0"/></svg>',
+  box:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 5.5 8 2.5l6 3v5.5l-6 3-6-3z"/><path d="M2 5.5 8 8.5l6-3M8 8.5v6"/></svg>',
+  tag:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 2.5h5L14 9l-5 5-6.5-6.5z"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none"/></svg>',
+  grid:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12M2 9.8h12M6 3v10M10 3v10"/></svg>',
+  key:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 13.5c0-2.5 2-4 4.5-4 1 0 1.9.2 2.6.7"/><path d="M14 9.5 10.5 13l-1.2-1.2M12.5 11l-1.3-1.3"/></svg>',
+  arrow:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8v8M13 3 3 13"/></svg>',
+  more:    '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>',
+  back:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
 };
+
+// The sidebar, in sections. `need` decides visibility; RLS decides data.
+const TABS = {
+  overview:   { label: 'Overview',      icon: 'house',  sect: 'Fees',          need: () => has('admission') || has('finance') },
+  children:   { label: 'Children',      icon: 'people', sect: 'Fees',          need: () => has('finance') || has('admission') },
+  views:      { label: 'Views',         icon: 'list',   sect: 'Fees',          need: () => has('finance') || has('admission') },
+  plans:      { label: 'Fees & Plans',  icon: 'rupee',  sect: 'Fees',          need: () => has('finance') || has('admission') },
+  liability:  { label: 'Liabilities',   icon: 'tray',   sect: 'Fees',          need: () => has('finance') },
+  compose:    { label: 'Send Email',    icon: 'mail',   sect: 'Communication', need: () => has('finance') || has('admission') },
+  reminders:  { label: 'Reminders',     icon: 'bell',   sect: 'Communication', need: () => has('finance') },
+  kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
+  discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => has('finance') },
+  fees:       { label: 'Fee Grid',      icon: 'grid',   sect: 'Reference',     need: () => has('fees') || has('finance') },
+  users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
+};
+const SECTIONS = ['Fees', 'Communication', 'Reference', 'Setup'];
+// The four that earn a place on the phone's tab bar; the rest sit under More.
+const TABBAR = ['overview', 'children', 'views', 'plans'];
 
 /* ── boot ─────────────────────────────────────────────── */
 async function boot(){
@@ -598,19 +165,9 @@ async function loadMe(){
   profile = prof || null;
 }
 
-/* ── chrome ───────────────────────────────────────────── */
-function paintChrome(){
-  el('chromeR').innerHTML = session
-    ? `<span>${esc(profile?.full_name || session.user.email)}</span><a id="out">Sign out</a>`
-    : `<span>admin.eurokidsjmdenclave.org</span>`;
-  const o = el('out');
-  if (o) o.onclick = async () => { await getSb().auth.signOut(); };
-}
-
 function paint(){
-  paintChrome();
   if (!session) return renderLogin();
-  if (app === 'users') return renderUsers();
+  if (app === 'users') { app = 'admissions'; tab = 'users'; }   // old home-screen links
   if (!app)     return renderChooser();
   renderApp();
 }
@@ -622,19 +179,18 @@ function isOwner(){
 /* ── sign in ──────────────────────────────────────────── */
 function renderLogin(){
   el('stage').innerHTML = `
-    <div class="chooser">
-      <h1 class="hello">Sign in</h1>
-      <p class="askline">Eurokids JMD Enclave</p>
-      <div style="max-width:360px;margin-top:30px">
+    <div class="page">
+      <div class="sb-brand" style="padding-bottom:18px"><span class="dot"></span><span>EuroKids JMD Enclave</span></div>
+      <div class="card">
+        <h1 class="t-t2" style="margin-bottom:14px">Sign In</h1>
         <div id="loginErr"></div>
         <div class="fld"><label for="em">Email</label>
           <input class="in" id="em" type="email" autocomplete="username" placeholder="you@eurokidsjmdenclave.org"></div>
         <div class="fld"><label for="pw">Password</label>
           <input class="in" id="pw" type="password" autocomplete="current-password"></div>
-        <button class="btn" id="go" style="width:100%">Sign in</button>
-        <p class="hint" style="margin-top:14px">Teachers: go to
-          <a href="/teacher" style="color:var(--accent)">/teacher</a> to apply for leave.</p>
+        <button class="btn lg" id="go" style="width:100%;margin-top:4px">Sign In</button>
       </div>
+      <p class="hint" style="margin-top:16px">Teachers: go to <a href="/teacher">/teacher</a> to apply for leave.</p>
     </div>`;
   const go = el('go');
   const submit = async () => {
@@ -644,7 +200,7 @@ function renderLogin(){
     const { error } = await getSb().auth.signInWithPassword({ email, password });
     if (error) {
       el('loginErr').innerHTML = `<div class="err">${esc(error.message)}</div>`;
-      go.disabled = false; go.textContent = 'Sign in';
+      go.disabled = false; go.textContent = 'Sign In';
     }
   };
   go.onclick = submit;
@@ -664,28 +220,32 @@ function renderChooser(){
     { key:'pulse', name:'Site Pulse',
       desc:'Enquiries, conversions and centre performance.', ok:false, soon:true }
   ];
-  if (isOwner()) doors.push({ key:'users', name:'Users & access',
-    desc:'Create accounts for coordinators and HR; grant modules.', ok:true, href:null });
+  if (isOwner()) doors.push({ key:'users', name:'Users & Access',
+    desc:'Accounts for coordinators and HR; what each may open.', ok:true, href:null });
+  const who = profile?.full_name || session.user.email;
   el('stage').innerHTML = `
-    <div class="chooser">
-      <h1 class="hello">Hello</h1>
+    <div class="page"><div class="chooser">
+      <div class="sb-brand" style="padding:0 0 22px"><span class="dot"></span><span>EuroKids JMD Enclave</span></div>
+      <h1 class="hello">Hello, ${esc(who.split(' ')[0].split('@')[0])}</h1>
       <p class="askline">Where would you like to go?</p>
       <div class="deck">${doors.map(d => `
         <div class="doorwrap">
           <button class="door ${d.ok ? '' : 'shut'}" data-key="${d.key}" ${d.ok ? '' : 'disabled'}>
             <h3>${d.name}</h3><p>${d.desc}</p>
-            <span class="open">${d.ok ? 'Open &rarr;' : (d.soon ? 'Not ready yet' : 'Not your access')}</span>
+            <span class="open">${d.ok ? 'Open ›' : (d.soon ? 'Not ready yet' : 'Not your access')}</span>
           </button>${d.soon ? '<span class="soon">soon</span>' : ''}
         </div>`).join('')}</div>
       ${(!canAdmissions && !canStaff) ? `<p class="hint" style="margin-top:26px">
         ${_loadMeFailed ? 'Could not load your access just now — check your connection and reload.' : 'No modules are granted to this account yet. Ask the administrator to add them.'}</p>` : ''}
-    </div>`;
+      <p class="hint" style="margin-top:28px">${esc(who)} · <a id="out" style="cursor:pointer">Sign Out</a></p>
+    </div></div>`;
+  el('out').onclick = async () => { await getSb().auth.signOut(); };
   document.querySelectorAll('.door[data-key]').forEach(b => {
     b.onclick = () => {
       const d = doors.find(x => x.key === b.dataset.key);
       if (d.href) { location.href = d.href; return; }
-      app = d.key;
-      tab = Object.keys(TABS).find(t => TABS[t].need()) || 'overview';
+      app = 'admissions';
+      tab = d.key === 'users' ? 'users' : (Object.keys(TABS).find(t => t !== 'users' && TABS[t].need()) || 'overview');
       paint(); scrollTo({ top: 0 });
     };
   });
@@ -706,76 +266,71 @@ async function hubUsersApi(method, body){
   return resp.json();
 }
 
-function modChecks(prefix, selected){
+// Module grants as a grouped list of switches — one row per module, the
+// dangerous one (Finance) explained in its own footnote.
+function modRows(prefix, selected){
   return ALL_MODULES.map(m => `
-    <label style="display:inline-flex;align-items:center;gap:6px;margin:3px 12px 3px 0;font-size:13px;${m==='finance'?'color:var(--crit);font-weight:600':''}">
-      <input type="checkbox" class="${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}> ${MODULE_LABEL[m]}
-    </label>`).join('');
+    <label class="row" style="cursor:pointer"><span class="l">${MODULE_LABEL[m]}${m==='finance' ? '<span class="sub">Shows school-wide money. Coordinators normally need Admission + EPMS admin only.</span>' : ''}</span>
+      <input type="checkbox" class="sw ${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}></label>`).join('');
 }
 
 async function renderUsers(){
-  el('stage').innerHTML = `
-    <div class="crumb"><button id="back">&larr; All apps</button><span>/</span><span>Users &amp; access</span></div>
-    <div id="body"><div class="loading">Loading users…</div></div>`;
-  el('back').onclick = () => { app = null; paint(); };
-
+  el('body').innerHTML = head('Users & Access', 'Who can sign in to the hub, and what each person may open.') + '<div class="loading">Loading users…</div>';
   const json = await hubUsersApi('GET');
   if (!json.ok) { el('body').innerHTML = `<div class="err">${esc(json.error||'Could not load')}</div>`; return; }
 
   const staffUsers = json.users.filter(u => !u.is_teacher);
   const teacherCount = json.users.length - staffUsers.length;
 
-  el('body').innerHTML = `
-    <div class="panel" style="padding:20px">
-      <h3 style="margin-bottom:4px">Create an account</h3>
-      <p class="hint" style="margin-bottom:14px">For coordinators, HR staff and yourself. Teachers are created in the Staff Portal → Employees, the same as always (${teacherCount} teacher account${teacherCount===1?'':'s'} exist there).</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:820px">
-        <div class="fld"><label>Full name</label><input class="in" id="nu-name" placeholder="e.g. Sunita Saxena"></div>
-        <div class="fld"><label>Email</label><input class="in" id="nu-email" type="email" placeholder="name@eurokidsjmdenclave.org"></div>
-        <div class="fld"><label>Password (min 8)</label><input class="in" id="nu-pass" placeholder="They can't change it — pick well"></div>
-      </div>
-      <div style="margin:8px 0 14px"><div class="hint" style="margin-bottom:4px">Modules — tick what they may open. <span style="color:var(--crit)">Finance shows money; grant sparingly.</span></div>${modChecks('nu')}</div>
-      <div id="nu-msg"></div>
-      <button class="btn" id="nu-go">Create account</button>
-    </div>
-
-    <div class="panel" style="padding:0;overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="text-align:left;border-bottom:1px solid var(--line)">
-          <th>Person</th><th>Access</th><th>Last sign-in</th><th></th>
-        </tr></thead>
+  el('body').innerHTML = head('Users & Access', 'Who can sign in to the hub, and what each person may open.',
+      `<button class="btn" id="nu-open">New Account…</button>`)
+    + `<div class="panel"><div class="tw"><table id="users-table"><thead><tr>
+          <th>Person</th><th>Access</th><th>Last Sign-In</th><th></th></tr></thead>
         <tbody>${staffUsers.map(u => `
           <tr data-uid="${u.id}">
             <td><strong>${esc(u.full_name||'—')}</strong><br><span class="hint">${esc(u.email)}</span></td>
             <td>${u.modules.length ? u.modules.map(m=>`<span class="chip ${m==='finance'?'c-crit':'c-mute'}">${MODULE_LABEL[m]||m}</span>`).join('') : '<span class="hint">no access yet</span>'}</td>
             <td class="hint">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : 'never'}</td>
-            <td style="text-align:right">
-              <button class="btn line sm" onclick="editUserModules('${u.id}')">Access</button>
-              <button class="btn line sm" onclick="resetUserPassword('${u.id}','${esc(u.email)}')">Password</button>
-              ${u.email==='abhinav@ganya.in'?'':`<button class="btn line sm" style="color:var(--crit);border-color:transparent" onclick="deleteHubUser('${u.id}','${esc(u.email)}')">Remove</button>`}
-            </td>
+            <td class="r"><div class="more" style="display:inline-block"><button class="btn line sm" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle('open')" aria-label="Actions">•••</button>
+              <div class="menu">
+                <button onclick="editUserModules('${u.id}')">Edit Access…</button>
+                <button onclick="resetUserPassword('${u.id}','${esc(u.email)}')">Reset Password…</button>
+                ${u.email==='abhinav@ganya.in'?'':`<div class="msep"></div><button style="color:var(--red)" onclick="deleteHubUser('${u.id}','${esc(u.email)}')">Remove Account…</button>`}
+              </div></div></td>
           </tr>
           <tr class="modrow" id="modrow-${u.id}" style="display:none">
-            <td colspan="4" class="user-edit">
-              <div class="hint" style="margin-bottom:8px">What ${esc((u.full_name||u.email).split(' ')[0])} may open. <strong style="color:var(--crit)">Finance</strong> shows school-wide money — coordinators normally need Admission + EPMS admin only.</div>
-              ${modChecks('mm-'+u.id, u.modules)}
-              <div style="margin-top:12px;display:flex;gap:8px"><button class="btn sm" onclick="saveUserModules('${u.id}')">Save access</button>
+            <td colspan="4" class="user-edit" style="white-space:normal">
+              <div class="box" style="max-width:520px">${modRows('mm-'+u.id, u.modules)}</div>
+              <div style="margin-top:12px;display:flex;gap:8px"><button class="btn sm" onclick="saveUserModules('${u.id}')">Save</button>
                 <button class="btn line sm" onclick="el('modrow-${u.id}').style.display='none'">Cancel</button></div>
             </td>
           </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>`;
+        </tbody></table></div>
+      <div class="pbody hint">Teachers are created in the Staff Portal → Employees, as always (${teacherCount} teacher account${teacherCount===1?'':'s'} exist there).</div></div>`;
+  if (!window._umenu) { window._umenu = true; document.addEventListener('click', () => document.querySelectorAll('#users-table .menu.open').forEach(m => m.classList.remove('open'))); }
 
-  el('nu-go').onclick = async () => {
-    const full_name = el('nu-name').value.trim(), email = el('nu-email').value.trim(), password = el('nu-pass').value;
-    const modules = [...document.querySelectorAll('.nu-mod:checked')].map(c=>c.value);
-    if (!full_name || !email || password.length < 8) { el('nu-msg').innerHTML = '<div class="err">Name, email, and a password of at least 8 characters are required.</div>'; return; }
-    if (modules.includes('finance') && !confirm('Grant FINANCE? This person will see collections, dues and discounts. Continue?')) return;
-    el('nu-go').disabled = true; el('nu-go').textContent = 'Creating…';
-    const r = await hubUsersApi('POST', { action:'create', email, password, full_name, modules });
-    if (r.ok) { renderUsers(); }
-    else { el('nu-msg').innerHTML = `<div class="err">${esc(r.error||'Failed')}</div>`; el('nu-go').disabled = false; el('nu-go').textContent = 'Create account'; }
+  // Creating an account is a scoped task, so it opens as a sheet.
+  el('nu-open').onclick = () => {
+    const body = openDrawer('New Account', 'For coordinators, HR staff and yourself.');
+    body.innerHTML = `
+      <div class="grp"><h3>Person</h3><div class="box">
+        <div class="row"><div class="l">Full name</div><input class="in wide" id="nu-name" placeholder="e.g. Sunita Saxena"></div>
+        <div class="row"><div class="l">Email</div><input class="in wide" id="nu-email" type="email" placeholder="name@eurokidsjmdenclave.org"></div>
+        <div class="row"><div class="l">Password</div><input class="in wide" id="nu-pass" placeholder="at least 8 characters"></div>
+      </div><div class="foot">They cannot change the password themselves — pick a good one and share it privately.</div></div>
+      <div class="grp"><h3>May open</h3><div class="box">${modRows('nu')}</div></div>`;
+    el('drawer-foot').innerHTML = `<div id="pf-msg"></div><button class="btn line" id="nu-cancel">Cancel</button><button class="btn" id="nu-go">Create Account</button>`;
+    el('nu-cancel').onclick = closeDrawer;
+    el('nu-go').onclick = async () => {
+      const full_name = el('nu-name').value.trim(), email = el('nu-email').value.trim(), password = el('nu-pass').value;
+      const modules = [...document.querySelectorAll('.nu-mod:checked')].map(c=>c.value);
+      if (!full_name || !email || password.length < 8) { el('pf-msg').innerHTML = '<div class="err">Name, email, and a password of at least 8 characters are required.</div>'; return; }
+      if (modules.includes('finance') && !confirm('Grant Finance? This person will see collections, dues and discounts.')) return;
+      el('nu-go').disabled = true; el('nu-go').textContent = 'Creating…';
+      const r = await hubUsersApi('POST', { action:'create', email, password, full_name, modules });
+      if (r.ok) { closeDrawer(); renderUsers(); }
+      else { el('pf-msg').innerHTML = `<div class="err">${esc(r.error||'Failed')}</div>`; el('nu-go').disabled = false; el('nu-go').textContent = 'Create Account'; }
+    };
   };
 }
 
@@ -806,29 +361,64 @@ async function deleteHubUser(uid, email){
 }
 
 /* ── app shell ────────────────────────────────────────── */
+// NavigationSplitView: the sidebar is built once and only re-marked when the
+// tab changes; the detail pane is what each tab function paints into.
 function renderApp(){
   const avail = Object.keys(TABS).filter(t => TABS[t].need());
   if (!avail.includes(tab)) tab = avail[0];
-  // Primary tabs stay visible; the long tail lives under "More".
-  const PRIMARY = ['overview','children','views','plans','compose','liability','reminders'];
-  const prim = avail.filter(t => PRIMARY.includes(t)), more = avail.filter(t => !PRIMARY.includes(t));
-  const moreOn = more.includes(tab);
-  el('stage').innerHTML = `
-    <div class="crumb"><button id="back">&larr; All apps</button><span>/</span><span>Admissions &amp; Fees</span></div>
-    <div class="tabs">${prim.map(t =>
-      `<button class="tab ${t === tab ? 'on' : ''}" data-tab="${t}">${TABS[t].label}</button>`).join('')}
-      ${more.length ? `<div class="more"><button class="tab ${moreOn ? 'on' : ''}" id="more-btn">${moreOn ? TABS[tab].label : 'More'} ▾</button>
-        <div class="menu" id="more-menu">${more.map(t => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${TABS[t].label}</button>`).join('')}</div></div>` : ''}
-    </div>
-    <div id="body"><div class="loading">Loading…</div></div>`;
-  el('back').onclick = () => { app = null; paint(); };
-  document.querySelectorAll('.tab[data-tab], .menu [data-tab]').forEach(b =>
-    b.onclick = () => { tab = b.dataset.tab; renderApp(); });
-  const mb = el('more-btn');
-  if (mb) mb.onclick = e => { e.stopPropagation(); el('more-menu').classList.toggle('open'); };
-  document.addEventListener('click', () => el('more-menu')?.classList.remove('open'), { once: true });
+  const item = t => `<button class="sb-i ${t === tab ? 'on' : ''}" data-tab="${t}">${ICON[TABS[t].icon]}<span>${TABS[t].label}</span></button>`;
+
+  if (!el('shell')) {
+    const who = profile?.full_name || session.user.email;
+    const canStaff = has('staff_portal') || has('payroll');
+    el('stage').innerHTML = `<div class="shell" id="shell">
+      <nav class="sb" id="sb">
+        <div class="sb-brand"><span class="dot"></span><span>EuroKids JMD</span></div>
+        ${SECTIONS.map(sec => { const ts = avail.filter(t => TABS[t].sect === sec); return ts.length
+          ? `<div class="sb-h">${sec}</div>${ts.map(item).join('')}` : ''; }).join('')}
+        <div class="sb-h">Apps</div>
+        <a class="sb-i" id="sb-home">${ICON.back}<span>All Apps</span></a>
+        ${canStaff ? `<a class="sb-i" href="/staff">${ICON.arrow}<span>Staff Portal</span></a>` : ''}
+        <div class="sb-foot"><span title="${esc(session.user.email)}">${esc(who)}</span><a id="out">Sign Out</a></div>
+      </nav>
+      <main class="main" id="main">
+        <div class="tbar" id="tbar"><button class="ib" id="tb-back" aria-label="All apps" style="display:none">${ICON.back}</button><div class="tt" id="tb-title"></div><div></div></div>
+        <div class="content" id="body"><div class="loading">Loading…</div></div>
+        <nav class="tabbar" id="tabbar"></nav>
+      </main></div>`;
+    el('sb-home').onclick = () => { app = null; paint(); };
+    el('out').onclick = async () => { await getSb().auth.signOut(); };
+    // scroll-edge effect: the bar earns its hairline and title once content moves under it
+    const main = el('main'), bar = el('tbar');
+    const onScroll = () => bar.classList.toggle('edge', (window.innerWidth < 768 ? window.scrollY : main.scrollTop) > 36);
+    main.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', onScroll, { passive: true });
+    el('sb').addEventListener('click', e => { const b = e.target.closest('.sb-i[data-tab]'); if (!b) return; tab = b.dataset.tab; renderApp(); });
+  }
+  // mark the current item everywhere it appears
+  document.querySelectorAll('#sb .sb-i[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  el('tb-title').textContent = TABS[tab].label;
+  el('tb-back').style.display = window.innerWidth < 768 ? '' : 'none';
+  el('tb-back').onclick = () => { app = null; paint(); };
+
+  // phone: a tab bar with the four everyday places and a More sheet for the rest
+  const bar = avail.filter(t => TABBAR.includes(t)), rest = avail.filter(t => !TABBAR.includes(t));
+  el('tabbar').innerHTML = bar.map(t => `<button class="${t === tab ? 'on' : ''}" data-tab="${t}">${ICON[TABS[t].icon]}${TABS[t].label.split(' ')[0]}</button>`).join('')
+    + (rest.length ? `<button id="tb-more" class="${rest.includes(tab) ? 'on' : ''}">${ICON.more}More</button>` : '');
+  el('tabbar').querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; renderApp(); });
+  const tm = el('tb-more'); if (tm) tm.onclick = () => {
+    const body = openDrawer('More', '');
+    body.innerHTML = `<div class="grp"><div class="box">${rest.map(t => `<button class="linkrow" data-tab="${t}" style="display:flex;gap:10px;align-items:center;color:var(--label)"><span style="color:var(--accent);width:18px;display:inline-flex">${ICON[TABS[t].icon]}</span>${TABS[t].label}</button>`).join('')}</div></div>
+      <div class="grp"><div class="box"><button class="linkrow" id="more-home">All Apps</button><button class="linkrow" id="more-out">Sign Out</button></div></div>`;
+    body.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { closeDrawer(); tab = b.dataset.tab; renderApp(); });
+    el('more-home').onclick = () => { closeDrawer(); app = null; paint(); };
+    el('more-out').onclick = async () => { closeDrawer(); await getSb().auth.signOut(); };
+  };
+
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  el('main').scrollTop = 0; window.scrollTo({ top: 0 });
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
-     compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees }[tab] || tabOverview)();
+     compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers }[tab] || tabOverview)();
 }
 
 /* ── schedule coverage: what the coordinator still has to fill ──
@@ -1311,32 +901,26 @@ async function tabReminders(){
 
   b.innerHTML = head('Automatic fee reminders',
       'Runs every morning at 9. Only families who still owe are contacted, using their true balance after discount and after any cash you hold.')
-    + `<div class="card" style="padding:20px">
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:10px;font-size:16px;font-weight:600;cursor:pointer">
-          <input type="checkbox" id="rm-on" ${st?.enabled ? 'checked' : ''} style="width:22px;height:22px">
-          ${st?.enabled ? 'Reminders are ON' : 'Reminders are OFF'}
-        </label>
-        <span class="hint">${st?.enabled ? 'Tomorrow morning’s run will go out.' : 'Nothing is sent until you switch this on.'}</span>
-      </div>
-      <div style="margin-top:18px">
-        <label class="lb">When to remind, relative to each instalment’s due date</label>
-        <div class="chips" id="rm-steps">${[-15,-10,-7,-5,-3,-1,0,1,3,5,7,10,14].map(d =>
-          `<span class="chip ${steps.includes(d)?'on':''}" data-v="${d}">${label(d)}</span>`).join('')}</div>
-        <div class="hint" style="margin-top:6px">Pick as many as you like. A family gets each step once per instalment, and never once they have paid.</div>
-      </div>
-      <label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:14px">
-        <input type="checkbox" id="rm-cc" ${st?.cc_office !== false ? 'checked' : ''}> cc the office on every reminder
-      </label>
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn" id="rm-save">Save settings</button>
-        <button class="btn line" id="rm-preview">Show what would go tomorrow</button>
+    + `<div style="max-width:720px">
+      <div class="grp" style="margin-top:0"><div class="box">
+        <label class="row" style="cursor:pointer"><span class="l"><strong>Automatic reminders</strong><span class="sub">${st?.enabled ? 'On — tomorrow morning’s run will go out.' : 'Off — nothing is sent until you switch this on.'}</span></span>
+          <input type="checkbox" class="sw" id="rm-on" ${st?.enabled ? 'checked' : ''}></label>
+        <label class="row" style="cursor:pointer"><span class="l">Copy the office on every reminder</span>
+          <input type="checkbox" class="sw" id="rm-cc" ${st?.cc_office !== false ? 'checked' : ''}></label>
+      </div></div>
+      <div class="grp"><h3>When to remind</h3><div class="box">
+        <div class="rowx"><div class="chips" id="rm-steps">${[-15,-10,-7,-5,-3,-1,0,1,3,5,7,10,14].map(d =>
+          `<span class="chip ${steps.includes(d)?'on':''}" data-v="${d}">${label(d)}</span>`).join('')}</div></div>
+      </div><div class="foot">Relative to each instalment’s due date. Pick as many as you like — a family gets each step once per instalment, and never once they have paid.</div></div>
+      <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+        <button class="btn" id="rm-save">Save</button>
+        <button class="btn line" id="rm-preview">Preview Tomorrow’s Run</button>
       </div>
       <div id="rm-msg" style="margin-top:12px"></div>
       <div id="rm-plan" style="margin-top:12px"></div>
     </div>
 
-    <div class="panel" style="margin-top:16px"><div class="ptop"><h2>Sent so far</h2>
+    <div class="panel" style="margin-top:22px"><div class="ptop"><h2>Sent so far</h2>
       <span class="hint">${(log||[]).length} entries</span></div>
       <div class="tw"><table><thead><tr><th>When</th><th>Child</th><th>Step</th><th>Due</th><th class="r">Owed</th><th>Result</th></tr></thead><tbody>
       ${(log||[]).map(l => `<tr>
@@ -1418,87 +1002,58 @@ async function tabCompose(){
   b.innerHTML = head('Send email to parents',
     'Choose a group, write once, and every family gets it with the school’s branding.');
   b.innerHTML += `
-  <div class="card" style="padding:18px">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">
-      <div><label class="lb">Class</label><div id="cmp-classes" class="chips">…</div></div>
-      <div><label class="lb">Batch</label><div id="cmp-batches" class="chips">…</div></div>
-      <div>
-        <label class="lb">Who</label>
-        <select id="cmp-money" class="in">
-          <option value="all">Everyone in the selection</option>
-          <option value="owing">Only families who still owe</option>
-          <option value="overdue">Only families past their due date</option>
-          <option value="settled">Only families fully paid</option>
-        </select>
-      </div>
-      <div>
-        <label class="lb">Payment due on or before</label>
-        <input id="cmp-cutoff" type="date" class="in">
-        <div class="hint">Leave blank to ignore. Set it and anyone whose next
-          instalment falls <em>after</em> this date is left out.</div>
-      </div>
-    </div>
-    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
-      <input type="checkbox" id="cmp-nosched"> Only families with no payment schedule on file
-    </label>
-
-    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div>
-        <label class="lb">Or name specific children</label>
-        <input class="in" id="cmp-pick" list="cmp-kids" placeholder="Type a name and press Enter" autocomplete="off">
-        <datalist id="cmp-kids"></datalist>
-        <div id="cmp-picked" class="chips" style="margin-top:8px"></div>
-        <div class="hint">Naming children here overrides the filters above.</div>
-      </div>
-      <div>
-        <label class="lb">Or send to any address</label>
-        <textarea class="in" id="cmp-extra" rows="3" placeholder="someone@example.com, another@example.com"></textarea>
-        <div class="hint">Anyone at all — a supplier, a former parent. They get the branding
-          but no fee details, since there is no child attached.</div>
-      </div>
-    </div>
-
-    <div id="cmp-count" class="pill-row" style="margin-top:14px">Counting…</div>
-    <div id="cmp-flags" class="hint" style="margin-top:6px"></div>
+  <div style="max-width:760px">
+  <div class="grp" style="margin-top:0"><h3>To</h3><div class="box">
+    <div class="row"><div class="l">Class</div><div id="cmp-classes" class="chips">…</div></div>
+    <div class="row"><div class="l">Batch</div><div id="cmp-batches" class="chips">…</div></div>
+    <div class="row"><div class="l">Who</div>
+      <select id="cmp-money" class="in">
+        <option value="all">Everyone in the selection</option>
+        <option value="owing">Only families who still owe</option>
+        <option value="overdue">Only families past their due date</option>
+        <option value="settled">Only families fully paid</option>
+      </select></div>
+    <div class="row"><div class="l">Payment due on or before<span class="sub">Anyone whose next instalment falls after this date is left out.</span></div><input id="cmp-cutoff" type="date" class="in"></div>
+    <label class="row" style="cursor:pointer"><span class="l">Only families with no payment schedule</span><input type="checkbox" class="sw" id="cmp-nosched"></label>
   </div>
+  <div class="foot" id="cmp-count">Counting…</div><div class="foot" id="cmp-flags"></div></div>
 
-  <div class="card" style="padding:18px;margin-top:14px">
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px">
-      <div><label class="lb">Subject</label><input id="cmp-subject" class="in" placeholder="e.g. Janmashtami celebration on 6 September"></div>
-      <div><label class="lb">Look</label><select id="cmp-theme" class="in">
-        <option value="school">School blue (default)</option>
+  <div class="grp"><h3>Or name them</h3><div class="box">
+    <div class="row"><div class="l">Children<span class="sub">Naming children overrides the filters above.</span></div>
+      <input class="in wide" id="cmp-pick" list="cmp-kids" placeholder="Type a name and press Enter" autocomplete="off"><datalist id="cmp-kids"></datalist></div>
+    <div class="rowx" id="cmp-picked-row" style="display:none"><div id="cmp-picked" class="chips"></div></div>
+    <div class="row"><div class="l">Other addresses<span class="sub">Branding only — no fee details, since there is no child attached.</span></div>
+      <textarea class="in" id="cmp-extra" rows="2" placeholder="someone@example.com, another@example.com" style="width:55%"></textarea></div>
+  </div></div>
+
+  <div class="grp"><h3>Message</h3><div class="box">
+    <div class="row"><div class="l">Subject</div><input id="cmp-subject" class="in wide" placeholder="e.g. Janmashtami celebration on 6 September"></div>
+    <div class="row"><div class="l">Look</div><select id="cmp-theme" class="in">
+        <option value="school">School blue</option>
         <option value="celebration">Celebration red</option>
         <option value="festive">Festive saffron</option>
         <option value="warm">Warm rose</option>
         <option value="notice">Payment notice amber</option>
         <option value="calm">Calm green</option>
       </select></div>
-    </div>
-    <label class="lb" style="margin-top:12px">Message</label>
-    <textarea id="cmp-message" class="in" rows="9" placeholder="Dear Parent,&#10;&#10;Write normally. Leave a blank line between paragraphs."></textarea>
-    <div class="hint" style="margin-top:6px">
-      Personalise with <code>{{child}}</code>, <code>{{first_name}}</code>, <code>{{class}}</code>,
-      <code>{{amount_due}}</code>, <code>{{due_date}}</code> — each family sees their own.
-    </div>
-    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
-      <input type="checkbox" id="cmp-fees"> Add each family’s full fee statement underneath — every payment received, what’s left
-    </label>
-    <label class="lb" style="margin-top:12px">Attachments</label>
-    <input id="cmp-files" type="file" multiple class="in">
-    <div id="cmp-filelist" class="hint"></div>
+    <div class="rowx"><textarea id="cmp-message" class="in" rows="9" placeholder="Dear Parent,&#10;&#10;Write normally. Leave a blank line between paragraphs." style="border:0;padding:0;width:100%"></textarea></div>
+    <label class="row" style="cursor:pointer"><span class="l">Add each family’s fee statement underneath<span class="sub">Every payment received and what is left, per child.</span></span><input type="checkbox" class="sw" id="cmp-fees"></label>
+    <div class="row"><div class="l">Attachments<span class="sub" id="cmp-filelist"></span></div><input id="cmp-files" type="file" multiple class="in" style="width:auto;text-align:left"></div>
   </div>
+  <div class="foot">Personalise with <code>{{child}}</code>, <code>{{first_name}}</code>, <code>{{class}}</code>, <code>{{amount_due}}</code>, <code>{{due_date}}</code> — each family sees their own.</div></div>
 
-  <div class="card" style="padding:18px;margin-top:14px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <button class="btn" id="cmp-preview">Preview</button>
-      <button class="btn ghost" id="cmp-test">Send one test to me</button>
-      <button class="btn danger" id="cmp-send">Send to everyone selected</button>
-      <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-left:auto">
-        <input type="checkbox" id="cmp-cc" checked> cc the office
-      </label>
-    </div>
-    <div id="cmp-msg" style="margin-top:12px"></div>
-    <div id="cmp-preview-box" style="margin-top:12px"></div>
+  <div class="grp"><div class="box">
+    <label class="row" style="cursor:pointer"><span class="l">Copy the office</span><input type="checkbox" class="sw" id="cmp-cc" checked></label>
+  </div></div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:22px">
+    <button class="btn line" id="cmp-preview">Preview</button>
+    <button class="btn line" id="cmp-test">Send a Test…</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="cmp-send">Send</button>
+  </div>
+  <div id="cmp-msg" style="margin-top:12px"></div>
+  <div id="cmp-preview-box" style="margin-top:12px"></div>
   </div>`;
 
   const readFilters = () => {
@@ -1518,9 +1073,9 @@ async function tabCompose(){
 
   async function refresh(){
     _cmp.filters = readFilters();
-    el('cmp-count').innerHTML = '<span class="pill">Counting…</span>';
+    el('cmp-count').textContent = 'Counting…';
     const j = await feesApi('/api/fees/recipients', { filters: _cmp.filters });
-    if (!j.ok) { el('cmp-count').innerHTML = `<span class="err">${esc(j.error)}</span>`; return; }
+    if (!j.ok) { el('cmp-count').innerHTML = `<span style="color:var(--red)">${esc(j.error)}</span>`; return; }
     _cmp.recipients = j.recipients;
     const freeCount = readExtras().length;
     // The markup is rebuilt on every visit, so the chips must be too —
@@ -1546,18 +1101,20 @@ async function tabCompose(){
       .map(k => `<option value="${esc(k.student_name)} — ${esc(k.program_name || 'class ?')}">`).join('');
     drawPicked();
     const s = j.summary;
-    _cmp.lastSummary = { reachable: s.reachable + freeCount };
+    const n = s.reachable + freeCount;
+    _cmp.lastSummary = { reachable: n };
     el('cmp-count').innerHTML =
-      `<span class="pill big">${s.reachable + freeCount} will receive this</span>` +
-      (freeCount ? `<span class="pill">${freeCount} typed address${freeCount === 1 ? '' : 'es'}</span>` : '') +
-      `<span class="pill">${s.addresses} email addresses</span>` +
-      (s.unreachable ? `<span class="pill warn">${s.unreachable} have no email on file</span>` : '') +
-      (s.owed ? `<span class="pill">${money(s.owed)} outstanding across them</span>` : '');
+      `<strong style="color:var(--label)">${n} will receive this</strong> · ${s.addresses} email address${s.addresses === 1 ? '' : 'es'}` +
+      (freeCount ? ` · ${freeCount} typed` : '') +
+      (s.unreachable ? ` · <span style="color:#8A4B00">${s.unreachable} have no email on file</span>` : '') +
+      (s.owed && has('finance') ? ` · ${money(s.owed)} outstanding across them` : '');
     el('cmp-flags').textContent = 'Across the school: ' +
       Object.entries(j.flags).map(([k,v]) => `${v} ${k.toLowerCase()}`).join(' · ');
+    const sb = el('cmp-send'); if (sb && sb.textContent !== 'Sent') sb.textContent = n ? `Send to ${n}` : 'Send';
   }
 
   const drawPicked = () => {
+    el('cmp-picked-row').style.display = _cmp.picked.length ? '' : 'none';
     el('cmp-picked').innerHTML = _cmp.picked.map((p, i) =>
       `<span class="chip on" data-i="${i}" style="cursor:pointer">${esc(p.student_name)} ✕</span>`).join('');
     document.querySelectorAll('#cmp-picked .chip').forEach(c => c.onclick = () => {
@@ -1857,28 +1414,26 @@ function kidRowHtml(r){
 
           const paid = Number(r.true_due) <= 0;
           const part = !paid && Number(r.total_collected) > 0;
-          const tint = paid ? 'background:var(--good-wash)' : (part ? 'background:var(--warn-wash)' : 'background:var(--crit-wash)');
-          const bar  = paid ? 'var(--good)' : (part ? 'var(--warn)' : 'var(--crit)');
+          const tint = paid ? 't-good' : (part ? 't-warn' : 't-crit');
           const contacts = [r.parent_email1, r.parent_email2].filter(Boolean);
           const phones   = [r.mobile1, r.mobile2].filter(Boolean);
-          return `<tr style="${tint}">
-          <td style="border-left:3px solid ${bar}">
-            <strong>${esc(r.student_name)}</strong>
+          return `<tr class="${tint}" style="cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">
+          <td><strong>${esc(r.student_name)}</strong>
             ${Number(r.our_discount) ? `<span class="chip c-mute" style="margin-left:6px">−${money(r.our_discount)}</span>`:''}
             ${Number(r.uncredited_cash) ? `<span class="chip c-warn" style="margin-left:4px">${money(r.uncredited_cash)} in hand</span>`:''}
             <br><span class="uin">${esc(r.uin)}</span></td>
-          <td style="font-size:12px;color:var(--muted)">${esc(r.father_name || '—')}
-            ${phones.length?`<br>${phones.map(p=>`<a href="tel:${esc(p)}" style="color:var(--muted)">${esc(p)}</a>`).join(' · ')}`:''}
-            ${contacts.length?`<br>${contacts.map(e2=>`<a href="mailto:${esc(e2)}" style="color:var(--accent)">${esc(e2)}</a>`).join(' · ')}`
-                             :'<br><span style="color:var(--faint)">no email on file</span>'}</td>
+          <td class="hint" onclick="event.stopPropagation()">${esc(r.father_name || '—')}
+            ${phones.length?`<br>${phones.map(p=>`<a href="tel:${esc(p)}" style="color:var(--label-2)">${esc(p)}</a>`).join(' · ')}`:''}
+            ${contacts.length?`<br>${contacts.map(e2=>`<a href="mailto:${esc(e2)}">${esc(e2)}</a>`).join(' · ')}`
+                             :'<br><span style="color:var(--label-3)">no email on file</span>'}</td>
           <td>${esc(r.program_name)}</td>
-          <td>${r.batch ? esc(r.batch) : `<select class="in" style="padding:2px 6px;font-size:12px;width:auto" onchange="setBatch('${esc(r.uin)}', this.value)">
-                <option value="">—</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option></select>`}</td>
+          <td onclick="event.stopPropagation()">${r.batch ? esc(r.batch) : `<select class="in" style="width:auto" onchange="setBatch('${esc(r.uin)}', this.value)">
+                <option value="">Set…</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option></select>`}</td>
           <td class="hint">${fmtDate(r.admission_date)}</td>
           <td class="r num">${money(r.total_invoiced)}</td>
           <td class="r num">${money(r.total_collected)}</td>
-          <td class="r num" style="font-weight:700;color:${bar}">${paid ? 'Paid' : money(r.true_due)}</td>
-          <td class="r"><a onclick="openPlanFrom('${esc(r.uin)}')">Plan ›</a></td>
+          <td class="r num ${paid ? 'money-ok' : (part ? '' : 'money-due')}" style="font-weight:600">${paid ? 'Paid' : money(r.true_due)}</td>
+          <td class="r" style="color:var(--label-3)">›</td>
         </tr>`;
 }
 const _DFY2 = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', year:'2-digit', timeZone:'UTC' });
@@ -1944,9 +1499,8 @@ function renderChildren(){
 
   el('body').innerHTML = head('Children', has('finance') ? 'Active roster. Quit and Transfer Out are excluded everywhere.' : 'Active roster — set batches and find contact details here.')
     + `<div class="stats" style="margin-bottom:14px">${classStrip}</div>
-      <div class="panel" style="padding:14px 16px;margin-bottom:14px">
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <input class="in" id="kid-q" placeholder="Search name, father or UIN…" value="${esc(_kidQ)}" style="flex:1;min-width:220px">
+      <div class="tools">
+          <div class="search"><input class="in" id="kid-q" type="search" placeholder="Search name, father or UIN" value="${esc(_kidQ)}"></div>
           <select class="in" id="kid-prog" style="width:auto">
             <option value="all">All classes (${_kids.length})</option>
             ${PROGRAMS.filter(p=>countFor(p)).map(p=>`<option value="${p}" ${_kidProg===p?'selected':''}>${p} (${countFor(p)})</option>`).join('')}
@@ -1963,7 +1517,6 @@ function renderChildren(){
             <option value="name"   ${_kidSort==='name'?'selected':''}>Name A–Z</option>
             <option value="due"    ${_kidSort==='due'?'selected':''}>Biggest balance</option>
           </select>
-        </div>
       </div>
 
       <div class="panel"><div class="ptop"><h2>Roster</h2>
@@ -2053,7 +1606,8 @@ async function tabLiability(){
   const otherMoney = sum(r => r.purpose !== 'tuition');
 
   el('body').innerHTML = head('Liabilities',
-      'Money already in our hands. Cash still to reach the bank, fees still to reach EuroKids, and collections that were never EuroKids’ to begin with.')
+      'Money already in our hands. Cash still to reach the bank, fees still to reach EuroKids, and collections that were never EuroKids’ to begin with.',
+      `<button class="btn" id="lb-open">Record Money…</button>`)
     + `<div class="stats" style="margin-bottom:16px">
         <div class="stat crit"><div class="k">Owed to EuroKids</div><div class="v">${money(heldForEuro)}</div>
           <div class="m">Fee money taken but not yet posted</div></div>
@@ -2063,55 +1617,9 @@ async function tabLiability(){
           <div class="m">Day care, uniform, events — ours, not EuroKids’</div></div>
       </div>
 
-      <div class="panel" style="padding:18px">
-        <h3 style="margin-bottom:12px">Record money received</h3>
-        <div class="pill-row" style="margin-bottom:12px">
-          <span class="chip on" id="lb-t-child" data-who="child" style="cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--bone);padding:5px 11px">A school child</span>
-          <span class="chip" id="lb-t-other" data-who="other" style="cursor:pointer;border:1px solid var(--line-2);padding:5px 11px">Someone else (day care, guest)</span>
-        </div>
-
-        <div id="lb-child-row" style="display:grid;grid-template-columns:2fr 1fr;gap:10px;align-items:end">
-          <div class="fld" style="margin:0"><label>Child — type to search</label>
-            <input class="in" id="lb-child" list="lb-kids" placeholder="Start typing a name…" autocomplete="off">
-            <datalist id="lb-kids">${options}</datalist>
-            <div class="hint" id="lb-child-hint">${(kids || []).length} children on the roll</div></div>
-          <div class="fld" style="margin:0"><label>What is this for?</label>
-            <select class="in" id="lb-purpose">
-              <option value="tuition">Tuition / term fees</option>
-              <option value="other">Something else…</option></select></div>
-        </div>
-
-        <div id="lb-other-row" style="display:none;grid-template-columns:1.4fr 1.4fr 1fr;gap:10px;align-items:end">
-          <div class="fld" style="margin:0"><label>Who paid — name</label>
-            <input class="in" id="lb-name" placeholder="e.g. Aarav (day care only)"></div>
-          <div class="fld" style="margin:0"><label>Their email — for the receipt</label>
-            <input class="in" id="lb-email" type="email" placeholder="optional"></div>
-          <div class="fld" style="margin:0"><label>Phone</label>
-            <input class="in" id="lb-phone" placeholder="optional"></div>
-        </div>
-
-        <div class="fld" id="lb-purpose-note-wrap" style="display:none;margin:10px 0 0">
-          <label>What is it for?</label>
-          <input class="in" id="lb-purpose-note" placeholder="e.g. Day care August · Uniform · Class photographs · Annual function">
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:10px;align-items:end;margin-top:10px">
-          <div class="fld" style="margin:0"><label>Mode</label>
-            <select class="in" id="lb-mode"><option>Cash</option><option>UPI</option><option>Cheque</option><option>Other</option></select></div>
-          <div class="fld" style="margin:0"><label>Amount</label><input class="in num" id="lb-amt" type="number" min="1"></div>
-          <div class="fld" style="margin:0"><label>Received on</label><input class="in" id="lb-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-          <div class="fld" style="margin:0"><label>Received by</label><input class="in" id="lb-by" placeholder="who took it"></div>
-        </div>
-        <label id="lb-receipt-label" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px">
-          <input type="checkbox" id="lb-receipt" checked> Email a receipt straight away<span id="lb-receipt-hint" class="hint"></span>
-        </label>
-        <div id="lb-msg" style="margin-top:10px"></div>
-        <button class="btn" id="lb-add" style="margin-top:12px">Record it</button>
-      </div>
-
-      <div class="panel" style="margin-top:16px;padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <input class="in" id="lb-q" placeholder="Search a name…" style="max-width:260px">
-        <select class="in" id="lb-f" style="max-width:230px">
+      <div class="tools">
+        <div class="search"><input class="in" id="lb-q" type="search" placeholder="Search a name"></div>
+        <select class="in" id="lb-f">
           <option value="">Everything</option>
           <option value="owed">Still owed to EuroKids</option>
           <option value="cash">Cash not yet banked</option>
@@ -2120,21 +1628,60 @@ async function tabLiability(){
         </select>
       </div>
 
-      <div class="panel" style="margin-top:14px"><div class="ptop"><h2 id="lb-h">Receipts</h2>
+      <div class="panel"><div class="ptop"><h2 id="lb-h">Receipts</h2>
         <span class="hint">Posting to EuroKids is matched automatically on the next sync</span></div>
         <div class="tw"><table><thead><tr><th>Who</th><th>For</th><th>Mode</th><th class="r">Amount</th>
-          <th class="r">Still held</th><th>Received</th><th>By</th><th>Banked</th><th></th></tr></thead>
+          <th class="r">Still Held</th><th>Received</th><th>By</th><th>Banked</th><th></th></tr></thead>
         <tbody id="lb-rows"></tbody></table></div></div>`;
 
+  // ── recording money is a scoped task, so it opens as a sheet ─────────────
+  const openRecord = () => {
+    const body = openDrawer('Record Money', 'What came in, from whom, and what it was for.');
+    body.innerHTML = `
+      <div class="grp"><div class="box">
+        <div class="row"><div class="l">Paid by</div>
+          <div class="seg"><button id="lb-t-child" data-who="child">A school child</button><button id="lb-t-other" data-who="other">Someone else</button></div></div>
+      </div><div class="foot">“Someone else” is for day care, guests and anything not tied to a child on the roll.</div></div>
+
+      <div class="grp" id="lb-child-row"><h3>Child</h3><div class="box">
+        <div class="row"><div class="l">Child</div><input class="in wide" id="lb-child" list="lb-kids" placeholder="Start typing a name" autocomplete="off"><datalist id="lb-kids">${options}</datalist></div>
+        <div class="row"><div class="l">For</div><select class="in" id="lb-purpose"><option value="tuition">Tuition / term fees</option><option value="other">Something else…</option></select></div>
+      </div><div class="foot" id="lb-child-hint">${(kids || []).length} children on the roll</div></div>
+
+      <div class="grp" id="lb-other-row" style="display:none"><h3>Payer</h3><div class="box">
+        <div class="row"><div class="l">Name</div><input class="in wide" id="lb-name" placeholder="e.g. Aarav (day care only)"></div>
+        <div class="row"><div class="l">Email</div><input class="in wide" id="lb-email" type="email" placeholder="optional — for the receipt"></div>
+        <div class="row"><div class="l">Phone</div><input class="in wide" id="lb-phone" placeholder="optional"></div>
+      </div></div>
+
+      <div class="grp" id="lb-purpose-note-wrap" style="display:none"><div class="box">
+        <div class="row"><div class="l">What for</div><input class="in wide" id="lb-purpose-note" placeholder="e.g. Day care August · Uniform · Annual function"></div>
+      </div></div>
+
+      <div class="grp"><h3>Payment</h3><div class="box">
+        <div class="row"><div class="l">Amount</div><input class="in num" id="lb-amt" type="number" min="1" placeholder="₹"></div>
+        <div class="row"><div class="l">Mode</div><select class="in" id="lb-mode"><option>Cash</option><option>UPI</option><option>Cheque</option><option>Other</option></select></div>
+        <div class="row"><div class="l">Received on</div><input class="in" id="lb-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="row"><div class="l">Received by</div><input class="in" id="lb-by" placeholder="who took it"></div>
+      </div></div>
+
+      <div class="grp"><div class="box">
+        <label class="row" id="lb-receipt-label" style="cursor:pointer"><span class="l">Email a receipt now<span class="sub" id="lb-receipt-hint"></span></span><input type="checkbox" class="sw" id="lb-receipt" checked></label>
+      </div></div>`;
+    el('drawer-foot').innerHTML = `<div id="pf-msg"></div><button class="btn line" id="lb-cancel">Cancel</button><button class="btn" id="lb-add">Record</button>`;
+    el('lb-cancel').onclick = closeDrawer;
+    wireRecord();
+  };
+  el('lb-open').onclick = openRecord;
+
+  function wireRecord(){
   // ── who-is-paying toggle ────────────────────────────────────────────────
   const setWho = who => {
     _liab.who = who;
-    const on = id => { const e = el(id); e.style.background = 'var(--ink)'; e.style.color = 'var(--bone)'; e.style.borderColor = 'var(--ink)'; };
-    const off = id => { const e = el(id); e.style.background = 'transparent'; e.style.color = 'var(--ink)'; e.style.borderColor = 'var(--line-2)'; };
-    if (who === 'child') { on('lb-t-child'); off('lb-t-other'); }
-    else                 { on('lb-t-other'); off('lb-t-child'); }
-    el('lb-child-row').style.display = who === 'child' ? 'grid' : 'none';
-    el('lb-other-row').style.display = who === 'child' ? 'none' : 'grid';
+    el('lb-t-child').classList.toggle('on', who === 'child');
+    el('lb-t-other').classList.toggle('on', who !== 'child');
+    el('lb-child-row').style.display = who === 'child' ? '' : 'none';
+    el('lb-other-row').style.display = who === 'child' ? 'none' : '';
     // Someone off the roll can never be paying EuroKids tuition.
     if (who !== 'child') { el('lb-purpose').value = 'other'; }
     togglePurposeNote();
@@ -2148,14 +1695,13 @@ async function tabLiability(){
       : !!(el('lb-email').value || '').trim();
     box.disabled = !hasAddress;
     if (!hasAddress) box.checked = false;
-    el('lb-receipt-label').style.opacity = hasAddress ? '1' : '.5';
-    el('lb-receipt-hint').textContent = hasAddress ? ''
-      : (_liab.who === 'child' ? ' — pick a child first'
-                               : ' — add their email above to enable this');
+    el('lb-receipt-label').style.opacity = hasAddress ? '1' : '.55';
+    el('lb-receipt-hint').textContent = hasAddress ? 'Goes to the family, cc the office.'
+      : (_liab.who === 'child' ? 'Pick a child first.' : 'Add their email above to enable this.');
   };
   const togglePurposeNote = () => {
     const other = _liab.who !== 'child' || el('lb-purpose').value === 'other';
-    el('lb-purpose-note-wrap').style.display = other ? 'block' : 'none';
+    el('lb-purpose-note-wrap').style.display = other ? '' : 'none';
   };
   el('lb-t-child').onclick = () => { setWho('child'); lbDraftSave(); };
   el('lb-t-other').onclick = () => { setWho('other'); lbDraftSave(); };
@@ -2168,9 +1714,8 @@ async function tabLiability(){
     LB_FIELDS.forEach(id => { const e = el(id); if (e && draft[id] != null) e.value = draft[id]; });
     togglePurposeNote();
     if (LB_FIELDS.some(id => id !== 'lb-on' && id !== 'lb-mode' && (draft[id] || '').trim())) {
-      el('lb-msg').innerHTML = `<div class="hint" style="background:var(--warn-wash);color:var(--warn);padding:8px 11px;border-radius:8px">
-        Picked up where you left off. <a href="#" id="lb-clear" style="color:inherit;font-weight:600">Clear it</a></div>`;
-      el('lb-clear').onclick = ev => { ev.preventDefault(); lbDraftClear(); tabLiability(); };
+      el('pf-msg').innerHTML = `<div class="ok">Picked up where you left off. <a href="#" id="lb-clear" style="color:inherit;font-weight:600">Clear it</a></div>`;
+      el('lb-clear').onclick = ev => { ev.preventDefault(); lbDraftClear(); openRecord(); };
     }
   }
   LB_FIELDS.forEach(id => {
@@ -2185,11 +1730,18 @@ async function tabLiability(){
     el('lb-child-hint').textContent = k
       ? `${k.student_name} · ${k.program_name || 'class ?'}`
       : `${_liab.kids.length} children on the roll`;
-    el('lb-child-hint').style.color = k ? 'var(--good)' : 'var(--muted)';
+    el('lb-child-hint').style.color = k ? 'var(--green)' : '';
     refreshReceiptTick();
     lbDraftSave();
   };
   el('lb-email').oninput = () => { refreshReceiptTick(); lbDraftSave(); };
+  el('lb-add').onclick = recordMoney;
+  setTimeout(() => el(_liab.who === 'child' ? 'lb-child' : 'lb-name')?.focus(), 250);
+  }   // wireRecord
+
+  // A draft left behind reopens the sheet, so nothing typed is lost.
+  const d0 = lbDraftLoad();
+  if (d0 && LB_FIELDS.some(id => id !== 'lb-on' && id !== 'lb-mode' && (d0[id] || '').trim())) openRecord();
 
   // ── the list ────────────────────────────────────────────────────────────
   const paintRows = () => {
@@ -2234,10 +1786,10 @@ async function tabLiability(){
   el('lb-f').onchange = paintRows;
 
   // ── record ──────────────────────────────────────────────────────────────
-  el('lb-add').onclick = async e => {
+  async function recordMoney(e){
     const btn = e.currentTarget;
     const amt = Number(el('lb-amt').value) || 0;
-    const say = (h, c='err') => el('lb-msg').innerHTML = `<div class="${c}">${h}</div>`;
+    const say = (h, c='err') => el('pf-msg').innerHTML = `<div class="${c}">${h}</div>`;
     if (amt <= 0) return say('Enter an amount.');
 
     let uin = null, name = null, purpose = 'other', email = null, phone = null;
@@ -2254,7 +1806,7 @@ async function tabLiability(){
     const note = (el('lb-purpose-note').value || '').trim();
     if (purpose === 'other' && !note) return say('Say what this payment is for.');
 
-    btn.disabled = true; say('Saving…', 'hint');
+    btn.disabled = true; btn.textContent = 'Saving…';
     const { data, error } = await getSb().schema('eurokids').from('receipt_offline').insert({
       uin, student_name: name, purpose, purpose_note: purpose === 'other' ? note : null,
       mode: el('lb-mode').value, amount_rupees: amt,
@@ -2263,7 +1815,7 @@ async function tabLiability(){
       payer_email: email, payer_phone: phone,
     }).select('id').maybeSingle();
     if (error) {
-      btn.disabled = false;
+      btn.disabled = false; btn.textContent = 'Record';
       // Surface the real reason — a silent failure here loses real money records.
       return say(`Could not save: ${esc(error.message)}${error.hint ? ' — ' + esc(error.hint) : ''}`);
     }
@@ -2274,6 +1826,7 @@ async function tabLiability(){
       // The money is already committed at this point. If the email fails the
       // operator must be told it was SAVED, or they re-enter it and the cash
       // is counted twice.
+      btn.textContent = 'Emailing receipt…';
       try {
         const r = await feesApi('/api/fees/payment-receipt', { receipt_id: data.id });
         say(r.ok ? `Recorded. Receipt emailed to ${esc((r.sent_to || []).join(', '))}.`
@@ -2282,12 +1835,13 @@ async function tabLiability(){
       } catch (e) {
         say(`Recorded — but the receipt email failed: ${esc(e.message)}. Use the Receipt link on the row to retry. Do not enter the payment again.`, 'err');
       } finally {
-        setTimeout(() => { if (tab === 'liability') tabLiability(); }, 2200);
+        btn.textContent = 'Recorded ✓';
+        setTimeout(() => { closeDrawer(); if (tab === 'liability') tabLiability(); }, 1800);
       }
     } else {
-      tabLiability();
+      closeDrawer(); tabLiability();
     }
-  };
+  }
 }
 
 async function sendReceipt(id, a){
@@ -2385,8 +1939,8 @@ async function tabPlans(){
 
   el('body').innerHTML = head('Fees &amp; Plans',
       'Fee, discount, instalments, letter — per child.')
-    + `<div class="panel" style="padding:14px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:280px" value="${esc(_planF.q)}">
+    + `<div class="tools">
+        <div class="search"><input class="in" id="plan-q" type="search" placeholder="Find a child" value="${esc(_planF.q)}"></div>
         <select class="in" id="plan-class" style="max-width:180px">
           <option value="">All classes</option>
           ${CLASSES.map(c => `<option ${_planF.cls === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
