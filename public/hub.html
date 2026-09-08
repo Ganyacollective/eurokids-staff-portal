@@ -138,6 +138,7 @@ async function boot(){
   const want = new URLSearchParams(location.search).get('open');
   if (want && TABS[want]) { app = TABS[want].app || 'admissions'; tab = want; }
   if (want === 'enq_new') { app = 'enquiries'; tab = 'enq_today'; window._openNewEnquiry = true; }
+  readUrl();                       // a reload should land where you left off
   const { data } = await getSb().auth.getSession();
   session = data.session;
   if (session) await loadMe();
@@ -178,6 +179,27 @@ async function loadMe(){
   modules = (mods || []).map(r => r.module);
   profile = prof || null;
 }
+
+// The address bar is the app's memory. #enquiries/enq_list means exactly
+// that, so a reload, a bookmark, a shared link and the browser's Back button
+// all behave the way people expect rather than dumping you at the chooser.
+function readUrl(){
+  const m = (location.hash || '').replace(/^#\/?/, '').split('/');
+  const a = m[0], t = m[1];
+  if (a === 'apps' || a === '') { app = null; return; }
+  if (t && TABS[t]) { app = TABS[t].app || 'admissions'; tab = t; }
+  else if (a === 'enquiries' || a === 'admissions') { app = a; }
+}
+function writeUrl(push){
+  const want = app ? `#${app}/${tab}` : '#apps';
+  if (location.hash === want) return;
+  try { history[push ? 'pushState' : 'replaceState'](null, '', want); } catch (_) {}
+}
+window.addEventListener('popstate', () => {
+  const before = `${app}/${tab}`;
+  readUrl();
+  if (`${app}/${tab}` !== before) paint();
+});
 
 function paint(){
   if (!session) return renderLogin();
@@ -236,6 +258,7 @@ function renderChooser(){
   ];
   if (isOwner()) doors.push({ key:'users', name:'Users & Access',
     desc:'Accounts for coordinators and HR; what each may open.', ok:true, href:null });
+  writeUrl(false);
   const who = profile?.full_name || session.user.email;
   el('stage').innerHTML = `
     <div class="page"><div class="chooser">
@@ -437,6 +460,7 @@ function renderApp(){
     el('more-out').onclick = async () => { closeDrawer(); await getSb().auth.signOut(); };
   };
 
+  writeUrl(true);
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   el('main').scrollTop = 0; window.scrollTo({ top: 0 });
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
