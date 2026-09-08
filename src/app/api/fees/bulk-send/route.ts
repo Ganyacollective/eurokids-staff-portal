@@ -5,13 +5,12 @@ import {
   renderEmail, textToHtml, money, day, plainFooter,
   SCHOOL_NAME, statementHtml, statementText, type ThemeKey, type LedgerLine,
 } from "@/lib/brand-email";
-import { sendMail, sendMany, provider as mailProvider, dailyCap } from "@/lib/mailer";
+import { sendMail, sendMany, provider as mailProvider, dailyCap, mailReady } from "@/lib/mailer";
 import { applyFilters, addressesFor, summarise, isRealAddress, type Filters, type ScheduleRow } from "@/lib/recipients";
 import { loadSchedule, bearer } from "@/lib/fee-data";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || `${SCHOOL_NAME} <admin@eurokidsjmdenclave.org>`;
 const CC = "admin@eurokidsjmdenclave.org";
 
@@ -45,7 +44,7 @@ function merge(text: string, r: ScheduleRow) {
 export async function POST(req: NextRequest) {
   const token = bearer(req);
   if (!token) return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
-  if (mailProvider() === "resend" && !RESEND_API_KEY) return NextResponse.json({ error: "No mail provider is configured — set SMTP_HOST/SMTP_USER/SMTP_PASS, or RESEND_API_KEY." }, { status: 400 });
+  if (!mailReady()) return NextResponse.json({ error: "No mail provider is configured — set SMTP_HOST/SMTP_USER/SMTP_PASS in Vercel." }, { status: 400 });
 
   let body: {
     filters?: Filters; subject?: string; message?: string;

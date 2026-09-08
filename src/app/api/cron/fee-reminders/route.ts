@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendMail } from "@/lib/mailer";
+import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME } from "@/lib/brand-email";
 import { addressesFor, type ScheduleRow } from "@/lib/recipients";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || `${SCHOOL_NAME} <admin@eurokidsjmdenclave.org>`;
 const CC = "admin@eurokidsjmdenclave.org";
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -106,7 +105,7 @@ export async function GET(req: NextRequest) {
   }));
   if (dry) return NextResponse.json({ ok: true, dry: true, on: todayIST, enabled: settings.enabled, steps, would_send: plan.length, plan });
 
-  if (!RESEND_API_KEY) return NextResponse.json({ ok: false, error: "RESEND_API_KEY missing" }, { status: 500 });
+  if (!mailReady()) return NextResponse.json({ ok: false, error: "No mail provider configured" }, { status: 500 });
 
   const results: { child: string; step: number; result: string }[] = [];
   for (const { r, step } of candidates) {

@@ -1,4 +1,4 @@
-import { sendMail } from "@/lib/mailer";
+import { sendMail, mailReady } from "@/lib/mailer";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME } from "@/lib/brand-email";
@@ -7,7 +7,6 @@ import { addressesFor, isRealAddress, type ScheduleRow } from "@/lib/recipients"
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || `${SCHOOL_NAME} <admin@eurokidsjmdenclave.org>`;
 const CC = "admin@eurokidsjmdenclave.org";
 
@@ -25,8 +24,8 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   const receiptId = Number(body.receipt_id);
   if (!receiptId) return NextResponse.json({ error: "receipt_id required" }, { status: 400 });
-  if (!body.preview && !RESEND_API_KEY) {
-    return NextResponse.json({ error: "RESEND_API_KEY is not configured in Vercel." }, { status: 400 });
+  if (!body.preview && !mailReady()) {
+    return NextResponse.json({ error: "No mail provider is configured — set SMTP_HOST/SMTP_USER/SMTP_PASS in Vercel." }, { status: 400 });
   }
 
   // Read the receipt as the caller first, so row-level security decides whether

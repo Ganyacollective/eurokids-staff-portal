@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 import { bearer } from "@/lib/fee-data";
 
@@ -29,6 +30,6 @@ export async function GET(req: NextRequest) {
     ivr_url: ivr ? `${SITE}/api/public/ivr-webhook?key=${encodeURIComponent(ivr)}` : null,
     whatsapp_configured: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
     whatsapp_template: process.env.WHATSAPP_WELCOME_TEMPLATE || "enquiry_welcome",
-    email_configured: !!process.env.RESEND_API_KEY,
+    email_configured: mailReady(),
   });
 }

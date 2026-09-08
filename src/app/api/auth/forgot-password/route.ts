@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendMail } from "@/lib/mailer";
+import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || "EuroKids JMD Enclave <admin@eurokidsjmdenclave.org>";
 
 // POST /api/auth/forgot-password
@@ -129,11 +128,12 @@ export async function POST(req: NextRequest) {
 
   // Email via Resend
   if (personalEmail) {
-    if (!RESEND_API_KEY) {
-      errors.push("Email skipped: RESEND_API_KEY is not configured in Vercel.");
+    if (!mailReady("hr")) {
+      errors.push("Email skipped: no mail provider is configured in Vercel.");
     } else {
       try {
-        const r = await sendMail({ to: [personalEmail], subject, text: textBody, html: htmlBody });
+        const r = await sendMail({ from: "hr",
+            to: [personalEmail], subject, text: textBody, html: htmlBody });
         if (r.ok) {
           sent.email = true;
         } else {

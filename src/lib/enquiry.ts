@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, plainFooter } from "@/lib/brand-email";
 import { sendWhatsApp } from "@/lib/whatsapp";
-import { sendMail } from "@/lib/mailer";
+import { sendMail, mailReady } from "@/lib/mailer";
 
 export type Source = "Walk In" | "Call" | "Website" | "Leadsquare" | "Instagram" | "Referral" | "Just Dial" | "WhatsApp" | "Others";
 export type Status = "in_progress" | "form_taken" | "won" | "almost_lost" | "lost";
@@ -145,8 +145,8 @@ export async function notifySchool(e: EnquiryRow, source: Source, created: boole
   const site = process.env.NEXT_PUBLIC_SITE_URL || "https://admin.eurokidsjmdenclave.org";
   const who = e.child_name || e.father_name || e.father_phone || "someone";
   const line = `${source === "Walk In" ? "Walk-in" : source} · ${who}${e.programs?.length ? " · " + e.programs.join(", ") : ""}${e.father_phone ? " · " + e.father_phone : ""}${created ? "" : " (known family)"}`;
-  const key = process.env.RESEND_API_KEY, to = (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
-  if (key && to.length) {
+  const to = (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
+  if (mailReady() && to.length) {
     const html = renderEmail({
       title: source === "Walk In" ? "A family just walked in" : `New enquiry — ${source}`, subtitle: who, theme: "celebration",
       bodyHtml: `<table style="font-size:14px;border-collapse:collapse">
@@ -166,7 +166,7 @@ export async function notifySchool(e: EnquiryRow, source: Source, created: boole
 }
 
 export async function sendEnquiryWelcomeEmail(to: string[], e: EnquiryRow): Promise<"sent" | "skipped" | string> {
-  const key = process.env.RESEND_API_KEY; if (!key) return "skipped";
+  if (!mailReady()) return "skipped";
   const parent = e.father_name || e.mother_name || "Parent";
   const child = e.child_name ? ` for ${esc(e.child_name)}` : "";
   const prog = (e.programs || [])[0];

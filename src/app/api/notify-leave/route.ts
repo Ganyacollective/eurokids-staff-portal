@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendMail } from "@/lib/mailer";
+import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -7,7 +7,6 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 // Notification destinations — all optional. Set in Vercel env vars.
-const RESEND_API_KEY   = process.env.RESEND_API_KEY;
 const RESEND_FROM      = process.env.RESEND_FROM || "EuroKids JMD Enclave <admin@eurokidsjmdenclave.org>";
 const HR_NOTIFY_EMAIL  = process.env.HR_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org";
 const SLACK_WEBHOOK    = process.env.SLACK_WEBHOOK_URL;
@@ -82,12 +81,13 @@ export async function POST(req: NextRequest) {
   const results: Record<string, string> = {};
 
   // 1) Resend email
-  if (RESEND_API_KEY && HR_NOTIFY_EMAIL) {
+  if (mailReady("hr") && HR_NOTIFY_EMAIL) {
     try {
-      const r = await sendMail({ to: [HR_NOTIFY_EMAIL], subject, text: textBody, html: htmlBody });
+      const r = await sendMail({ from: "hr",
+            to: [HR_NOTIFY_EMAIL], subject, text: textBody, html: htmlBody });
       results.email = r.ok ? "sent" : `failed: ${r.status}`;
     } catch (e: unknown) { results.email = "failed: " + (e instanceof Error ? e.message : String(e)); }
-  } else { results.email = "skipped (no RESEND_API_KEY or HR_NOTIFY_EMAIL)"; }
+  } else { results.email = "skipped (no mail provider or HR_NOTIFY_EMAIL)"; }
 
   // 2) Slack webhook
   if (SLACK_WEBHOOK) {

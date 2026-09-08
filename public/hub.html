@@ -1131,7 +1131,9 @@ async function tabCompose(){
     <label class="row" style="cursor:pointer"><span class="l">Copy the office</span><input type="checkbox" class="sw" id="cmp-cc" checked></label>
   </div></div>
 
-  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:22px">
+  <div class="foot" id="cmp-mail" style="margin:14px 0 0">Checking the mail route…</div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px">
     <button class="btn line" id="cmp-preview">Preview</button>
     <button class="btn line" id="cmp-test">Send a Test…</button>
     <span style="flex:1"></span>
@@ -1310,6 +1312,19 @@ async function tabCompose(){
       + '<br><span class="hint">Change the subject or reload the tab before sending anything else.</span>',
       j.failed ? 'err' : 'ok');
   };
+
+  // Say plainly which mailbox and which provider this send will use, so
+  // "is it still going through Resend?" is answerable at a glance.
+  (async () => {
+    const { data: { session: sx } } = await getSb().auth.getSession();
+    const r = await fetch('/api/mail/status', { headers: { Authorization: `Bearer ${sx?.access_token}` } }).then(x => x.json()).catch(() => null);
+    const box = el('cmp-mail'); if (!box) return;
+    if (!r?.ok) return box.textContent = '';
+    const name = p => p === 'smtp' ? 'Google Workspace' : 'Resend';
+    box.innerHTML = `Parents' post goes out as <strong>${esc(r.school.from)}</strong> through <strong>${name(r.school.provider)}</strong>${r.school.user ? ' (' + esc(r.school.user) + ')' : ''} · up to ${r.daily_cap.toLocaleString('en-IN')} a day.
+      HR mail goes as <strong>${esc(r.hr.from)}</strong> through <strong>${name(r.hr.provider)}</strong>.
+      ${r.school.provider === 'smtp' && r.hr.provider === 'smtp' && r.resend_key_present ? '<span style="color:#8A4B00">RESEND_API_KEY is still set in Vercel but nothing uses it — safe to delete.</span>' : ''}`;
+  })();
 
   refresh();
 }

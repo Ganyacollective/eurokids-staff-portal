@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendMail } from "@/lib/mailer";
+import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM = process.env.RESEND_FROM || "EuroKids JMD Enclave <admin@eurokidsjmdenclave.org>";
 const HR_NOTIFY_EMAIL = process.env.HR_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org";
 const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK_URL;
@@ -96,10 +95,10 @@ export async function POST(req: NextRequest) {
   const results: Record<string, string> = {};
 
   // (a) HR notification email
-  if (RESEND_API_KEY && HR_NOTIFY_EMAIL) {
+  if (mailReady("hr") && HR_NOTIFY_EMAIL) {
     dispatches.push((async () => {
       try {
-        const r = await sendMail({
+        const r = await sendMail({ from: "hr",
             to: [HR_NOTIFY_EMAIL],
             subject: `${emp.display_name} applied for ${leave_type} (${total_days} day${total_days === 1 ? "" : "s"})`,
             text: `${emp.display_name} just applied for ${leave_type}.\n\nDates: ${dateText}\nDays: ${total_days}\nReason: ${reason}\nSubmitted anonymously (no sign-in)\n\nReview: ${portalUrl}/`,
@@ -111,14 +110,14 @@ export async function POST(req: NextRequest) {
   }
 
   // (b) Teacher confirmation email — record explicit skip reasons so the UI can surface them
-  if (!RESEND_API_KEY) {
-    results.teacher_confirm = "skipped: RESEND_API_KEY not set in Vercel";
+  if (!mailReady("hr")) {
+    results.teacher_confirm = "skipped: no mail provider set in Vercel";
   } else if (!emp.email) {
     results.teacher_confirm = "skipped: no personal email on employee record";
   } else {
     dispatches.push((async () => {
       try {
-        const r = await sendMail({
+        const r = await sendMail({ from: "hr",
             to: [emp.email!],
             subject: "We've received your leave application",
             text: `Hello ${emp.display_name?.split(" ")[0] || ""},\n\nThank you for applying. Here's what we received:\n\nType: ${leave_type}\nDates: ${dateText}\nDays: ${total_days}\nReason: ${reason}\n\nHR will review and let you know shortly. If you did not submit this, please tell the office immediately.\n\n— Eurokids JMD Enclave`,
@@ -191,7 +190,7 @@ export async function POST(req: NextRequest) {
     parts.push(`Confirmation sent to ${emp.email}. Check inbox + spam folder.`);
   } else if (confirmStatus.startsWith("skipped: no personal email")) {
     parts.push("(No personal email on file for you — ask the office to add one so future confirmations reach you.)");
-  } else if (confirmStatus.startsWith("skipped: RESEND_API_KEY")) {
+  } else if (confirmStatus.startsWith("skipped: no mail provider")) {
     parts.push("(Email confirmations are not yet configured — ask the office.)");
   } else if (confirmStatus.startsWith("failed") || confirmStatus.startsWith("err")) {
     parts.push(`(Confirmation to ${emp.email} could not be delivered: ${confirmStatus}.)`);
@@ -203,7 +202,7 @@ export async function POST(req: NextRequest) {
     personal_email: emp.email || null,
     notifications: results,
     diagnostics: {
-      resend_api_key_present: !!RESEND_API_KEY,
+      mail_configured: mailReady("hr"),
       resend_from: RESEND_FROM,
       hr_notify_email_present: !!HR_NOTIFY_EMAIL,
       employee_personal_email: emp.email || null,
