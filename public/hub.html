@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=19">
-<link rel="prefetch" href="/brand/enquiries.js?v=19" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=20">
+<link rel="prefetch" href="/brand/enquiries.js?v=20" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -81,7 +81,8 @@ const SCHED_COLS = 'uin,student_name,father_name,program_name,batch,admission_da
   + 'total_fee,final_fee,agreed_fee,welcome_sent_at,note,eurokids_discount,note_count,latest_note,'
   + 'term1_due,term2_due,epms_invoiced,collected,epms_due,our_discount,uncredited_cash,paid_so_far,true_due,overpaid,'
   + 'instalments,scheduled_total,has_schedule,schedule_mismatch,next_amount,next_due_date,schedule_flag,days_overdue,'
-  + 'overdue_amount,overdue_by,upcoming_amount,upcoming_date,epms_discount_kind,discount_reason';
+  + 'overdue_amount,overdue_by,upcoming_amount,upcoming_date,epms_discount_kind,discount_reason,'
+  + 'list_fee,scheme_discount,fee_looks_wrong';
 const schedule = () => cached('sched', async () => {
   const { data, error } = await getSb().schema('eurokids').from('v_schedule').select(SCHED_COLS).limit(2000);
   if (error) throw error; return data || [];
@@ -564,6 +565,9 @@ const VIEW_FIELDS = [
   { k:'welcome_sent_at', l:'Welcome letter sent',     t:'exists' },
   { k:'parent_email1', l:'Has parent email',          t:'exists' },
   { k:'epms_discount_kind', l:'EuroKids scheme (corporate/sibling/…)', t:'enum' },
+  { k:'scheme_discount', l:'EuroKids scheme saving',   t:'num' },
+  { k:'list_fee',      l:'Full fee for the year',      t:'num' },
+  { k:'fee_looks_wrong', l:'EPMS invoice looks wrong', t:'bool' },
   { k:'discount_reason', l:'Concession reason',        t:'text' },
   { k:'father_name',   l:'Father',                    t:'text' },
 ];
@@ -2343,11 +2347,20 @@ function statementHtml(c, ledger, items){
   // A concession is money off our own margin, and it must say what it was for.
   const scheme = epmsSchemeLabel(c.epms_discount_kind);
   const why = String(c.discount_reason || '').trim();
+  // EuroKids applies its scheme before invoicing, so the invoice already reads
+  // ₹63,330 where the published fee is ₹68,500. Showing only the invoice hides
+  // the ₹5,170 the family was given, and makes the school's own concession look
+  // like the whole of their benefit. Both come off the published fee, in order.
+  const listFee = Number(c.list_fee || 0);
+  const schemeOff = Number(c.scheme_discount || 0);
   return `
     <div class="hero ${heroCls}"><div class="k">${heroK}</div><div class="v">${heroV}</div><div class="m">${heroM}</div></div>
     <div class="grp"><h3>Statement</h3><div class="box">
-      ${line('Annual fee', money(fee), 'mute', scheme ? `already after the ${esc(scheme)}` : 'as invoiced by EuroKids')}
-      ${disc > 0 ? line('Concession', '− ' + money(disc), 'credit', why ? esc(why) + ' — funded by us' : '⚠︎ no reason recorded — open Fee below and say why') : ''}
+      ${schemeOff > 0
+        ? line('Annual fee', money(listFee), 'mute', `${esc(c.program_name || '')} · full fee for this year`)
+          + line(`${esc(scheme[0].toUpperCase() + scheme.slice(1))}`, '− ' + money(schemeOff), 'credit', 'applied by EuroKids before invoicing')
+        : line('Annual fee', money(fee), 'mute', scheme ? `already after the ${esc(scheme)}` : 'as invoiced by EuroKids')}
+      ${disc > 0 ? line('Concession from the school', '− ' + money(disc), 'credit', why ? esc(why) : '⚠︎ no reason recorded — open Fee below and say why') : ''}
       ${line('<strong>Agreed fee</strong>', '<strong>' + money(agreed) + '</strong>')}
       ${epmsUndated > 0 ? line('Paid to EuroKids', '− ' + money(epmsUndated), 'credit', 'before we started tracking dates') : ''}
       ${pays.map(l => line(l.source === 'epms' ? 'Paid to EuroKids' : 'Paid to us', '− ' + money(l.amount), 'credit',
@@ -2372,15 +2385,35 @@ async function openPlan(uin){
     `<div class="grp"><div class="box"><div class="rowx"><div class="skel" style="width:60%"></div></div>
       <div class="rowx"><div class="skel" style="width:85%"></div></div><div class="rowx"><div class="skel" style="width:40%"></div></div></div></div>`;
 
-  const [{ data: kidRow }, { data: plan }, { data: items }, { data: contact }, { data: ledger }, { data: promises }] = await Promise.all([
-    known ? Promise.resolve({ data: known }) : s.schema('eurokids').from('v_schedule').select('*').eq('uin', uin).maybeSingle(),
-    s.schema('eurokids').from('payment_plan').select('*').eq('uin', uin).maybeSingle(),
-    s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date,label').eq('uin', uin).order('seq'),
-    s.schema('eurokids').from('child_contact').select('*').eq('uin', uin).maybeSingle(),
-    s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date'),
-    s.schema('eurokids').from('payment_promise').select('*').eq('uin', uin).order('promised_on', { ascending: false }).limit(20),
+  // A dropped connection used to reject the whole batch, leaving the roster's
+  // figures on screen looking authoritative with a bare "TypeError: Load
+  // failed" underneath. Each request now answers for itself, and if the ones
+  // the money depends on did not arrive, the sheet says so and offers to retry
+  // rather than presenting a half-loaded statement as fact.
+  const q = p => p.then(r => r, e => ({ data: null, error: e }));
+  const [kidRes, planRes, itemRes, contactRes, ledgerRes, promiseRes] = await Promise.all([
+    // Always re-read this child, even when the roster gave us a row to paint
+    // instantly: that copy can be minutes old, and a fee that changed in the
+    // meantime would otherwise sit on screen as though it were current.
+    q(s.schema('eurokids').from('v_schedule').select('*').eq('uin', uin).maybeSingle()),
+    q(s.schema('eurokids').from('payment_plan').select('*').eq('uin', uin).maybeSingle()),
+    q(s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date,label').eq('uin', uin).order('seq')),
+    q(s.schema('eurokids').from('child_contact').select('*').eq('uin', uin).maybeSingle()),
+    q(s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date')),
+    q(s.schema('eurokids').from('payment_promise').select('*').eq('uin', uin).order('promised_on', { ascending: false }).limit(20)),
   ]);
-  const kid = kidRow;
+  const lost = [kidRes, planRes, itemRes, ledgerRes].find(r => r && r.error);
+  if (lost) {
+    body.innerHTML = `<div class="empty" style="padding:40px 12px"><div class="ic">⚠︎</div>
+      <h3>This record did not load</h3>
+      <div>${esc(lost.error.message || String(lost.error))}</div>
+      <button class="btn" id="pf-retry" style="margin-top:16px">Try again</button></div>`;
+    el('pf-retry').onclick = () => openPlan(uin);
+    return;
+  }
+  const plan = planRes.data, items = itemRes.data, contact = contactRes.data,
+        ledger = ledgerRes.data, promises = promiseRes.data;
+  const kid = kidRes.data || known;
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
   const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
 
@@ -2392,7 +2425,11 @@ async function openPlan(uin){
     ${statementHtml(kid || {}, ledger, items)}
 
     <div class="grp"><h3>Fee</h3><div class="box">
-      ${epmsSchemeLabel(kid?.epms_discount_kind) ? `<div class="row"><div class="l">EuroKids scheme<span class="sub">Applied before EPMS invoiced us — it is already inside the annual fee below. Do not enter it again as a concession.</span></div>
+      ${Number(kid?.list_fee) > 0 ? `<div class="row"><div class="l">Full fee for the year<span class="sub">${esc(kid.program_name || '')} joining ${kid.admission_date ? longDate(kid.admission_date) : '—'}, from the EuroKids fee calculator</span></div>
+        <div class="v mute">${money(kid.list_fee)}</div></div>` : ''}
+      ${Number(kid?.scheme_discount) > 0 ? `<div class="row"><div class="l">${esc(kid.epms_discount_kind)}<span class="sub">EuroKids applied this before invoicing, so it is already inside the figure below. The parent now sees it on their statement.</span></div>
+        <div class="v credit">− ${money(kid.scheme_discount)}</div></div>`
+        : epmsSchemeLabel(kid?.epms_discount_kind) ? `<div class="row"><div class="l">EuroKids scheme<span class="sub">Already inside the annual fee below. Do not enter it again as a concession.</span></div>
         <div class="v"><span class="chip c-acc">${esc(kid.epms_discount_kind)}</span></div></div>` : ''}
       <div class="row"><div class="l">Annual fee<span class="sub">EPMS invoiced <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></div>
         <input class="in num" id="pf-total" type="number" value="${total}"></div>
@@ -2498,6 +2535,14 @@ async function openPlan(uin){
   const warnFee = () => {
     const box = el('pf-fee-warn'); if (!box) return;
     const t = Number(el('pf-total').value) || 0;
+    // An invoice a fraction of the published fee is EPMS billing one month, not
+    // a bargain. Say so plainly — a statement built on it would be nonsense.
+    if (kid?.fee_looks_wrong) {
+      box.innerHTML = `<div class="foot warn">EPMS has invoiced only <strong>${money(epmsFee)}</strong> against a full-year fee of
+        <strong>${money(kid.list_fee)}</strong> for ${esc(kid.program_name || 'this class')}. That looks like a single month,
+        not the year. Fix the invoice in EPMS before sending this family anything.</div>`;
+      return;
+    }
     box.innerHTML = (epmsFee > 0 && Math.abs(t - epmsFee) > 1)
       ? `<div class="foot warn">EPMS invoiced <strong>${money(epmsFee)}</strong>, not ${money(t)}.
            <a href="#" id="pf-use-epms" style="margin-left:6px">Use the EPMS figure</a></div>`
@@ -2798,7 +2843,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=19"></script>
+<script src="/brand/enquiries.js?v=20"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

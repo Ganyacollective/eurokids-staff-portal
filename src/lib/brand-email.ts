@@ -131,6 +131,11 @@ export type StatementChild = {
   //  · discount_reason — the concession we fund ourselves, off our own
   //    margin, which is the only thing that reduces the fee here.
   epms_discount_kind?: string | null; discount_reason?: string | null;
+  // The published fee for this programme and joining month, and what the
+  // EuroKids scheme took off it. Zero when there is no scheme, or when the
+  // grid and the invoice do not reconcile — in which case no breakdown is
+  // shown rather than a guessed one.
+  list_fee?: number | string | null; scheme_discount?: number | string | null;
 };
 
 // The concessions we grant ourselves. Kept in one place so the child sheet,
@@ -187,9 +192,18 @@ export function statementHtml(c: StatementChild, ledger: LedgerLine[] = []) {
   const sub = (t: string) => `<div style="font-size:12px;color:#9CA3AF;margin-top:2px">${esc(t)}</div>`;
   const scheme = epmsDiscountLabel(c.epms_discount_kind);
   const why = String(c.discount_reason || "").trim();
+  // EuroKids applies its scheme before the invoice is raised, so a statement
+  // built on the invoice alone silently drops the largest thing the family was
+  // given. Both reductions are shown, off the published fee, in the order they
+  // happened — the parent should be able to see the whole of their benefit.
+  const listFee = Number(c.list_fee || 0), schemeOff = Number(c.scheme_discount || 0);
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const lines = [
-    row(`Annual fee${scheme ? sub(`after your ${scheme}`) : ""}`, moneyH(fee)),
-    disc > 0 ? row(`Concession${why ? sub(why) : ""}`, "− " + moneyH(disc), green) : "",
+    schemeOff > 0
+      ? row(`Annual fee${sub(`${c.program_name || "the year"} · full fee`)}`, moneyH(listFee))
+        + row(cap(scheme || "EuroKids discount"), "− " + moneyH(schemeOff), green)
+      : row(`Annual fee${scheme ? sub(`after your ${scheme}`) : ""}`, moneyH(fee)),
+    disc > 0 ? row(`Concession from the school${why ? sub(why) : ""}`, "− " + moneyH(disc), green) : "",
     undated > 0 ? row("Paid so far", "− " + moneyH(undated), green) : "",
     ...pays.map((l) => row(
       `Paid${l.on_date ? ` <span style="color:#9CA3AF;font-size:12px">${day(l.on_date)}${l.mode && l.source !== "epms" ? " · " + esc(l.mode) : ""}</span>` : ""}`,
@@ -213,8 +227,12 @@ export function statementText(c: StatementChild, ledger: LedgerLine[] = []) {
   const pays = ledger.filter((l) => l.counts_to_fees);
   const scheme = epmsDiscountLabel(c.epms_discount_kind);
   const why = String(c.discount_reason || "").trim();
+  const listFee = Number(c.list_fee || 0), schemeOff = Number(c.scheme_discount || 0);
   return [
-    `Annual fee:      ${money(fee)}${scheme ? `  (after your ${scheme})` : ""}`,
+    ...(schemeOff > 0
+      ? [`Annual fee:      ${money(listFee)}`,
+         `${(scheme || "EuroKids discount").replace(/^./, (m) => m.toUpperCase())}: − ${money(schemeOff)}`]
+      : [`Annual fee:      ${money(fee)}${scheme ? `  (after your ${scheme})` : ""}`]),
     ...(disc > 0 ? [`Concession:      − ${money(disc)}${why ? `  (${why})` : ""}`] : []),
     ...pays.map((l) => `Paid ${l.on_date ? day(l.on_date) : ""}: − ${money(l.amount)}`),
     owed <= 1 ? `Balance:         NIL — fully paid` : `Balance due:     ${money(owed)}`,
