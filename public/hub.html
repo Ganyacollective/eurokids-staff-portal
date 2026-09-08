@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=16">
-<link rel="prefetch" href="/brand/enquiries.js?v=16" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=17">
+<link rel="prefetch" href="/brand/enquiries.js?v=17" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1459,32 +1459,81 @@ async function tabOverview(){
     return;
   }
 
-  // No finance grant: a worklist. No roster count, no sums, nothing to multiply.
-  const { data, error } = await s.schema('eurokids').from('v_action_items')
-    .select('uin,student_name,father_name,program_name,action,priority,amount_to_collect');
+  // No finance grant: her day, not the school's balance sheet. Counts and
+  // names, never a school-wide total.
+  const [{ data: work, error }, roster, { data: promises }] = await Promise.all([
+    s.schema('eurokids').from('v_action_items').select('uin,student_name,father_name,program_name,action,priority,amount_to_collect'),
+    schedule().catch(() => []),
+    s.schema('eurokids').from('v_promise').select('*').in('status', ['open']).order('promised_on'),
+  ]);
   if (error) return el('body').innerHTML = fail(error);
-  el('body').innerHTML = head("Today's list", 'The parents to follow up with.',
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = roster.filter(r => r.schedule_flag === 'OVERDUE');
+  const dueSoon = roster.filter(r => r.schedule_flag === 'DUE SOON');
+  const paidUp  = roster.filter(r => r.schedule_flag === 'SETTLED');
+  const promisedToday = (promises || []).filter(p => p.promised_on === today);
+  const promisedBroken = (promises || []).filter(p => p.promised_on < today);
+  const promisedLater = (promises || []).filter(p => p.promised_on > today);
+
+  const pRow = p => `<button class="linkrow" onclick="openPlanFrom('${esc(p.uin)}')" style="display:flex;justify-content:space-between;gap:12px;align-items:center;color:var(--label)">
+      <span><strong>${esc(p.student_name)}</strong> <span class="hint">${esc(p.program_name || '')}</span>
+        <div class="hint">Said they would pay ${p.amount ? money(p.amount) : 'the balance'} by ${longDate(p.promised_on)}${p.spoke_to ? ' · ' + esc(p.spoke_to) : ''}${p.taken_by ? ' · noted by ' + esc(p.taken_by) : ''}</div>
+        ${p.note ? `<div class="hint">“${esc(String(p.note).slice(0, 90))}”</div>` : ''}</span>
+      <span style="display:flex;gap:8px;align-items:center;flex:none">
+        ${p.true_due > 1 ? `<span class="chip ${p.promised_on < today ? 'c-crit' : 'c-warn'}">${money(p.true_due)} still due</span>` : '<span class="chip c-good">paid</span>'}
+        ${p.mobile1 ? `<a class="btn line sm" href="tel:${esc(p.mobile1)}" onclick="event.stopPropagation()">Call</a>` : ''}
+        <span style="color:var(--label-3)">›</span></span></button>`;
+
+  el('body').innerHTML = head("Today's list", new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' }),
       has('epms_admin') ? `<span class="hint" id="sync-info" style="margin-right:10px">Checking…</span>
          <button class="btn line sm" id="sync">Sync from EPMS</button>` : '')
-    + `<div class="panel"><div class="ptop"><h2>Fees to follow up</h2>
+    + `<div class="stats">
+        <div class="stat"><div class="k">Children on the roll</div><div class="v">${roster.length}</div><div class="m">${paidUp.length} fully paid</div></div>
+        <div class="stat crit"><div class="k">Fees overdue</div><div class="v">${overdue.length}</div><div class="m">famil${overdue.length === 1 ? 'y' : 'ies'} to chase</div></div>
+        <div class="stat warn"><div class="k">Due within a fortnight</div><div class="v">${dueSoon.length}</div><div class="m">worth a friendly call</div></div>
+        <div class="stat ${promisedBroken.length ? 'crit' : ''}"><div class="k">Promised to pay</div><div class="v">${promisedToday.length + promisedBroken.length}</div>
+          <div class="m">${promisedBroken.length ? promisedBroken.length + ' dates have passed' : 'due today'}</div></div>
+      </div>
+
+      ${promisedBroken.length ? `<div class="panel"><div class="ptop"><h2>Promised — and the day has passed</h2><span class="hint">${promisedBroken.length}</span></div>
+        <div class="box" style="box-shadow:none;border-radius:0">${promisedBroken.map(pRow).join('')}</div></div>` : ''}
+      ${promisedToday.length ? `<div class="panel"><div class="ptop"><h2>Promised for today</h2><span class="hint">${promisedToday.length}</span></div>
+        <div class="box" style="box-shadow:none;border-radius:0">${promisedToday.map(pRow).join('')}</div></div>` : ''}
+      ${promisedLater.length ? `<div class="panel"><div class="ptop"><h2>Promised, still to come</h2><span class="hint">${promisedLater.length}</span></div>
+        <div class="box" style="box-shadow:none;border-radius:0">${promisedLater.map(pRow).join('')}</div></div>` : ''}
+
+      <div class="panel"><div class="ptop"><h2>Fees to follow up</h2>
         <span class="hint">Term 1 first, then the largest balances</span></div>
-      <div class="tw"><table><thead><tr><th>Child</th><th>Father</th><th>Program</th>
+      <div class="tw"><table><thead><tr><th>Child</th><th>Father</th><th>Programme</th>
         <th>What is owed</th><th class="r">Amount</th><th></th></tr></thead><tbody>
-        ${(data || []).map(r => `<tr><td>${esc(r.student_name)}</td>
-          <td style="color:var(--muted)">${esc(r.father_name || '—')}</td><td>${esc(r.program_name)}</td>
+        ${(work || []).map(r => `<tr style="cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">
+          <td><strong>${esc(r.student_name)}</strong></td>
+          <td class="hint">${esc(r.father_name || '—')}</td><td>${esc(r.program_name)}</td>
           <td><span class="chip ${r.priority === 'urgent' ? 'c-crit' : 'c-warn'}">${esc(r.action)}</span></td>
           <td class="r num">${money(r.amount_to_collect)}</td>
-          <td><button class="btn line sm logcall">Log a call</button></td></tr>`).join('')}
+          <td class="r" style="color:var(--label-3)">›</td></tr>`).join('')
+        || `<tr><td colspan="6"><div class="empty"><div class="ic">✅</div><h3>Nothing to chase</h3><div>Every family is up to date.</div></div></td></tr>`}
       </tbody></table></div></div>`;
-  document.querySelectorAll('.logcall').forEach(b =>
-    b.onclick = () => {
-      // This wrote nothing anywhere and reset on reload, so a coordinator
-      // believed the follow-up was on record when it was not.
-      alert('Call logging is not built yet — please note the follow-up wherever you keep them.');
-    });
   if (has('epms_admin')) wireSync(s, () => { if (tab === 'overview') tabOverview(); });
 }
 
+// When a colleague syncs, this tab is holding stale numbers. Coming back to
+// the window checks the clock on the last run and quietly refreshes if it has
+// moved on.
+let _lastSyncAt = null;
+if (!window._syncWatch) {
+  window._syncWatch = true;
+  window.addEventListener('focus', async () => {
+    if (!session || !app || !_lastSyncAt) return;
+    try {
+      const { data } = await getSb().schema('epms').from('sync_runs')
+        .select('finished_at').not('finished_at','is',null)
+        .order('finished_at', { ascending: false }).limit(1);
+      const at = data?.[0]?.finished_at;
+      if (at && at !== _lastSyncAt) { _lastSyncAt = at; invalidate(); renderApp(); }
+    } catch (_) { /* a background check must never interrupt anyone */ }
+  });
+}
 
 /* ── the EPMS sync button — shared by the finance overview and the coordinator's worklist ── */
 function wireSync(s, afterSync){
@@ -1493,12 +1542,15 @@ function wireSync(s, afterSync){
       const info = el('sync-info'); if (!info) return;
       try {
         const { data: runs } = await s.schema('epms').from('sync_runs')
-          .select('finished_at,status,rows_fetched').not('finished_at','is',null)
+          .select('finished_at,status,rows_fetched,triggered_by').not('finished_at','is',null)
           .order('finished_at', { ascending: false }).limit(1);
         const last = runs && runs[0];
         info.textContent = last
-          ? `Last synced ${new Date(last.finished_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${last.status==='ok' ? '' : ' (failed)'}`
+          ? `Last synced ${new Date(last.finished_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}`
+            + (last.triggered_by ? ` by ${String(last.triggered_by).split('@')[0]}` : '')
+            + (last.status === 'ok' ? '' : ' — that run failed')
           : 'Never synced';
+        _lastSyncAt = last?.finished_at || null;
       } catch (_) { info.textContent = ''; }
     };
     showLastSync();
@@ -1545,16 +1597,15 @@ function wireSync(s, afterSync){
             ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
             : `Synced ${j.invoices} records · ${j.active} active`) + extra + matched;
           b.textContent = 'Synced ✓';
+          invalidate();                    // everyone's next read is the new figures
           setTimeout(afterSync, 900);
         } else {
-          el('sync-info').textContent = '';
-          alert('Sync failed:\n\n' + (j.error || 'unknown error'));
-          b.disabled = false; b.textContent = 'Sync from EPMS';
+          el('sync-info').innerHTML = `<span style="color:var(--red)">Sync failed — ${esc(j.error || 'unknown error')}</span>`;
+          b.disabled = false; b.textContent = 'Try again';
         }
       } catch (e) {
-        el('sync-info').textContent = '';
-        alert('Sync failed: ' + e.message);
-        b.disabled = false; b.textContent = 'Sync from EPMS';
+        el('sync-info').innerHTML = `<span style="color:var(--red)">Sync failed — ${esc(e.message)}</span>`;
+        b.disabled = false; b.textContent = 'Try again';
       }
     };
 }
@@ -2241,18 +2292,31 @@ function statementHtml(c, ledger, items){
 async function openPlan(uin){
   _planUin = uin;
   const s = getSb();
-  const [{ data: kid }, { data: plan }, { data: items }, { data: contact }] = await Promise.all([
-    s.schema('eurokids').from('v_schedule').select('*').eq('uin', uin).maybeSingle(),
+  // The roster is already in memory, so the name, the class and the balance
+  // can be on screen before a single request goes out. Everything else — the
+  // plan, the instalments, the ledger, the notes — arrives together after.
+  const known = (_cache.get('sched')?.val || []).find(k => k.uin === uin);
+  const body = openDrawer(known?.student_name || uin,
+    known ? `${known.program_name || ''}${known.batch ? ' · ' + known.batch : ''}${known.father_name ? ' · ' + known.father_name : ''} · ${uin}` : uin);
+  if (known) body.innerHTML = statementHtml(known, [], []) +
+    `<div class="grp"><div class="box"><div class="rowx"><div class="skel" style="width:60%"></div></div>
+      <div class="rowx"><div class="skel" style="width:85%"></div></div><div class="rowx"><div class="skel" style="width:40%"></div></div></div></div>`;
+
+  const [{ data: kidRow }, { data: plan }, { data: items }, { data: contact }, { data: ledger }, { data: promises }] = await Promise.all([
+    known ? Promise.resolve({ data: known }) : s.schema('eurokids').from('v_schedule').select('*').eq('uin', uin).maybeSingle(),
     s.schema('eurokids').from('payment_plan').select('*').eq('uin', uin).maybeSingle(),
     s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date,label').eq('uin', uin).order('seq'),
     s.schema('eurokids').from('child_contact').select('*').eq('uin', uin).maybeSingle(),
+    s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date'),
+    s.schema('eurokids').from('payment_promise').select('*').eq('uin', uin).order('promised_on', { ascending: false }).limit(20),
   ]);
-  const { data: ledger } = await s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date');
+  const kid = kidRow;
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
   const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
 
-  const body = openDrawer(kid?.student_name || uin,
-    `${kid?.program_name || ''}${kid?.batch ? ' · ' + kid.batch : ''}${kid?.father_name ? ' · ' + kid.father_name : ''} · ${uin}`);
+  el('drawer-title').textContent = kid?.student_name || uin;
+  el('drawer-sub').textContent = `${kid?.program_name || ''}${kid?.batch ? ' · ' + kid.batch : ''}${kid?.father_name ? ' · ' + kid.father_name : ''} · ${uin}`;
+  const openPromise = (promises || []).find(p => p.status === 'open');
   body.innerHTML = `
     ${statementHtml(kid || {}, ledger, items)}
 
@@ -2277,8 +2341,22 @@ async function openPlan(uin){
     ${plan?.welcome_sent_at ? `<div class="foot">Welcome letter sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}. Every letter also goes to admin@eurokidsjmdenclave.org.</div>`
                             : `<div class="foot">Every letter also goes to admin@eurokidsjmdenclave.org.</div>`}</div>
 
-    <div class="grp" id="notes-sec"><h3>Notes</h3><div class="box">
-      <div class="note-in"><textarea class="in" id="cn-body" rows="1" placeholder="Add a note — e.g. Father called, will pay by the 20th."></textarea>
+    <div class="grp" id="promise-sec"><h3>Promise to pay</h3><div class="box">
+      ${openPromise ? `<div class="row"><div class="l">${openPromise.promised_on < new Date().toISOString().slice(0,10) ? '<strong style="color:var(--red)">Promised and not paid</strong>' : '<strong>Promised</strong>'}
+          <span class="sub">${openPromise.amount ? money(openPromise.amount) : 'the balance'} by ${longDate(openPromise.promised_on)}${openPromise.spoke_to ? ' · spoke to ' + esc(openPromise.spoke_to) : ''}${openPromise.taken_by ? ' · noted by ' + esc(openPromise.taken_by) : ''}${openPromise.note ? '<br>“' + esc(openPromise.note) + '”' : ''}</span></div>
+        <button class="btn line sm" id="pr-cancel">Clear</button></div>` : ''}
+      <div class="row"><div class="l">They will pay</div><div class="inst">
+        <input class="in num" id="pr-amt" type="number" placeholder="${esc(String(Math.round(Number(kid?.true_due || 0))))}" style="width:120px">
+        <span class="hint">by</span><input class="in" id="pr-date" type="date" value="${new Date(Date.now() + 3 * 864e5).toISOString().slice(0,10)}"></div></div>
+      <div class="row"><div class="l">Spoke to</div><input class="in wide" id="pr-who" placeholder="e.g. father, on the phone"></div>
+      <div class="rowx"><textarea class="in" id="pr-note" rows="2" placeholder="What they said — e.g. salary on the 2nd, will transfer that evening." style="width:100%"></textarea></div>
+      <label class="row" style="cursor:pointer"><span class="l">Remind the parent that morning<span class="sub">One email on the day, in their own words. Nothing is sent if the money has already arrived.</span></span>
+        <input type="checkbox" class="sw" id="pr-remind" checked></label>
+      <button class="linkrow" id="pr-save">Record this promise</button>
+    </div><div class="foot">It appears on the dashboard on the day, and the note goes into the log below.</div></div>
+
+    <div class="grp" id="notes-sec"><h3>Call log &amp; notes</h3><div class="box">
+      <div class="note-in"><textarea class="in" id="cn-body" rows="1" placeholder="What happened on the call — e.g. spoke to father, will pay Thursday."></textarea>
         <button class="btn sm" id="cn-add">Add</button></div>
       <div id="cn-list"></div>
     </div><div class="foot">Internal. Never sent to parents.</div></div>`;
@@ -2498,6 +2576,34 @@ async function openPlan(uin){
     invalidate('views');
     el('cn-body').value = ''; drawNotes();
   };
+  // ── promise to pay ──
+  const prCancel = el('pr-cancel');
+  if (prCancel) prCancel.onclick = async () => {
+    if (!confirm('Clear this promise? It stops the reminder and takes it off the dashboard.')) return;
+    await s.schema('eurokids').from('payment_promise').update({ status: 'cancelled' }).eq('id', openPromise.id);
+    invalidate(); openPlan(uin);
+  };
+  el('pr-save').onclick = async e => {
+    const btn = e.currentTarget;
+    const on = el('pr-date').value;
+    if (!on) return alert('Which day did they promise?');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const amount = Number(el('pr-amt').value) || null;
+    const note = (el('pr-note').value || '').trim() || null;
+    const spoke = (el('pr-who').value || '').trim() || null;
+    const me = (profile?.full_name || session?.user?.email || '').split('@')[0];
+    // an older open promise is superseded, not duplicated
+    await s.schema('eurokids').from('payment_promise').update({ status: 'cancelled' }).eq('uin', uin).eq('status', 'open');
+    const { error } = await s.schema('eurokids').from('payment_promise').insert({
+      uin, amount, promised_on: on, note, spoke_to: spoke, taken_by: me,
+      remind_parent: el('pr-remind').checked, created_by: session?.user?.id || null });
+    if (error) { btn.disabled = false; btn.textContent = 'Record this promise'; return alert('Could not save: ' + error.message); }
+    // the same words go into the log, so the call is on the record either way
+    await s.schema('eurokids').from('child_note').insert({ uin, author: me, created_by: session?.user?.id || null,
+      body: `Promised ${amount ? money(amount) : 'the balance'} by ${longDate(on)}${spoke ? ' · spoke to ' + spoke : ''}${note ? ' — ' + note : ''}` });
+    invalidate(); openPlan(uin);
+  };
+
   drawNotes();
   // the note box grows with the text, like Messages
   const ta = el('cn-body');
@@ -2597,7 +2703,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=16"></script>
+<script src="/brand/enquiries.js?v=17"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
