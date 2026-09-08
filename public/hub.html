@@ -18,7 +18,7 @@
 <style>
 :root{
   --bone:#FFFFFF; --card:#FFF; --ink:#1A1A1A; --muted:#6B6B6B; --faint:#9A968F;
-  --line:#E5E7EB; --line-2:#D1D5DB; --accent:#DC2B1C; --accent-wash:#FCEEEC; --bar:#000;
+  --line:#E8EAED; --line-2:#CBD0D6; --brand:#FF2217; --accent:#1F4FD8; --accent-wash:#EAF0FF; --bar:#000;
   --good:#1E7A4B; --good-wash:#E8F3ED; --warn:#9A6410; --warn-wash:#FAF0DF;
   --crit:#B32519; --crit-wash:#FBEBE9; --r:12px;
 }
@@ -32,7 +32,7 @@ button,input,select{font:inherit;color:inherit}
 .chrome{display:flex;align-items:center;justify-content:space-between;padding:18px 34px;gap:16px;flex-wrap:wrap}
 @media(max-width:560px){.chrome{padding:14px 18px}}
 .brand{display:flex;align-items:center;gap:11px;font-weight:600;font-size:15px}
-.dot{width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#FF7A5C,var(--accent) 62%,#A81E12);filter:blur(.4px)}
+.dot{width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#FF7A5C,var(--brand) 62%,#A81E12);filter:blur(.4px)}
 .chromeR{display:flex;align-items:center;gap:20px;font-size:13.5px;color:var(--muted)}
 .chromeR a{color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .stage{max-width:1180px;margin:0 auto;padding:0 34px 90px}
@@ -139,9 +139,7 @@ code{background:var(--line);padding:1px 5px;border-radius:4px;font-size:12px;fon
 select.in{padding-right:32px}
 
 /* tabs — a scrolling strip on phones, underline on desktop */
-.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;gap:2px;
-      position:sticky;top:0;background:var(--bone);z-index:5;padding-top:4px}
-.tabs::-webkit-scrollbar{display:none}
+.tabs{flex-wrap:wrap;overflow:visible;gap:2px;position:sticky;top:0;background:var(--bone);z-index:5;padding-top:4px}
 .tab{white-space:nowrap;min-height:44px;padding:10px 14px;font-size:14px}
 .tab.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:700}
 
@@ -162,6 +160,103 @@ td:first-child{white-space:normal;min-width:160px}
 
 /* links that act like buttons get a real hit area */
 a[onclick]{display:inline-block;padding:6px 2px;min-height:32px;font-weight:600}
+
+/* ─────────────────────────────────────────────────────────────────
+   Visual pass 2 — quieter, denser, one voice.
+   · numbers in the UI face with tabular figures; mono only for codes
+   · red means brand or danger, never "click here"
+   · rows are the target: hover, chevron, no red CTA on every line
+   · headers stop shouting; panels stop nesting borders
+   ───────────────────────────────────────────────────────────────── */
+body{font-size:14px;letter-spacing:-.005em}
+.num{font-family:inherit;font-variant-numeric:tabular-nums;letter-spacing:0}
+.code,.uin{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--faint);letter-spacing:.01em}
+
+/* header */
+.chrome{padding:14px 34px;border-bottom:1px solid var(--line)}
+.crumb{margin:18px 0 6px;font-size:13px}
+.crumb button{color:var(--muted);background:none;border:0;padding:0;cursor:pointer;font-weight:500}
+.crumb button:hover{color:var(--ink)}
+.ph{margin:22px 0 16px;align-items:center}
+.ph h1{font-size:20px;font-weight:650;letter-spacing:-.01em}
+.ph .s{font-size:13.5px;margin-top:2px;max-width:70ch}
+.ph-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* tabs */
+.tabs{gap:0;border-bottom:1px solid var(--line);margin-bottom:0}
+.tab{padding:12px 14px;font-size:14px;color:var(--muted);border-bottom:2px solid transparent}
+.tab:hover{color:var(--ink);background:#FAFAFA}
+.tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+.more{position:relative;margin-left:auto}
+.menu{display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line-2);
+      border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.08);min-width:200px;padding:6px;z-index:20}
+.menu.open{display:block}
+.menu button{display:block;width:100%;text-align:left;background:none;border:0;padding:10px 12px;border-radius:7px;cursor:pointer;font-size:14px}
+.menu button:hover,.menu button.on{background:#F3F4F6}
+
+/* cards & panels — one border, no nesting */
+.card,.panel,.stat{border:1px solid var(--line);box-shadow:none;border-radius:12px}
+.panel{margin-bottom:16px}
+.ptop{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.ptop h2{font-size:15px;font-weight:600}
+.stats{gap:12px;margin-bottom:16px}
+.stat{padding:14px 16px}
+.stat .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.stat .v{font-size:24px;font-weight:650;letter-spacing:-.02em;color:var(--ink);margin-top:6px;font-family:inherit;font-variant-numeric:tabular-nums}
+.stat .m{font-size:12.5px;color:var(--muted);margin-top:4px}
+.stat.crit .v{color:var(--crit)}
+.stat.good .v,.stat.warn .v,.stat.acc .v{color:var(--ink)}   /* only the critical number gets colour */
+
+/* tables — the row is the control */
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px}
+thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;
+         padding:10px 14px;background:#FAFAFA;border-bottom:1px solid var(--line)}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.35}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:#FAFBFC}
+td strong{font-weight:600}
+td .num,td.num{font-variant-numeric:tabular-nums}
+td.r,th.r{text-align:right}
+
+/* in-row actions: quiet by default, clear on hover */
+a[onclick]{color:var(--ink);font-weight:500;text-decoration:none;padding:6px 0;border-radius:6px}
+a[onclick]:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+td:last-child a[onclick]{color:var(--muted);font-weight:500}
+td:last-child a[onclick]:hover{color:var(--accent)}
+tbody tr:hover td:last-child a[onclick]{color:var(--ink)}
+
+/* status chips: soft fills, no borders, one size */
+.chip{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;letter-spacing:.01em}
+.c-good{background:#E6F4EC;color:#146C3A} .c-warn{background:#FCF1DA;color:#8A5A00}
+.c-crit{background:#FDE8E6;color:#A3231A} .c-mute{background:#F1F2F4;color:#4B5563}
+
+/* buttons */
+.btn{border-radius:10px;font-size:14px}
+.btn.line,.btn.ghost{background:#fff;border:1px solid var(--line-2);color:var(--ink);font-weight:500}
+.btn.line:hover,.btn.ghost:hover{background:#F6F7F8;border-color:#9CA3AF}
+.btn.sm{border-radius:8px}
+
+/* inputs */
+.in{border-color:var(--line-2);border-radius:10px;font-size:14px}
+.in::placeholder{color:#9CA3AF}
+
+/* hints & messages */
+.hint{font-size:12.5px}
+.err{background:#FDE8E6;color:#A3231A;border:0}
+.ok{background:#E6F4EC;color:#146C3A;border:0}
+.pill{background:#F1F2F4;font-weight:500}
+.pill.big{background:var(--ink);color:#fff}
+
+/* the sync line on the overview */
+#sync-info{font-size:12.5px}
+
+/* Users & access — chips wrapped into the next column and overlapped the date */
+#users-table td:nth-child(2){white-space:normal;max-width:520px}
+#users-table td:nth-child(2) .chip{margin:2px 4px 2px 0;display:inline-block}
+#users-table td:nth-child(3){white-space:nowrap;color:var(--muted)}
+#users-table td:last-child{white-space:nowrap}
+.user-edit{background:#FAFBFC;border-top:1px solid var(--line);padding:14px 18px}
+.user-edit label{margin-right:14px;font-size:14px}
 
 /* phones */
 @media(max-width:640px){
@@ -251,7 +346,8 @@ const el = id => document.getElementById(id);
 
 const TABS = {
   overview:   { label: 'Overview', need: () => has('admission') || has('finance') },
-  children:   { label: 'Children', need: () => has('finance') },
+  children:   { label: 'Children', need: () => has('finance') || has('admission') },
+  views:      { label: 'Views', need: () => has('finance') || has('admission') },
   plans:      { label: 'Fees & Plans', need: () => has('finance') || has('admission') },
   compose:    { label: 'Send email', need: () => has('finance') || has('admission') },
   reminders:  { label: 'Reminders', need: () => has('finance') },
@@ -452,24 +548,25 @@ async function renderUsers(){
     <div class="panel" style="padding:0;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="text-align:left;border-bottom:1px solid var(--line)">
-          <th style="padding:12px 16px">Person</th><th style="padding:12px">Modules</th>
-          <th style="padding:12px">Last sign-in</th><th style="padding:12px 16px"></th>
+          <th>Person</th><th>Access</th><th>Last sign-in</th><th></th>
         </tr></thead>
         <tbody>${staffUsers.map(u => `
-          <tr style="border-bottom:1px solid var(--line)" data-uid="${u.id}">
-            <td style="padding:12px 16px"><strong>${esc(u.full_name||'—')}</strong><br><span class="hint">${esc(u.email)}</span></td>
-            <td style="padding:12px;max-width:340px">${u.modules.length ? u.modules.map(m=>`<span style="display:inline-block;background:${m==='finance'?'var(--crit-wash)':'var(--good-wash)'};color:${m==='finance'?'var(--crit)':'var(--good)'};border-radius:99px;padding:1px 9px;margin:2px;font-size:11px">${MODULE_LABEL[m]||m}</span>`).join('') : '<span class="hint">none</span>'}</td>
-            <td style="padding:12px" class="hint">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : 'never'}</td>
-            <td style="padding:12px 16px;white-space:nowrap">
-              <a style="color:var(--accent);cursor:pointer" onclick="editUserModules('${u.id}')">Modules</a> ·
-              <a style="color:var(--accent);cursor:pointer" onclick="resetUserPassword('${u.id}','${esc(u.email)}')">Password</a>
-              ${u.email==='abhinav@ganya.in'?'':` · <a style="color:var(--crit);cursor:pointer" onclick="deleteHubUser('${u.id}','${esc(u.email)}')">Remove</a>`}
+          <tr data-uid="${u.id}">
+            <td><strong>${esc(u.full_name||'—')}</strong><br><span class="hint">${esc(u.email)}</span></td>
+            <td>${u.modules.length ? u.modules.map(m=>`<span class="chip ${m==='finance'?'c-crit':'c-mute'}">${MODULE_LABEL[m]||m}</span>`).join('') : '<span class="hint">no access yet</span>'}</td>
+            <td class="hint">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : 'never'}</td>
+            <td style="text-align:right">
+              <button class="btn line sm" onclick="editUserModules('${u.id}')">Access</button>
+              <button class="btn line sm" onclick="resetUserPassword('${u.id}','${esc(u.email)}')">Password</button>
+              ${u.email==='abhinav@ganya.in'?'':`<button class="btn line sm" style="color:var(--crit);border-color:transparent" onclick="deleteHubUser('${u.id}','${esc(u.email)}')">Remove</button>`}
             </td>
           </tr>
-          <tr class="modrow" id="modrow-${u.id}" style="display:none;border-bottom:1px solid var(--line);background:var(--bone)">
-            <td colspan="4" style="padding:12px 16px">
+          <tr class="modrow" id="modrow-${u.id}" style="display:none">
+            <td colspan="4" class="user-edit">
+              <div class="hint" style="margin-bottom:8px">What ${esc((u.full_name||u.email).split(' ')[0])} may open. <strong style="color:var(--crit)">Finance</strong> shows school-wide money — coordinators normally need Admission + EPMS admin only.</div>
               ${modChecks('mm-'+u.id, u.modules)}
-              <div style="margin-top:8px"><button class="btn" onclick="saveUserModules('${u.id}')">Save modules</button></div>
+              <div style="margin-top:12px;display:flex;gap:8px"><button class="btn sm" onclick="saveUserModules('${u.id}')">Save access</button>
+                <button class="btn line sm" onclick="el('modrow-${u.id}').style.display='none'">Cancel</button></div>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -518,15 +615,25 @@ async function deleteHubUser(uid, email){
 function renderApp(){
   const avail = Object.keys(TABS).filter(t => TABS[t].need());
   if (!avail.includes(tab)) tab = avail[0];
+  // Primary tabs stay visible; the long tail lives under "More".
+  const PRIMARY = ['overview','children','views','plans','compose','liability','reminders'];
+  const prim = avail.filter(t => PRIMARY.includes(t)), more = avail.filter(t => !PRIMARY.includes(t));
+  const moreOn = more.includes(tab);
   el('stage').innerHTML = `
     <div class="crumb"><button id="back">&larr; All apps</button><span>/</span><span>Admissions &amp; Fees</span></div>
-    <div class="tabs">${avail.map(t =>
-      `<button class="tab ${t === tab ? 'on' : ''}" data-tab="${t}">${TABS[t].label}</button>`).join('')}</div>
+    <div class="tabs">${prim.map(t =>
+      `<button class="tab ${t === tab ? 'on' : ''}" data-tab="${t}">${TABS[t].label}</button>`).join('')}
+      ${more.length ? `<div class="more"><button class="tab ${moreOn ? 'on' : ''}" id="more-btn">${moreOn ? TABS[tab].label : 'More'} ▾</button>
+        <div class="menu" id="more-menu">${more.map(t => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${TABS[t].label}</button>`).join('')}</div></div>` : ''}
+    </div>
     <div id="body"><div class="loading">Loading…</div></div>`;
   el('back').onclick = () => { app = null; paint(); };
-  document.querySelectorAll('.tab[data-tab]').forEach(b =>
+  document.querySelectorAll('.tab[data-tab], .menu [data-tab]').forEach(b =>
     b.onclick = () => { tab = b.dataset.tab; renderApp(); });
-  ({ overview: tabOverview, children: tabChildren, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
+  const mb = el('more-btn');
+  if (mb) mb.onclick = e => { e.stopPropagation(); el('more-menu').classList.toggle('open'); };
+  document.addEventListener('click', () => el('more-menu')?.classList.remove('open'), { once: true });
+  ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees }[tab] || tabOverview)();
 }
 
@@ -558,7 +665,7 @@ async function renderScheduleFlags(){
     ${missing.length ? `<div class="tw" style="max-height:420px;overflow:auto"><table><thead><tr><th>Child</th><th>Class</th><th class="r">Owed</th><th></th></tr></thead><tbody>
       ${missing.map(r => `<tr><td><strong>${esc(r.student_name)}</strong></td>
         <td>${esc(r.program_name || '')}</td><td class="r num">${money(r.true_due)}</td>
-        <td class="r"><a style="color:var(--accent);cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">Add schedule →</a></td></tr>`).join('')}
+        <td class="r"><a onclick="openPlanFrom('${esc(r.uin)}')">Add schedule ›</a></td></tr>`).join('')}
       </tbody></table></div>
 ` : ''}
   </div>`;
@@ -567,6 +674,341 @@ async function renderScheduleFlags(){
     renderApp();
     setTimeout(() => { const m = el('cmp-money'); if (m) { m.value = 'overdue'; m.dispatchEvent(new Event('change')); } }, 350);
   };
+}
+
+/* ── views: stack conditions like a Coda filter, save them, act on them ──
+   Everything evaluates in the browser against the live roster, so a view is
+   instant and can be tweaked while you look at it. A saved view is shared
+   with everyone who can see fees.                                            */
+const VIEW_FIELDS = [
+  { k:'student_name',  l:'Child',                     t:'text' },
+  { k:'program_name',  l:'Class',                     t:'enum' },
+  { k:'batch',         l:'Batch',                     t:'enum' },
+  { k:'schedule_flag', l:'Status',                    t:'enum' },
+  { k:'agreed_fee',    l:'Agreed fee',                t:'num' },
+  { k:'our_discount',  l:'Our discount',              t:'num' },
+  { k:'term1_due',     l:'Term 1 due (EPMS)',         t:'num' },
+  { k:'term2_due',     l:'Term 2 due (EPMS)',         t:'num' },
+  { k:'epms_due',      l:'EPMS total due',            t:'num' },
+  { k:'true_due',      l:'Truly due',                 t:'num' },
+  { k:'collected',     l:'Collected by EPMS',         t:'num' },
+  { k:'uncredited_cash', l:'Cash with us, not posted', t:'num' },
+  { k:'paid_so_far',   l:'Paid so far',               t:'num' },
+  { k:'next_amount',   l:'Next instalment amount',    t:'num' },
+  { k:'next_due_date', l:'Next due date',             t:'date' },
+  { k:'admission_date',l:'Admitted on',               t:'date' },
+  { k:'days_overdue',  l:'Days overdue',              t:'num' },
+  { k:'instalments',   l:'No. of instalments',        t:'num' },
+  { k:'has_schedule',  l:'Has a schedule',            t:'bool' },
+  { k:'schedule_mismatch', l:'Schedule does not add up', t:'bool' },
+  { k:'welcome_sent_at', l:'Welcome letter sent',     t:'exists' },
+  { k:'parent_email1', l:'Has parent email',          t:'exists' },
+  { k:'eurokids_discount', l:'EuroKids discount label', t:'text' },
+  { k:'father_name',   l:'Father',                    t:'text' },
+];
+const OPS = {
+  num:   [['=','is'],['!=','is not'],['<','less than'],['<=','at most'],['>','more than'],['>=','at least'],['between','between']],
+  date:  [['=','on'],['<','before'],['>','after'],['between','between'],['empty','is blank'],['notempty','is set']],
+  text:  [['contains','contains'],['=','is'],['!=','is not'],['startswith','starts with'],['empty','is blank'],['notempty','is set']],
+  enum:  [['=','is'],['!=','is not']],
+  bool:  [['true','is yes'],['false','is no']],
+  exists:[['notempty','yes'],['empty','no']],
+};
+let _views = { rows:[], list:[], conds:[], sort:{ field:'student_name', dir:'asc' }, current:null };
+
+function evalCond(r, c){
+  const f = VIEW_FIELDS.find(x => x.k === c.field); if (!f) return true;
+  const raw = r[c.field];
+  const isEmpty = raw == null || raw === '' || raw === false;
+  switch (c.op) {
+    case 'empty':     return isEmpty;
+    case 'notempty':  return !isEmpty;
+    case 'true':      return raw === true;
+    case 'false':     return !raw;
+  }
+  if (f.t === 'num') {
+    const v = Number(raw || 0), a = Number(c.value), b = Number(c.value2);
+    switch (c.op) {
+      case '=': return v === a; case '!=': return v !== a;
+      case '<': return v < a;   case '<=': return v <= a;
+      case '>': return v > a;   case '>=': return v >= a;
+      case 'between': return v >= Math.min(a,b) && v <= Math.max(a,b);
+    }
+  }
+  if (f.t === 'date') {
+    const v = String(raw || ''), a = String(c.value || ''), b = String(c.value2 || '');
+    if (!v) return false;
+    switch (c.op) {
+      case '=': return v === a; case '<': return v < a; case '>': return v > a;
+      case 'between': return v >= a && v <= b;
+    }
+  }
+  const v = String(raw ?? '').toLowerCase(), a = String(c.value ?? '').toLowerCase();
+  switch (c.op) {
+    case '=': return v === a; case '!=': return v !== a;
+    case 'contains': return v.includes(a); case 'startswith': return v.startsWith(a);
+  }
+  return true;
+}
+const describeCond = c => {
+  const f = VIEW_FIELDS.find(x => x.k === c.field); if (!f) return '';
+  const op = (OPS[f.t] || []).find(o => o[0] === c.op)?.[1] || c.op;
+  const fmt = v => f.t === 'num' ? money(v) : f.t === 'date' ? longDate(v) : v;
+  const val = ['empty','notempty','true','false'].includes(c.op) ? ''
+    : c.op === 'between' ? ` ${fmt(c.value)} and ${fmt(c.value2)}` : ` ${fmt(c.value)}`;
+  return `${f.l} ${op}${val}`;
+};
+
+async function tabViews(){
+  const b = el('body');
+  b.innerHTML = '<div class="loading">Loading…</div>';
+  const s = getSb();
+  const [{ data: rows, error }, { data: list }] = await Promise.all([
+    s.schema('eurokids').from('v_schedule').select('*').limit(2000),
+    s.schema('eurokids').from('saved_view').select('*').order('name'),
+  ]);
+  if (error) return b.innerHTML = fail(error);
+  _views.rows = rows || []; _views.list = list || [];
+  const enumVals = k => [...new Set(_views.rows.map(r => r[k]).filter(v => v != null && v !== ''))].sort();
+
+  b.innerHTML = head('Views',
+      'Stack any conditions — every one must be true — then sort, save, export, or email the result. Like a Coda filter, on live data.')
+    + `<div style="display:grid;grid-template-columns:260px 1fr;gap:16px" id="vw-grid">
+      <div class="card" style="padding:14px">
+        <label class="lb">Saved views</label>
+        <div id="vw-list"></div>
+        <button class="btn line sm" id="vw-new" style="margin-top:10px;width:100%">+ New blank view</button>
+      </div>
+      <div>
+        <div class="card" style="padding:16px">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input class="in" id="vw-name" placeholder="Name this view…" style="flex:1;min-width:200px">
+            <button class="btn" id="vw-save">Save view</button>
+            <button class="btn danger sm" id="vw-del" style="display:none">Delete</button>
+          </div>
+          <div class="chips" id="vw-quick" style="margin-top:14px"></div>
+          <div id="vw-conds" style="margin-top:14px"></div>
+          <button class="btn line sm" id="vw-add" style="margin-top:10px">+ Add condition</button>
+        </div>
+        <div class="card" style="padding:16px;margin-top:14px">
+          <div class="pill-row" id="vw-summary"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
+            <label class="lb" style="margin:0">Sort by</label>
+            <select class="in" id="vw-sort" style="max-width:220px">${VIEW_FIELDS.map(f => `<option value="${f.k}">${f.l}</option>`).join('')}</select>
+            <select class="in" id="vw-dir" style="max-width:130px"><option value="asc">ascending</option><option value="desc">descending</option></select>
+            <span style="flex:1"></span>
+            <button class="btn line sm" id="vw-print">Print list</button>
+            <button class="btn line sm" id="vw-csv">Download CSV</button>
+            <button class="btn sm" id="vw-mail">Email these families →</button>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:14px"><div class="tw"><table><thead><tr>
+          <th>Child</th><th>Class</th><th class="r">Term 1 due</th><th class="r">Term 2 due</th>
+          <th class="r">Discount</th><th class="r">Truly due</th><th>Status</th><th>Next due</th></tr></thead>
+          <tbody id="vw-rows"></tbody></table></div></div>
+      </div>
+    </div>`;
+  if (window.innerWidth < 720) el('vw-grid').style.gridTemplateColumns = '1fr';
+
+  // ── saved views list
+  const drawList = () => {
+    el('vw-list').innerHTML = _views.list.map(v =>
+      `<div class="chip ${_views.current?.id === v.id ? 'on' : ''}" data-id="${v.id}"
+            style="display:block;margin:4px 0;cursor:pointer;padding:8px 10px;border:1px solid var(--line-2);border-radius:8px;white-space:normal">
+         ${esc(v.name)}<div class="hint" style="font-size:11px;margin-top:2px">${(v.conditions||[]).length} condition${(v.conditions||[]).length===1?'':'s'}</div></div>`
+    ).join('') || '<div class="hint">No saved views yet.</div>';
+    document.querySelectorAll('#vw-list .chip').forEach(c => c.onclick = () => loadView(_views.list.find(v => v.id === Number(c.dataset.id))));
+  };
+  const loadView = v => {
+    _views.current = v || null;
+    _views.conds = JSON.parse(JSON.stringify(v?.conditions || []));
+    _views.sort = { field: v?.sort_field || 'student_name', dir: v?.sort_dir || 'asc' };
+    el('vw-name').value = v?.name || '';
+    el('vw-sort').value = _views.sort.field; el('vw-dir').value = _views.sort.dir;
+    el('vw-del').style.display = v ? '' : 'none';
+    drawList(); drawConds(); run();
+  };
+
+  // ── condition rows
+  const drawConds = () => {
+    el('vw-conds').innerHTML = _views.conds.map((c, i) => {
+      const f = VIEW_FIELDS.find(x => x.k === c.field) || VIEW_FIELDS[0];
+      const ops = OPS[f.t];
+      if (!ops.some(o => o[0] === c.op)) c.op = ops[0][0];
+      const needsVal = !['empty','notempty','true','false'].includes(c.op);
+      const valInput = !needsVal ? '' : f.t === 'enum'
+        ? `<select class="in vw-val" data-i="${i}">${enumVals(f.k).map(v => `<option ${String(c.value)===String(v)?'selected':''}>${esc(v)}</option>`).join('')}</select>`
+        : `<input class="in vw-val" data-i="${i}" type="${f.t==='num'?'number':f.t==='date'?'date':'text'}" value="${esc(c.value ?? '')}" placeholder="${f.t==='num'?'amount':''}">`;
+      const val2 = c.op === 'between' ? `<span class="hint">and</span><input class="in vw-val2" data-i="${i}" type="${f.t==='num'?'number':'date'}" value="${esc(c.value2 ?? '')}">` : '';
+      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <span class="hint" style="width:34px">${i === 0 ? 'Where' : 'and'}</span>
+        <select class="in vw-field" data-i="${i}" style="max-width:230px">${VIEW_FIELDS.map(x => `<option value="${x.k}" ${x.k===c.field?'selected':''}>${x.l}</option>`).join('')}</select>
+        <select class="in vw-op" data-i="${i}" style="max-width:150px">${ops.map(o => `<option value="${o[0]}" ${o[0]===c.op?'selected':''}>${o[1]}</option>`).join('')}</select>
+        ${valInput}${val2}
+        <button class="btn line sm vw-rm" data-i="${i}" title="Remove">✕</button>
+      </div>`;
+    }).join('') || '<div class="hint">No conditions — showing every child. Add one to narrow it down.</div>';
+    const bind = (cls, fn) => document.querySelectorAll(cls).forEach(e => { e.onchange = ev => { fn(Number(ev.target.dataset.i), ev.target.value); }; if (e.tagName === 'INPUT') e.oninput = e.onchange; });
+    bind('.vw-field', (i, v) => { _views.conds[i] = { field: v, op: OPS[VIEW_FIELDS.find(x=>x.k===v).t][0][0], value: '' }; drawConds(); run(); });
+    bind('.vw-op',    (i, v) => { _views.conds[i].op = v; drawConds(); run(); });
+    bind('.vw-val',   (i, v) => { _views.conds[i].value = v; run(); });
+    bind('.vw-val2',  (i, v) => { _views.conds[i].value2 = v; run(); });
+    document.querySelectorAll('.vw-rm').forEach(e => e.onclick = () => { _views.conds.splice(Number(e.dataset.i), 1); drawConds(); run(); });
+  };
+  el('vw-add').onclick = () => { _views.conds.push({ field:'true_due', op:'>', value:0 }); drawConds(); run(); };
+
+  // One click for the questions asked every day. Each replaces the conditions.
+  const QUICK = [
+    ['Paid up',      [{ field:'schedule_flag', op:'=', value:'SETTLED' }]],
+    ['Still owing',  [{ field:'true_due', op:'>', value:0 }]],
+    ['Overdue',      [{ field:'schedule_flag', op:'=', value:'OVERDUE' }]],
+    ['Due soon',     [{ field:'schedule_flag', op:'=', value:'DUE SOON' }]],
+    ['No schedule',  [{ field:'has_schedule', op:'false', value:'' }]],
+    ['Everyone',     []],
+  ];
+  const drawQuick = () => {
+    el('vw-quick').innerHTML = QUICK.map(([l, c], i) => {
+      const count = _views.rows.filter(r => c.every(x => evalCond(r, x))).length;
+      const on = JSON.stringify(c) === JSON.stringify(_views.conds);
+      return `<span class="chip ${on?'on':''}" data-i="${i}">${l} <b>${count}</b></span>`;
+    }).join('');
+    document.querySelectorAll('#vw-quick .chip').forEach(ch => ch.onclick = () => {
+      _views.conds = JSON.parse(JSON.stringify(QUICK[Number(ch.dataset.i)][1]));
+      _views.current = null; el('vw-name').value = ''; el('vw-del').style.display = 'none';
+      drawList(); drawConds(); run();
+    });
+  };
+
+  // ── evaluate + draw
+  const matched = () => {
+    let rows = _views.rows.filter(r => _views.conds.every(c => evalCond(r, c)));
+    const { field, dir } = _views.sort;
+    const f = VIEW_FIELDS.find(x => x.k === field);
+    rows.sort((a, b) => {
+      let x = a[field], y = b[field];
+      if (f?.t === 'num') { x = Number(x||0); y = Number(y||0); }
+      else { x = String(x ?? ''); y = String(y ?? ''); }
+      return (x < y ? -1 : x > y ? 1 : 0) * (dir === 'desc' ? -1 : 1);
+    });
+    return rows;
+  };
+  const run = () => {
+    const rows = matched();
+    _views.lastRows = rows;
+    drawQuick();
+    const owed = rows.reduce((a, r) => a + Number(r.true_due||0), 0);
+    const t2 = rows.reduce((a, r) => a + Number(r.term2_due||0), 0);
+    el('vw-summary').innerHTML =
+      `<span class="pill big">${rows.length} ${rows.length===1?'child':'children'}</span>` +
+      (has('finance') ? `<span class="pill">${money(owed)} truly due</span>` +
+                        `<span class="pill">${money(t2)} term 2 due</span>` : '') +
+      (_views.conds.length ? `<span class="hint" style="width:100%;margin-top:4px">${_views.conds.map(describeCond).join(' · and · ')}</span>` : '');
+    el('vw-rows').innerHTML = rows.map(r => `<tr>
+      <td><a style="cursor:pointer" onclick="openStatement('${esc(r.uin)}')"><strong>${esc(r.student_name)}</strong></a>
+        <br><span class="uin">${esc(r.uin)}</span></td>
+      <td>${esc(r.program_name||'')}</td>
+      <td class="r num">${Number(r.term1_due)>0?money(r.term1_due):'—'}</td>
+      <td class="r num">${Number(r.term2_due)>0?money(r.term2_due):'—'}</td>
+      <td class="r num">${Number(r.our_discount)>0?money(r.our_discount):'—'}</td>
+      <td class="r num" style="font-weight:600">${Number(r.true_due)>0?money(r.true_due):'<span class="chip c-good">paid</span>'}</td>
+      <td><span class="chip ${r.schedule_flag==='OVERDUE'?'c-crit':r.schedule_flag==='SETTLED'?'c-good':r.schedule_flag==='NO SCHEDULE'?'c-warn':'c-mute'}">${esc((r.schedule_flag||'').toLowerCase())}</span></td>
+      <td class="hint">${r.next_due_date ? longDate(r.next_due_date) : '—'}</td>
+    </tr>`).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No child matches these conditions.</td></tr>`;
+  };
+  el('vw-sort').onchange = e => { _views.sort.field = e.target.value; run(); };
+  el('vw-dir').onchange  = e => { _views.sort.dir = e.target.value; run(); };
+
+  // ── save / delete / new
+  el('vw-save').onclick = async e => {
+    const name = el('vw-name').value.trim();
+    if (!name) return alert('Give the view a name first.');
+    const btn = e.currentTarget; btn.disabled = true;
+    const rec = { name, conditions: _views.conds, sort_field: _views.sort.field, sort_dir: _views.sort.dir, updated_at: new Date().toISOString() };
+    const q = _views.current
+      ? s.schema('eurokids').from('saved_view').update(rec).eq('id', _views.current.id).select().maybeSingle()
+      : s.schema('eurokids').from('saved_view').insert({ ...rec, created_by: session?.user?.id || null }).select().maybeSingle();
+    const { data, error: e2 } = await q;
+    btn.disabled = false;
+    if (e2) return alert('Could not save: ' + e2.message);
+    const { data: list2 } = await s.schema('eurokids').from('saved_view').select('*').order('name');
+    _views.list = list2 || []; _views.current = data; drawList();
+  };
+  el('vw-del').onclick = async () => {
+    if (!_views.current || !confirm(`Delete the view “${_views.current.name}”?`)) return;
+    const { error: e3 } = await s.schema('eurokids').from('saved_view').delete().eq('id', _views.current.id);
+    if (e3) return alert('Could not delete: ' + e3.message);
+    _views.list = _views.list.filter(v => v.id !== _views.current.id); loadView(null);
+  };
+  el('vw-new').onclick = () => loadView(null);
+
+  // ── act on the result
+  el('vw-csv').onclick = () => {
+    const rows = _views.lastRows || [];
+    const cols = ['student_name','uin','program_name','batch','father_name','mobile1','parent_email1','agreed_fee','our_discount','term1_due','term2_due','collected','uncredited_cash','true_due','schedule_flag','next_due_date','next_amount'];
+    const csv = [cols.join(',')].concat(rows.map(r => cols.map(c => `"${String(r[c] ?? '').replace(/"/g,'""')}"`).join(','))).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' }));
+    a.download = `${(el('vw-name').value || 'view').replace(/[^\w]+/g,'-')}.csv`; a.click();
+  };
+  // A clean sheet for the coordinator: who to call today, with room to tick
+  // and scribble. Opens in a new tab and goes straight to the print dialog.
+  el('vw-print').onclick = () => {
+    const rows = _views.lastRows || [];
+    if (!rows.length) return alert('Nothing to print — the view is empty.');
+    const title = el('vw-name').value.trim() || 'Follow-up list';
+    const today = new Date().toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+    const owed = rows.reduce((a, r) => a + Number(r.true_due||0), 0);
+    const w = window.open('', '_blank');
+    if (!w) return alert('Your browser blocked the print window. Allow pop-ups for this site and try again.');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} — ${esc(today)}</title>
+    <style>
+      @page { size: A4; margin: 14mm 12mm; }
+      body{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;margin:0;font-size:12px}
+      .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #FF2217;padding-bottom:8px;margin-bottom:10px}
+      .hd h1{margin:0;font-size:18px} .hd .sub{color:#555;font-size:12px;margin-top:2px}
+      .meta{color:#444;font-size:11.5px;margin:6px 0 12px}
+      table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+      th{background:#F3F4F6;text-align:left;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:7px 6px;border-bottom:1.5px solid #999}
+      td{padding:8px 6px;border-bottom:1px solid #DDD;vertical-align:top}
+      td.r,th.r{text-align:right} .num{font-weight:600}
+      .box{display:inline-block;width:13px;height:13px;border:1.5px solid #333;border-radius:3px;vertical-align:middle}
+      .rem{min-width:150px;border-bottom:1px dotted #BBB}
+      tfoot td{font-weight:700;border-top:2px solid #333;border-bottom:none}
+      .ft{margin-top:22px;display:flex;justify-content:space-between;color:#555;font-size:11px}
+      .sig{margin-top:34px;display:flex;gap:40px}
+      .sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:11px;color:#555}
+      tr{page-break-inside:avoid}
+    </style></head><body>
+    <div class="hd"><div><h1>EuroKids JMD Enclave</h1><div class="sub">${esc(title)}</div></div>
+      <div style="text-align:right"><div style="font-weight:700">${esc(today)}</div><div class="sub">${rows.length} famil${rows.length===1?'y':'ies'} · ${money(owed)} outstanding</div></div></div>
+    ${_views.conds.length ? `<div class="meta">Showing children where ${esc(_views.conds.map(describeCond).join(', and '))}.</div>` : ''}
+    <table><thead><tr><th style="width:24px"></th><th>Child</th><th>Class</th><th>Parent</th><th>Phone</th>
+      <th class="r">Truly due</th><th>Next due</th><th>Called / remarks</th></tr></thead><tbody>
+    ${rows.map(r => `<tr>
+      <td><span class="box"></span></td>
+      <td><strong>${esc(r.student_name)}</strong></td>
+      <td>${esc(r.program_name||'')}</td>
+      <td>${esc(r.father_name||'')}</td>
+      <td>${esc(r.mobile1||r.mobile2||'')}</td>
+      <td class="r num">${Number(r.true_due)>0?money(r.true_due):'paid'}</td>
+      <td>${r.next_due_date ? longDate(r.next_due_date) : ''}</td>
+      <td class="rem"></td></tr>`).join('')}
+    </tbody><tfoot><tr><td></td><td colspan="4">Total</td><td class="r">${money(owed)}</td><td colspan="2"></td></tr></tfoot></table>
+    <div class="sig"><div>Prepared by</div><div>Coordinator</div><div>Reviewed by</div></div>
+    <div class="ft"><span>Printed from the EuroKids JMD Enclave hub</span><span>Internal — do not share with parents</span></div>
+    <script>window.onload = () => { window.print(); };<\/script>
+    </body></html>`);
+    w.document.close();
+  };
+
+  el('vw-mail').onclick = () => {
+    const rows = _views.lastRows || [];
+    if (!rows.length) return alert('Nothing to email — the view is empty.');
+    _cmp.picked = rows.map(r => ({ uin: r.uin, student_name: r.student_name, program_name: r.program_name }));
+    tab = 'compose'; renderApp();
+  };
+
+  loadView(_views.list[0] || null);
 }
 
 /* ── reminders: the automatic fee ladder ─────────────────────
@@ -938,7 +1380,7 @@ async function tabCompose(){
 }
 
 function head(t, s, right){
-  return `<div class="ph"><div><h1>${t}</h1><div class="s">${s}</div></div><div>${right || ''}</div></div>`;
+  return `<div class="ph"><div><h1>${t}</h1>${s ? `<div class="s">${s}</div>` : ''}</div><div class="ph-r">${right || ''}</div></div>`;
 }
 function fail(e){
   return `<div class="err">Could not load: ${esc(e?.message || e)}</div>`;
@@ -955,7 +1397,7 @@ async function tabOverview(){
     ]);
     if (e1 || e2) return el('body').innerHTML = fail(e1 || e2);
     if (!sum)     return el('body').innerHTML = `<div class="err">No finance access.</div>`;
-    el('body').innerHTML = head('Overview', 'Live from EPMS, corrected for status and discount.',
+    el('body').innerHTML = head('Overview', 'Live from EPMS, corrected for status and discounts.',
         `<span class="hint" id="sync-info" style="margin-right:10px">Checking…</span>
          <button class="btn line sm" id="sync">Sync from EPMS</button>`)
       + `<div class="stats">
@@ -978,7 +1420,7 @@ async function tabOverview(){
        <div class="tw"><table><thead><tr><th>Child</th><th>UIN</th><th>Program</th>
          <th class="r">Term 1</th><th class="r">Term 2</th><th class="r">Truly due</th></tr></thead><tbody>
          ${(due || []).map(r => `<tr><td>${esc(r.student_name)}</td>
-           <td class="num" style="color:var(--muted)">${esc(r.uin)}</td><td>${esc(r.program_name)}</td>
+           <td class="uin">${esc(r.uin)}</td><td>${esc(r.program_name)}</td>
            <td class="r num">${r.term1_due > 0 ? money(r.term1_due) : '—'}</td>
            <td class="r num">${money(r.term2_due)}</td>
            <td class="r num" style="font-weight:600">${money(r.true_due)}</td></tr>`).join('')}
@@ -1008,6 +1450,39 @@ async function tabOverview(){
     showRecentPayments();
     renderScheduleFlags();
 
+    wireSync(s, () => { if (tab === 'overview') tabOverview(); });
+    return;
+  }
+
+  // No finance grant: a worklist. No roster count, no sums, nothing to multiply.
+  const { data, error } = await s.schema('eurokids').from('v_action_items')
+    .select('uin,student_name,father_name,program_name,action,priority,amount_to_collect');
+  if (error) return el('body').innerHTML = fail(error);
+  el('body').innerHTML = head("Today's list", 'The parents to follow up with.',
+      has('epms_admin') ? `<span class="hint" id="sync-info" style="margin-right:10px">Checking…</span>
+         <button class="btn line sm" id="sync">Sync from EPMS</button>` : '')
+    + `<div class="panel"><div class="ptop"><h2>Fees to follow up</h2>
+        <span class="hint">Term 1 first, then the largest balances</span></div>
+      <div class="tw"><table><thead><tr><th>Child</th><th>Father</th><th>Program</th>
+        <th>What is owed</th><th class="r">Amount</th><th></th></tr></thead><tbody>
+        ${(data || []).map(r => `<tr><td>${esc(r.student_name)}</td>
+          <td style="color:var(--muted)">${esc(r.father_name || '—')}</td><td>${esc(r.program_name)}</td>
+          <td><span class="chip ${r.priority === 'urgent' ? 'c-crit' : 'c-warn'}">${esc(r.action)}</span></td>
+          <td class="r num">${money(r.amount_to_collect)}</td>
+          <td><button class="btn line sm logcall">Log a call</button></td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  document.querySelectorAll('.logcall').forEach(b =>
+    b.onclick = () => {
+      // This wrote nothing anywhere and reset on reload, so a coordinator
+      // believed the follow-up was on record when it was not.
+      alert('Call logging is not built yet — please note the follow-up wherever you keep them.');
+    });
+  if (has('epms_admin')) wireSync(s, () => { if (tab === 'overview') tabOverview(); });
+}
+
+
+/* ── the EPMS sync button — shared by the finance overview and the coordinator's worklist ── */
+function wireSync(s, afterSync){
     // When did data last arrive from EPMS?
     const showLastSync = async () => {
       const info = el('sync-info'); if (!info) return;
@@ -1065,7 +1540,7 @@ async function tabOverview(){
             ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
             : `Synced ${j.invoices} records · ${j.active} active`) + extra + matched;
           b.textContent = 'Synced ✓';
-          setTimeout(() => { if (tab === 'overview') tabOverview(); }, 900);
+          setTimeout(afterSync, 900);
         } else {
           el('sync-info').textContent = '';
           alert('Sync failed:\n\n' + (j.error || 'unknown error'));
@@ -1077,30 +1552,6 @@ async function tabOverview(){
         b.disabled = false; b.textContent = 'Sync from EPMS';
       }
     };
-    return;
-  }
-
-  // No finance grant: a worklist. No roster count, no sums, nothing to multiply.
-  const { data, error } = await s.schema('eurokids').from('v_action_items')
-    .select('uin,student_name,father_name,program_name,action,priority,amount_to_collect');
-  if (error) return el('body').innerHTML = fail(error);
-  el('body').innerHTML = head("Today's list", 'The parents to follow up with.')
-    + `<div class="panel"><div class="ptop"><h2>Fees to follow up</h2>
-        <span class="hint">Term 1 first, then the largest balances</span></div>
-      <div class="tw"><table><thead><tr><th>Child</th><th>Father</th><th>Program</th>
-        <th>What is owed</th><th class="r">Amount</th><th></th></tr></thead><tbody>
-        ${(data || []).map(r => `<tr><td>${esc(r.student_name)}</td>
-          <td style="color:var(--muted)">${esc(r.father_name || '—')}</td><td>${esc(r.program_name)}</td>
-          <td><span class="chip ${r.priority === 'urgent' ? 'c-crit' : 'c-warn'}">${esc(r.action)}</span></td>
-          <td class="r num">${money(r.amount_to_collect)}</td>
-          <td><button class="btn line sm logcall">Log a call</button></td></tr>`).join('')}
-      </tbody></table></div></div>`;
-  document.querySelectorAll('.logcall').forEach(b =>
-    b.onclick = () => {
-      // This wrote nothing anywhere and reset on reload, so a coordinator
-      // believed the follow-up was on record when it was not.
-      alert('Call logging is not built yet — please note the follow-up wherever you keep them.');
-    });
 }
 
 /* ── children ─────────────────────────────────────────── */
@@ -1135,7 +1586,7 @@ function kidRowHtml(r){
             <strong>${esc(r.student_name)}</strong>
             ${Number(r.our_discount) ? `<span class="chip c-mute" style="margin-left:6px">−${money(r.our_discount)}</span>`:''}
             ${Number(r.uncredited_cash) ? `<span class="chip c-warn" style="margin-left:4px">${money(r.uncredited_cash)} in hand</span>`:''}
-            <br><span class="num" style="color:var(--muted);font-size:11px">${esc(r.uin)}</span></td>
+            <br><span class="uin">${esc(r.uin)}</span></td>
           <td style="font-size:12px;color:var(--muted)">${esc(r.father_name || '—')}
             ${phones.length?`<br>${phones.map(p=>`<a href="tel:${esc(p)}" style="color:var(--muted)">${esc(p)}</a>`).join(' · ')}`:''}
             ${contacts.length?`<br>${contacts.map(e2=>`<a href="mailto:${esc(e2)}" style="color:var(--accent)">${esc(e2)}</a>`).join(' · ')}`
@@ -1147,7 +1598,7 @@ function kidRowHtml(r){
           <td class="r num">${money(r.total_invoiced)}</td>
           <td class="r num">${money(r.total_collected)}</td>
           <td class="r num" style="font-weight:700;color:${bar}">${paid ? 'Paid' : money(r.true_due)}</td>
-          <td><a style="color:var(--accent);cursor:pointer;white-space:nowrap" onclick="openPlanFrom('${esc(r.uin)}')">Plan →</a></td>
+          <td class="r"><a onclick="openPlanFrom('${esc(r.uin)}')">Plan ›</a></td>
         </tr>`;
 }
 const _DFY2 = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', year:'2-digit', timeZone:'UTC' });
@@ -1208,10 +1659,10 @@ function renderChildren(){
     const due = set.reduce((a,r) => a + Number(r.true_due), 0);
     return `<div class="stat" style="padding:11px 13px">
       <div class="k">${p}</div><div class="v" style="font-size:19px">${set.length}</div>
-      <div class="m">${due > 0 ? money(due) + ' outstanding' : 'all paid'}</div></div>`;
+      <div class="m">${!has('finance') ? '' : due > 0 ? money(due) + ' outstanding' : 'all paid'}</div></div>`;
   }).join('');
 
-  el('body').innerHTML = head('Children', 'Active roster. Quit and Transfer Out are excluded everywhere.')
+  el('body').innerHTML = head('Children', has('finance') ? 'Active roster. Quit and Transfer Out are excluded everywhere.' : 'Active roster — set batches and find contact details here.')
     + `<div class="stats" style="margin-bottom:14px">${classStrip}</div>
       <div class="panel" style="padding:14px 16px;margin-bottom:14px">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -1492,8 +1943,8 @@ async function tabLiability(){
         <td><input class="in" type="date" value="${r.deposited_on || ''}" style="padding:3px 6px;font-size:12px;width:auto"
               onchange="setDeposited(${r.id}, this.value, this)"></td>
         <td style="white-space:nowrap">
-          ${r.uin ? `<a style="color:var(--accent);cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
-          ${r.uin ? `<a style="color:var(--accent);cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
+          ${r.uin ? `<a style="cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
+          ${r.uin ? `<a style="cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
           <a style="color:var(--crit);cursor:pointer" onclick="delReceipt(${r.id})">Remove</a></td>
       </tr>`;
     }).join('') || `<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
@@ -1736,7 +2187,7 @@ async function tabPlans(){
     : k.schedule_flag === 'DUE SOON' ? '<span class="chip c-mute">due soon</span>' : '';
 
   el('body').innerHTML = head('Fees &amp; Plans',
-      'Agree the fee, record any discount out of your margin, set the instalment dates, then send the letter.')
+      'Fee, discount, instalments, letter — per child.')
     + `<div class="panel" style="padding:14px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:280px">
         <select class="in" id="plan-class" style="max-width:180px">
@@ -1772,14 +2223,14 @@ async function tabPlans(){
     el('plan-rows').innerHTML = rows.map(k => {
       const fee = Number(k.final_fee || 0);
       return `<tr><td><strong>${esc(k.student_name)}</strong><br>
-          <span class="num" style="color:var(--muted);font-size:11px">${esc(k.uin)}</span></td>
+          <span class="uin">${esc(k.uin)}</span></td>
         <td>${esc(k.program_name || '')}</td>
         <td class="r num">${fee > 0 ? money(fee) : '<span class="chip c-warn">not set</span>'}</td>
-        <td class="r num">${Number(k.term1_due) > 0 ? money(k.term1_due) : '—'}</td>
-        <td class="r num">${Number(k.term2_due) > 0 ? money(k.term2_due) : '—'}</td>
-        <td class="r num" style="font-weight:600">${Number(k.true_due) > 0 ? money(k.true_due) : '—'}</td>
+        <td class="r num" style="color:var(--faint)">${Number(k.term1_due) > 0 ? `<span style="color:var(--ink)">${money(k.term1_due)}</span>` : '·'}</td>
+        <td class="r num" style="color:var(--faint)">${Number(k.term2_due) > 0 ? `<span style="color:var(--ink)">${money(k.term2_due)}</span>` : '·'}</td>
+        <td class="r num" style="font-weight:650">${Number(k.true_due) > 0 ? money(k.true_due) : '<span style="color:var(--faint);font-weight:400">·</span>'}</td>
         <td>${flagChip(k)}${k.welcome_sent_at ? ' <span class="chip c-mute">letter sent</span>' : ''}</td>
-        <td><a style="color:var(--accent);cursor:pointer" onclick="openPlan('${esc(k.uin)}')">${fee > 0 ? 'Open' : 'Set up'} →</a></td></tr>`;
+        <td class="r"><a onclick="openPlan('${esc(k.uin)}')">${fee > 0 ? 'Open' : 'Set up'} ›</a></td></tr>`;
     }).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No match.</td></tr>`;
   };
   paint();
