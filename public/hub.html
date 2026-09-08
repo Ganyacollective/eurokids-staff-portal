@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=14">
-<link rel="prefetch" href="/brand/enquiries.js?v=14" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=16">
+<link rel="prefetch" href="/brand/enquiries.js?v=16" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -65,7 +65,13 @@ const CACHE_TTL = 45000;
 async function cached(key, loader){
   const hit = _cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL) return hit.val;
-  const val = await loader();
+  // A dropped connection used to leave the screen saying "Loading…" for
+  // minutes. Twenty seconds is generous for any query here; past that the
+  // screen says so and offers to try again.
+  const val = await Promise.race([
+    loader(),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('The server did not answer in time. Check the connection and try again.')), 20000)),
+  ]);
   _cache.set(key, { at: Date.now(), val });
   return val;
 }
@@ -1381,7 +1387,8 @@ function head(t, s, right){
   return `<div class="ph"><div><h1>${t}</h1>${s ? `<div class="s">${s}</div>` : ''}</div><div class="ph-r">${right || ''}</div></div>`;
 }
 function fail(e){
-  return `<div class="err">Could not load: ${esc(e?.message || e)}</div>`;
+  return `<div class="err">Could not load: ${esc(e?.message || e)}
+    <div style="margin-top:10px"><button class="btn sm" onclick="invalidate();renderApp()">Try again</button></div></div>`;
 }
 
 /* ── overview: position for the owner, worklist for everyone else ── */
@@ -1558,13 +1565,12 @@ let _kids = [], _kidQ = '', _kidProg = 'all', _kidBatch = 'all', _kidSort = 'new
 
 async function tabChildren(){
   el('body').innerHTML = '<div class="loading">Loading roster…</div>';
-  // Everyone, newest admission first. No limit — the whole active roster.
-  const { data, error } = await getSb().schema('eurokids').from('v_dues')
-    .select('uin,student_name,father_name,program_name,student_status,eurokids_discount,our_discount,uncredited_cash,admission_date,batch,mobile1,mobile2,parent_email1,parent_email2,total_collected,total_invoiced,epms_due,true_due,payment_status')
-    .order('admission_date', { ascending: false })
-    .order('student_name', { ascending: true });
-  if (error) return el('body').innerHTML = fail(error);
-  _kids = data || [];
+  let rows;
+  try { rows = await schedule(); } catch (e) { return el('body').innerHTML = fail(e); }
+  _kids = rows.slice()
+    .map(r => ({ ...r, total_invoiced: r.epms_invoiced, total_collected: r.collected }))
+    .sort((a, b2) => (b2.admission_date || '').localeCompare(a.admission_date || '')
+                  || (a.student_name || '').localeCompare(b2.student_name || ''));
   renderChildren();
 }
 
@@ -1591,9 +1597,9 @@ function kidRowHtml(r){
           <td onclick="event.stopPropagation()">${r.batch ? esc(r.batch) : `<select class="in" style="width:auto" onchange="setBatch('${esc(r.uin)}', this.value)">
                 <option value="">Set…</option><option value="Morning">Morning</option><option value="Afternoon">Afternoon</option></select>`}</td>
           <td class="hint">${fmtDate(r.admission_date)}</td>
-          <td class="r num">${money(r.total_invoiced)}</td>
+          ${has('finance') ? `<td class="r num">${money(r.total_invoiced)}</td>
           <td class="r num">${money(r.total_collected)}</td>
-          <td class="r num ${paid ? 'money-ok' : (part ? '' : 'money-due')}" style="font-weight:600">${paid ? 'Paid' : money(r.true_due)}</td>
+          <td class="r num ${paid ? 'money-ok' : (part ? '' : 'money-due')}" style="font-weight:600">${paid ? 'Paid' : money(r.true_due)}</td>` : ''}
           <td class="r" style="color:var(--label-3)">›</td>
         </tr>`;
 }
@@ -1623,9 +1629,8 @@ function repaintKidRows(){
     : `<tr><td colspan="9" style="padding:26px;text-align:center;color:var(--muted)">No child matches that search.</td></tr>`;
   const owing = rows.filter(r => Number(r.true_due) > 0).length;
   const hint = el('kid-count');
-  if (hint) hint.innerHTML = `<strong>${rows.length}</strong> shown of ${_kids.length} active ·
-      <span style="color:var(--good)">${rows.length-owing} fully paid</span> ·
-      <span style="color:var(--crit)">${owing} still owe</span>`;
+  if (hint) hint.innerHTML = `<strong>${rows.length}</strong> shown of ${_kids.length} active`
+    + (has('finance') ? ` · <span style="color:var(--good)">${rows.length-owing} fully paid</span> · <span style="color:var(--crit)">${owing} still owe</span>` : '');
 }
 
 function renderChildren(){
@@ -1681,12 +1686,11 @@ function renderChildren(){
       </div>
 
       <div class="panel"><div class="ptop"><h2>Roster</h2>
-        <span class="hint" id="kid-count"><strong>${rows.length}</strong> shown of ${_kids.length} active ·
-          <span style="color:var(--good)">${rows.length-owing} fully paid</span> ·
-          <span style="color:var(--crit)">${owing} still owe</span></span></div>
+        <span class="hint" id="kid-count"><strong>${rows.length}</strong> shown of ${_kids.length} active${has('finance')
+          ? ` · <span style="color:var(--good)">${rows.length-owing} fully paid</span> · <span style="color:var(--crit)">${owing} still owe</span>` : ''}</span></div>
       <div class="tw"><table><thead><tr>
         <th>Child</th><th>Parents</th><th>Class</th><th>Batch</th><th>Admitted</th>
-        <th class="r">Fee</th><th class="r">Collected</th><th class="r">Truly due</th><th></th></tr></thead><tbody id="kid-rows">
+        ${has('finance') ? '<th class="r">Fee</th><th class="r">Collected</th><th class="r">Truly due</th>' : ''}<th></th></tr></thead><tbody id="kid-rows">
       </tbody></table></div></div>`;
 
   // Wire the controls (preserve caret position in the search box)
@@ -2593,7 +2597,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=14"></script>
+<script src="/brand/enquiries.js?v=16"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
