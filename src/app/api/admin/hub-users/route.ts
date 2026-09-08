@@ -102,6 +102,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, user_id: uid, email, modules });
   }
 
+  if (action === "set_name") {
+    const uid = (body.user_id || "").trim();
+    const full_name = (body.full_name || "").trim();
+    if (!uid || !full_name) return NextResponse.json({ error: "user_id and full_name required" }, { status: 400 });
+    await a.auth.admin.updateUserById(uid, { user_metadata: { full_name } });
+    const { error } = await a.from("profiles").upsert({ id: uid, full_name });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+
   if (action === "set_modules") {
     const uid = body.user_id || "";
     const modules = (body.modules || []).filter(mod => VALID_MODULES.has(mod));

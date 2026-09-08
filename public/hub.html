@@ -263,13 +263,13 @@ function renderChooser(){
   el('stage').innerHTML = `
     <div class="page"><div class="chooser">
       <div class="sb-brand" style="padding:0 0 22px"><span class="dot"></span><span>EuroKids JMD Enclave</span></div>
-      <h1 class="hello">Hello, ${esc(who.split(' ')[0].split('@')[0])}</h1>
+      <h1 class="hello">Hello${profile?.full_name ? ', ' + esc(profile.full_name.split(' ')[0]) : ''}</h1>
       <p class="askline">Where would you like to go?</p>
-      <div class="deck">${doors.map(d => `
+      <div class="deck">${doors.filter(d => d.ok || d.soon).map(d => `
         <div class="doorwrap">
           <button class="door ${d.ok ? '' : 'shut'}" data-key="${d.key}" ${d.ok ? '' : 'disabled'}>
             <h3>${d.name}</h3><p>${d.desc}</p>
-            <span class="open">${d.ok ? 'Open ›' : (d.soon ? 'Not ready yet' : 'Not your access')}</span>
+            <span class="open">${d.ok ? 'Open ›' : 'Coming soon'}</span>
           </button>${d.soon ? '<span class="soon">soon</span>' : ''}
         </div>`).join('')}</div>
       ${(!canAdmissions && !canStaff) ? `<p class="hint" style="margin-top:26px">
@@ -330,6 +330,7 @@ async function renderUsers(){
             <td class="hint">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : 'never'}</td>
             <td class="r"><div class="more" style="display:inline-block"><button class="btn line sm" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle('open')" aria-label="Actions">•••</button>
               <div class="menu">
+                <button onclick="renameUser('${u.id}','${esc(u.full_name || '')}')">Rename…</button>
                 <button onclick="editUserModules('${u.id}')">Edit Access…</button>
                 <button onclick="resetUserPassword('${u.id}','${esc(u.email)}')">Reset Password…</button>
                 ${u.email==='abhinav@ganya.in'?'':`<div class="msep"></div><button style="color:var(--red)" onclick="deleteHubUser('${u.id}','${esc(u.email)}')">Remove Account…</button>`}
@@ -381,6 +382,17 @@ async function saveUserModules(uid){
   if (modules.includes('finance') && !confirm('Grant FINANCE to this account?')) return;
   const r = await hubUsersApi('POST', { action:'set_modules', user_id: uid, modules });
   if (r.ok) renderUsers(); else alert(r.error||'Failed');
+}
+
+// The name is what everyone sees on a note, a letter and the greeting, so it
+// must be editable long after the account was made.
+async function renameUser(uid, current){
+  const full_name = prompt('Their full name, as it should appear on notes and letters:', current || '');
+  if (!full_name || !full_name.trim() || full_name.trim() === current) return;
+  const r = await hubUsersApi('POST', { action: 'set_name', user_id: uid, full_name: full_name.trim() });
+  if (!r.ok) return alert(r.error || 'Could not rename');
+  if (uid === session?.user?.id) { profile = { ...(profile || {}), full_name: full_name.trim() }; }
+  renderUsers();
 }
 
 async function resetUserPassword(uid, email){
