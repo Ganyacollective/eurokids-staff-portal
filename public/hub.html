@@ -2259,7 +2259,9 @@ async function openPlan(uin){
         <span class="hint">${esc(kid?.program_name||'')} · ${esc(uin)}</span></div>
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:640px">
-        <div class="fld"><label>Total fee (EPMS)</label><input class="in num" id="pf-total" type="number" value="${total}"></div>
+        <div class="fld"><label>Total fee <span class="hint" style="font-weight:400">— what EPMS invoiced this child: <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></label>
+          <input class="in num" id="pf-total" type="number" value="${total}">
+          <div id="pf-fee-warn"></div></div>
         <div class="fld"><label>Our discount</label><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}"></div>
         <div class="fld"><label>Final payable</label><input class="in num" id="pf-final" type="number" value="${plan?.final_fee ?? total}" readonly style="background:var(--bone);font-weight:700"></div>
       </div>
@@ -2339,8 +2341,24 @@ async function openPlan(uin){
            A letter cannot be sent until these agree.</div>` : '';
   };
 
+  // The fee must be what EPMS billed this family — the Payment Due report —
+  // never the standard grid. Uniform opt-outs and joining-month pricing make
+  // the two differ, and the grid figure over-bills.
+  const epmsFee = Number(kid?.epms_invoiced || 0);
+  const warnFee = () => {
+    const box = el('pf-fee-warn'); if (!box) return;
+    const t = Number(el('pf-total').value) || 0;
+    box.innerHTML = (epmsFee > 0 && Math.abs(t - epmsFee) > 1)
+      ? `<div style="background:var(--warn-wash);color:var(--warn);padding:8px 11px;border-radius:8px;margin-top:6px;font-size:13px">
+           EPMS invoiced <strong>${money(epmsFee)}</strong>, not ${money(t)}.
+           <a href="#" id="pf-use-epms" style="color:inherit;font-weight:700;margin-left:6px">Use the EPMS figure</a></div>`
+      : '';
+    const a = el('pf-use-epms');
+    if (a) a.onclick = ev => { ev.preventDefault(); el('pf-total').value = epmsFee; autoLast(); };
+  };
   const autoLast = () => {
     recalcFinal();
+    warnFee();
     const final = Number(el('pf-final').value)||0;
     if (rows.length < 2) { if (rows.length===1 && !rows[0].amount) { rows[0].amount = final;
       const f = document.querySelector('.pf-amt[data-i="0"]'); if (f) f.value = final; } return; }
