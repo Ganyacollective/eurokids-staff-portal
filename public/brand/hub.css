@@ -87,7 +87,7 @@ code{background:var(--fill);padding:1px 5px;border-radius:4px;font-size:var(--fs
 .sb-i .ic{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex:none;color:#fff;background:var(--tint,var(--accent))}
 .sb-i .ic svg{width:14px;height:14px}
 .sb-i[data-sect="Fees"]{--tint:var(--c-fees)} .sb-i[data-sect="Communication"]{--tint:var(--c-comm)}
-.sb-i[data-sect="Reference"]{--tint:var(--c-ref)} .sb-i[data-sect="Setup"],.sb-i[data-sect="Apps"]{--tint:var(--c-setup)}
+.sb-i[data-sect="Reference"]{--tint:var(--c-ref)} .sb-i[data-sect="Enquiries"]{--tint:#FF6B3D} .sb-i[data-sect="Setup"],.sb-i[data-sect="Apps"]{--tint:var(--c-setup)}
 .sb-i .ct{margin-left:auto;font-size:var(--fs-sub);color:var(--label-2)} .sb-i.on .ct{color:rgba(255,255,255,.85)}
 .sb-foot{margin-top:auto;padding:12px 10px 4px;border-top:1px solid var(--sep);display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:var(--fs-co);color:var(--label-2)}
 .sb-foot a{cursor:pointer;color:var(--accent);text-decoration:none}
@@ -386,3 +386,10 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
   .tools .search{max-width:none}
   tbody td{padding:10px 12px}
 }
+
+/* ══ enquiries ══ */
+.heat{display:inline-flex;gap:3px;vertical-align:middle}
+.heat i{width:8px;height:8px;border-radius:50%;background:var(--fill-3);display:inline-block}
+.heat i.on{background:var(--orange)}
+.enq-row{border-top:1px solid var(--sep)} .enq-row:first-child{border-top:0}
+.panel>.box{box-shadow:none;border-radius:0}

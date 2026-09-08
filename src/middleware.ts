@@ -33,6 +33,7 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/staff") ||
     path.startsWith("/hub") ||
     path.startsWith("/teacher") ||
+    path.startsWith("/enquire") ||       // the public enquiry form
     path.startsWith("/login") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/_next") ||

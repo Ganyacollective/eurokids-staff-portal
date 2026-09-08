@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#FF2217">
+<title>Enquire — EuroKids JMD Enclave</title>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/brand/icons/apple-touch-icon.png">
+<style>
+  /* One form, three homes: the school's iPad (?src=walkin&k=KEY — big, resets
+     itself), an iframe on the website (?embed=1 — no chrome, posts its height
+     to the parent), and a plain page for a link in a WhatsApp message. */
+  :root{--brand:#FF2217;--ink:#1D1D1F;--label2:#5F5F66;--label3:#9A9AA3;--field:#F1F1F4;--sep:rgba(60,60,67,.16);--accent:#0A7AFF;--green:#1F9D4A;--red:#E5343A;--r:12px}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Inter,system-ui,sans-serif;color:var(--ink);background:#F4F4F6;-webkit-font-smoothing:antialiased;font-size:16px;line-height:1.45}
+  body.embed{background:transparent}
+  .wrap{max-width:640px;margin:0 auto;padding:28px 20px 60px}
+  body.kiosk .wrap{max-width:760px;padding:40px 32px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;margin-bottom:18px}
+  .brand .dot{width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#FF7A5C,var(--brand) 62%,#A81E12)}
+  body.embed .brand{display:none}
+  h1{font-size:30px;line-height:1.15;letter-spacing:-.025em;margin:0 0 6px}
+  body.kiosk h1{font-size:40px}
+  .lead{color:var(--label2);margin:0 0 22px;font-size:16px}
+  .card{background:#fff;border-radius:var(--r);box-shadow:0 0 0 1px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.04),0 6px 20px -12px rgba(0,0,0,.12);padding:6px 0;margin-bottom:16px}
+  .cap{font-size:13px;font-weight:600;color:var(--label2);margin:22px 0 8px 4px;text-transform:uppercase;letter-spacing:.05em}
+  .row{display:flex;flex-direction:column;gap:6px;padding:12px 18px}
+  .row+.row{border-top:1px solid var(--sep)}
+  label{font-size:14px;font-weight:600;color:var(--ink)}
+  label small{font-weight:400;color:var(--label3);margin-left:6px}
+  input,select,textarea{font:inherit;color:inherit;width:100%;min-height:48px;padding:10px 12px;border:0;border-radius:9px;background:var(--field);font-size:17px}
+  body.kiosk input,body.kiosk select,body.kiosk textarea{min-height:56px;font-size:20px}
+  input:focus,select:focus,textarea:focus{outline:none;background:#fff;box-shadow:0 0 0 3px rgba(10,122,255,.35)}
+  input::placeholder,textarea::placeholder{color:var(--label3)}
+  textarea{min-height:90px;resize:vertical}
+  select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='14' viewBox='0 0 10 14'%3E%3Cpath d='M2 5.5 5 2.5l3 3M2 8.5l3 3 3-3' fill='none' stroke='%236E6E73' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px}
+  .seg{display:flex;flex-wrap:wrap;gap:8px}
+  .seg button{flex:1 1 auto;min-height:48px;padding:8px 14px;border:0;border-radius:9px;background:var(--field);font:inherit;font-size:16px;color:var(--ink);cursor:pointer}
+  body.kiosk .seg button{min-height:56px;font-size:18px}
+  .seg button.on{background:var(--ink);color:#fff;font-weight:600}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:480px){.two{grid-template-columns:1fr}}
+  .btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:54px;border:0;border-radius:12px;background:linear-gradient(180deg,#FF4A3F,var(--brand));color:#fff;font:inherit;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(255,34,23,.3);margin-top:8px}
+  body.kiosk .btn{min-height:64px;font-size:21px}
+  .btn:disabled{opacity:.5}
+  .hint{font-size:13px;color:var(--label2);margin:10px 4px 0;line-height:1.5}
+  .err{background:rgba(255,56,60,.1);color:#B3232A;padding:10px 14px;border-radius:9px;margin:0 0 12px;font-size:15px}
+  .hp{position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0}
+  .done{text-align:center;padding:40px 20px}
+  .done .tick{width:72px;height:72px;border-radius:50%;background:var(--green);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:16px}
+  .done h2{font-size:26px;margin:0 0 8px;letter-spacing:-.02em}
+  .done p{color:var(--label2);font-size:17px;margin:0}
+  body.kiosk .done h2{font-size:34px} body.kiosk .done p{font-size:20px}
+  .foot{color:var(--label3);font-size:12.5px;text-align:center;margin-top:22px}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="brand"><span class="dot"></span> EuroKids JMD Enclave</div>
+  <h1 id="h1">Welcome — help us know you</h1>
+  <p class="lead" id="lead">Tell us a little about your child and we'll take it from there.</p>
+
+  <form id="f" novalidate>
+    <div id="err"></div>
+    <div class="cap">Your child</div>
+    <div class="card">
+      <div class="row"><label for="child_name">Child's name</label><input id="child_name" name="child_name" autocomplete="off" placeholder="e.g. Aarav Sharma"></div>
+      <div class="row"><label>Looking for</label>
+        <div class="seg" id="program">
+          <button type="button" data-v="Play Group">Play Group</button>
+          <button type="button" data-v="Nursery">Nursery</button>
+          <button type="button" data-v="Euro Junior">Euro Junior</button>
+          <button type="button" data-v="Euro Senior">Euro Senior</button>
+          <button type="button" data-v="Day Care">Day Care</button>
+          <button type="button" data-v="Not sure">Not sure yet</button>
+        </div></div>
+      <div class="row two">
+        <div><label for="dob">Date of birth <small>optional</small></label><input id="dob" name="dob" type="date"></div>
+        <div><label>Child is a</label><div class="seg" id="sex"><button type="button" data-v="Boy">Boy</button><button type="button" data-v="Girl">Girl</button></div></div>
+      </div>
+    </div>
+
+    <div class="cap">You</div>
+    <div class="card">
+      <div class="row"><label for="parent_name">Your name</label><input id="parent_name" name="parent_name" autocomplete="name" placeholder="Parent's full name"></div>
+      <div class="row"><label for="phone">Mobile number</label><input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" maxlength="14"></div>
+      <div class="row"><label for="email">Email <small>so we can send you details</small></label><input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com"></div>
+      <div class="row"><label for="address">Where do you live? <small>area or society</small></label><input id="address" name="address" placeholder="e.g. Undri, Nyati County"></div>
+      <div class="row"><label for="message">Anything you'd like to ask? <small>optional</small></label><textarea id="message" name="message" placeholder="Timings, fees, transport, a good day to visit…"></textarea></div>
+    </div>
+    <input class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+    <button class="btn" id="go" type="submit">Send</button>
+    <p class="hint">We'll call you within a working day. Your details stay with the school and are never shared.</p>
+  </form>
+
+  <div class="done" id="done" style="display:none">
+    <div class="tick">✓</div>
+    <h2 id="done-h">Thank you!</h2>
+    <p id="done-p">We've got your details. Someone from the school will call you shortly.</p>
+  </div>
+  <div class="foot" id="foot">EuroKids JMD Enclave · Undri, Pune · 022 696 22 686</div>
+</div>
+
+<script>
+  const q = new URLSearchParams(location.search);
+  const SRC = q.get('src') || 'website';
+  const KIOSK = SRC === 'walkin' && !!q.get('k');
+  const EMBED = q.get('embed') === '1';
+  if (KIOSK) document.body.classList.add('kiosk');
+  if (EMBED) document.body.classList.add('embed');
+  if (KIOSK) { document.getElementById('h1').textContent = 'Welcome to EuroKids'; document.getElementById('lead').textContent = 'Please tell us a little about your child while you wait.'; }
+  // The API lives with the hub. In an iframe on the website it is still the
+  // same origin as this page, so a relative URL works everywhere.
+  const API = '/api/public/enquiry';
+
+  const el = id => document.getElementById(id);
+  const seg = id => { const box = el(id); box.querySelectorAll('button').forEach(b => b.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); }); return () => box.querySelector('.on')?.dataset.v || null; };
+  const program = seg('program'), sex = seg('sex');
+
+  // tell the host page how tall we are, so the iframe never scrolls inside itself
+  const post = () => { if (EMBED && window.parent !== window) parent.postMessage({ ekEnquireHeight: document.documentElement.scrollHeight }, '*'); };
+  new ResizeObserver(post).observe(document.body); post();
+
+  el('f').onsubmit = async ev => {
+    ev.preventDefault();
+    const err = el('err'); err.innerHTML = '';
+    const phone = el('phone').value.replace(/\D/g, '');
+    if (phone.replace(/^91/, '').length !== 10) { err.innerHTML = '<div class="err">Please enter a 10-digit mobile number.</div>'; el('phone').focus(); return; }
+    if (!el('parent_name').value.trim() && !el('child_name').value.trim()) { err.innerHTML = '<div class="err">Please tell us your name or your child\'s.</div>'; el('parent_name').focus(); return; }
+    const go = el('go'); go.disabled = true; go.textContent = 'Sending…';
+    const body = {
+      child_name: el('child_name').value.trim(), program: program(), dob: el('dob').value || null, sex: sex(),
+      parent_name: el('parent_name').value.trim(), phone, email: el('email').value.trim(),
+      address: el('address').value.trim(), message: el('message').value.trim(),
+      company: document.querySelector('[name=company]').value,
+      source: KIOSK ? 'walk_in' : (q.get('src') || 'website'), kiosk_key: q.get('k') || undefined, page: document.referrer || location.href,
+    };
+    try {
+      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'Something went wrong');
+      el('f').style.display = 'none'; el('done').style.display = '';
+      if (KIOSK) { el('done-p').textContent = 'Please take a seat — someone will be with you in a moment.'; }
+      else if (j.existing) { el('done-h').textContent = 'Welcome back!'; el('done-p').textContent = 'We have your details already. We\'ll be in touch shortly.'; }
+      post();
+      if (window.parent !== window) parent.postMessage({ ekEnquireDone: true }, '*');
+      // the iPad at reception goes back to a clean form for the next family
+      if (KIOSK) setTimeout(() => location.reload(), 6000);
+    } catch (e) {
+      err.innerHTML = `<div class="err">${e.message}. You can also call us on 022 696 22 686.</div>`;
+      go.disabled = false; go.textContent = 'Send';
+    }
+  };
+</script>
+</body>
+</html>

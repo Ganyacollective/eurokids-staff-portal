@@ -19,6 +19,8 @@ const nextConfig: NextConfig = {
         { source: "/staff", destination: "/portal.html" },
         // Teachers are untouched.
         { source: "/teacher", destination: "/teacher.html" },
+        // The enquiry form: on the school iPad, embedded on the website, or linked.
+        { source: "/enquire", destination: "/enquire.html" },
       ],
       afterFiles: [],
       fallback: [],

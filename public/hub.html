@@ -98,10 +98,21 @@ const ICON = {
   arrow:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8v8M13 3 3 13"/></svg>',
   more:    '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>',
   back:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
+  sun:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>',
+  inbox:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 9h3.5l1 2h3l1-2H14M2 9l1.5-5.5h9L14 9v4H2z"/></svg>',
+  phone:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3.5 2.5h2.6l1.2 3-1.6 1.1a8 8 0 0 0 3.7 3.7l1.1-1.6 3 1.2v2.6a1 1 0 0 1-1.1 1A11.5 11.5 0 0 1 2.5 3.6a1 1 0 0 1 1-1.1z"/></svg>',
+  gear:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2" stroke-linecap="round"/></svg>',
+  plus:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
 };
 
 // The sidebar, in sections. `need` decides visibility; RLS decides data.
 const TABS = {
+  // ── Enquiries & Admissions ──
+  enq_today:  { app: 'enquiries', label: 'Today',       icon: 'sun',    sect: 'Enquiries', need: () => has('admission') || has('finance') },
+  enq_list:   { app: 'enquiries', label: 'Enquiries',   icon: 'inbox',  sect: 'Enquiries', need: () => has('admission') || has('finance') },
+  enq_calls:  { app: 'enquiries', label: 'Calls',       icon: 'phone',  sect: 'Enquiries', need: () => has('admission') || has('finance') },
+  enq_setup:  { app: 'enquiries', label: 'Setup',       icon: 'gear',   sect: 'Setup',     need: () => isOwner() || has('finance') },
+  // ── Fees ──
   overview:   { label: 'Overview',      icon: 'house',  sect: 'Fees',          need: () => has('admission') || has('finance') },
   children:   { label: 'Children',      icon: 'people', sect: 'Fees',          need: () => has('finance') || has('admission') },
   views:      { label: 'Views',         icon: 'list',   sect: 'Fees',          need: () => has('finance') || has('admission') },
@@ -114,16 +125,19 @@ const TABS = {
   fees:       { label: 'Fee Grid',      icon: 'grid',   sect: 'Reference',     need: () => has('fees') || has('finance') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
 };
-const SECTIONS = ['Fees', 'Communication', 'Reference', 'Setup'];
+const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Reference', 'Setup'];
+const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
-const TABBAR = ['overview', 'children', 'views', 'plans'];
+const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'] };
+const tabsFor = a => Object.keys(TABS).filter(t => (TABS[t].app || 'admissions') === (a || 'admissions') && TABS[t].need());
 
 /* ── boot ─────────────────────────────────────────────── */
 async function boot(){
  try {
   // Home-screen shortcuts land here with ?open=liability / ?open=compose.
   const want = new URLSearchParams(location.search).get('open');
-  if (want && TABS[want]) { app = 'admissions'; tab = want; }
+  if (want && TABS[want]) { app = TABS[want].app || 'admissions'; tab = want; }
+  if (want === 'enq_new') { app = 'enquiries'; tab = 'enq_today'; window._openNewEnquiry = true; }
   const { data } = await getSb().auth.getSession();
   session = data.session;
   if (session) await loadMe();
@@ -213,12 +227,12 @@ function renderChooser(){
   const canAdmissions = has('admission') || has('finance') || has('kits');
   const canStaff      = has('staff_portal') || has('payroll');
   const doors = [
-    { key:'admissions', name:'Admissions & Fees',
-      desc:'Children, fees, payment schedules and kits.', ok:canAdmissions, href:null },
+    { key:'admissions', name:'Fees & Children',
+      desc:'Roster, fees, payment schedules, statements and kits.', ok:canAdmissions, href:null },
     { key:'staff', name:'Staff Portal',
       desc:'Leave, attendance and payroll.', ok:canStaff, href:'/staff' },
-    { key:'pulse', name:'Site Pulse',
-      desc:'Enquiries, conversions and centre performance.', ok:false, soon:true }
+    { key:'enquiries', name:'Enquiries & Admissions',
+      desc:'Every call, walk-in and website enquiry; visits, follow-ups, conversions.', ok:canAdmissions, href:null },
   ];
   if (isOwner()) doors.push({ key:'users', name:'Users & Access',
     desc:'Accounts for coordinators and HR; what each may open.', ok:true, href:null });
@@ -244,8 +258,8 @@ function renderChooser(){
     b.onclick = () => {
       const d = doors.find(x => x.key === b.dataset.key);
       if (d.href) { location.href = d.href; return; }
-      app = 'admissions';
-      tab = d.key === 'users' ? 'users' : (Object.keys(TABS).find(t => t !== 'users' && TABS[t].need()) || 'overview');
+      app = d.key === 'enquiries' ? 'enquiries' : 'admissions';
+      tab = d.key === 'users' ? 'users' : (tabsFor(app).find(t => t !== 'users') || 'overview');
       paint(); scrollTo({ top: 0 });
     };
   });
@@ -364,20 +378,25 @@ async function deleteHubUser(uid, email){
 // NavigationSplitView: the sidebar is built once and only re-marked when the
 // tab changes; the detail pane is what each tab function paints into.
 function renderApp(){
-  const avail = Object.keys(TABS).filter(t => TABS[t].need());
+  const avail = tabsFor(app);
   if (!avail.includes(tab)) tab = avail[0];
+  // switching apps rebuilds the sidebar
+  if (el('shell') && el('shell').dataset.app !== app) el('stage').innerHTML = '';
   const item = t => `<button class="sb-i ${t === tab ? 'on' : ''}" data-tab="${t}" data-sect="${TABS[t].sect}"><span class="ic">${ICON[TABS[t].icon]}</span><span>${TABS[t].label}</span></button>`;
 
   if (!el('shell')) {
     const who = profile?.full_name || session.user.email;
     const canStaff = has('staff_portal') || has('payroll');
-    el('stage').innerHTML = `<div class="shell" id="shell">
+    el('stage').innerHTML = `<div class="shell" id="shell" data-app="${app}">
       <nav class="sb" id="sb">
         <div class="sb-brand"><span class="dot"></span><span>EuroKids JMD</span></div>
+        <div class="hint" style="margin:-10px 0 6px 10px;font-size:12px">${APP_NAME[app] || ''}</div>
         ${SECTIONS.map(sec => { const ts = avail.filter(t => TABS[t].sect === sec); return ts.length
           ? `<div class="sb-h">${sec}</div>${ts.map(item).join('')}` : ''; }).join('')}
         <div class="sb-h">Apps</div>
         <a class="sb-i" id="sb-home" data-sect="Apps"><span class="ic">${ICON.back}</span><span>All Apps</span></a>
+        ${app !== 'enquiries' && (has('admission') || has('finance')) ? `<a class="sb-i" id="sb-enq" data-sect="Apps"><span class="ic">${ICON.inbox}</span><span>Enquiries</span></a>` : ''}
+        ${app !== 'admissions' ? `<a class="sb-i" id="sb-fees" data-sect="Apps"><span class="ic">${ICON.rupee}</span><span>Fees &amp; Children</span></a>` : ''}
         ${canStaff ? `<a class="sb-i" href="/staff" data-sect="Apps"><span class="ic">${ICON.arrow}</span><span>Staff Portal</span></a>` : ''}
         <div class="sb-foot"><span title="${esc(session.user.email)}">${esc(who)}</span><a id="out">Sign Out</a></div>
       </nav>
@@ -387,6 +406,8 @@ function renderApp(){
         <nav class="tabbar" id="tabbar"></nav>
       </main></div>`;
     el('sb-home').onclick = () => { app = null; paint(); };
+    const se = el('sb-enq'); if (se) se.onclick = () => { app = 'enquiries'; tab = 'enq_today'; renderApp(); };
+    const sf = el('sb-fees'); if (sf) sf.onclick = () => { app = 'admissions'; tab = 'overview'; renderApp(); };
     el('out').onclick = async () => { await getSb().auth.signOut(); };
     // scroll-edge effect: the bar earns its hairline and title once content moves under it
     const main = el('main'), bar = el('tbar');
@@ -402,7 +423,8 @@ function renderApp(){
   el('tb-back').onclick = () => { app = null; paint(); };
 
   // phone: a tab bar with the four everyday places and a More sheet for the rest
-  const bar = avail.filter(t => TABBAR.includes(t)), rest = avail.filter(t => !TABBAR.includes(t));
+  const tb = TABBAR[app] || [];
+  const bar = avail.filter(t => tb.includes(t)), rest = avail.filter(t => !tb.includes(t));
   el('tabbar').innerHTML = bar.map(t => `<button class="${t === tab ? 'on' : ''}" data-tab="${t}">${ICON[TABS[t].icon]}${TABS[t].label.split(' ')[0]}</button>`).join('')
     + (rest.length ? `<button id="tb-more" class="${rest.includes(tab) ? 'on' : ''}">${ICON.more}More</button>` : '');
   el('tabbar').querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; renderApp(); });
@@ -418,7 +440,8 @@ function renderApp(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   el('main').scrollTop = 0; window.scrollTo({ top: 0 });
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
-     compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers }[tab] || tabOverview)();
+     compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
+     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_setup: tabEnqSetup }[tab] || tabOverview)();
 }
 
 /* ── schedule coverage: what the coordinator still has to fill ──
@@ -2497,6 +2520,7 @@ async function tabFees(){
 
 boot();
 </script>
+<script src="/brand/enquiries.js"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
