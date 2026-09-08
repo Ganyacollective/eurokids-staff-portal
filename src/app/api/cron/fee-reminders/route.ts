@@ -47,8 +47,8 @@ function feeBlock(r: ScheduleRow) {
   const line = (k: string, v: string) =>
     `<tr><td style="padding:6px 0;color:#4B5563">${k}</td><td style="padding:6px 0;text-align:right">${v}</td></tr>`;
   return `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
-    ${line("Fee for the year", moneyH(r.agreed_fee || r.final_fee || 0))}
-    ${Number(r.our_discount || 0) > 0 ? line("Special discount", `<span style="color:#15803D">− ${moneyH(r.our_discount)}</span>`) : ""}
+    ${line("Annual fee", moneyH(r.agreed_fee || r.final_fee || 0))}
+    ${Number(r.our_discount || 0) > 0 ? line("Concession", `<span style="color:#15803D">− ${moneyH(r.our_discount)}</span>`) : ""}
     ${line("Received so far", `<span style="color:#15803D">− ${moneyH(r.paid_so_far || 0)}</span>`)}
     <tr><td style="padding:10px 0;border-top:2px solid #1A202C;font-weight:700">Balance outstanding</td>
         <td style="padding:10px 0;border-top:2px solid #1A202C;text-align:right;font-weight:700;font-size:16px">${moneyH(r.true_due)}</td></tr>

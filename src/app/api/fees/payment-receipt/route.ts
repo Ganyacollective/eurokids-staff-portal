@@ -79,8 +79,8 @@ export async function POST(req: NextRequest) {
          <div style="color:#166534;font-size:13px;margin-top:2px">Balance outstanding: <strong>${moneyH(0)}</strong></div>
        </div>`
     : `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
-         ${line("Fee for the year", moneyH(child!.final_fee || child!.total_fee || 0))}
-         ${Number(child!.our_discount || 0) > 0 ? line("Special discount", `<span style="color:#15803D">− ${moneyH(child!.our_discount)}</span>`) : ""}
+         ${line("Annual fee", moneyH(child!.final_fee || child!.total_fee || 0))}
+         ${Number(child!.our_discount || 0) > 0 ? line("Concession", `<span style="color:#15803D">− ${moneyH(child!.our_discount)}</span>`) : ""}
          ${line("Received to date", `<span style="color:#15803D">− ${moneyH(Number(child!.collected || 0) + Number(child!.uncredited_cash || 0))}</span>`)}
          <tr><td style="padding:10px 0;border-top:2px solid #1A202C;font-weight:700">Balance remaining</td>
              <td style="padding:10px 0;border-top:2px solid #1A202C;text-align:right;font-weight:700;font-size:16px">${moneyH(owed)}</td></tr>

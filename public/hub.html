@@ -471,7 +471,7 @@ const VIEW_FIELDS = [
   { k:'batch',         l:'Batch',                     t:'enum' },
   { k:'schedule_flag', l:'Status',                    t:'enum' },
   { k:'agreed_fee',    l:'Agreed fee',                t:'num' },
-  { k:'our_discount',  l:'Our discount',              t:'num' },
+  { k:'our_discount',  l:'Concession',                t:'num' },
   { k:'term1_due',     l:'Term 1 due (EPMS)',         t:'num' },
   { k:'term2_due',     l:'Term 2 due (EPMS)',         t:'num' },
   { k:'epms_due',      l:'EPMS total due',            t:'num' },
@@ -1202,6 +1202,7 @@ async function tabCompose(){
     el('cmp-subject').value = t.subject; el('cmp-message').value = t.body;
     el('cmp-theme').value = t.theme; el('cmp-fees').checked = t.fees;
     el('cmp-money').value = t.money;
+    el('cmp-preview-box').innerHTML = ''; el('cmp-msg').innerHTML = '';   // an old preview must not outlive the letter it showed
     refresh();
     el('cmp-message').focus();
   };
@@ -2111,7 +2112,11 @@ function statementHtml(c, ledger, items){
   const epmsKnown = pays.filter(l => l.source === 'epms').reduce((a,l) => a + Number(l.amount), 0);
   const epmsUndated = Math.max(0, Number(c.collected || 0) - epmsKnown);
   const over = Number(c.overpaid || 0);
-  const nextDue = !settled && c.next_due_date ? `Next instalment ${money(c.next_amount || 0)} due ${d(c.next_due_date)}` : '';
+  const late = Number(c.overdue_amount || 0);
+  const nextDue = settled ? '' :
+    (late > 1 ? `${money(late)} overdue${c.overdue_by ? ' since ' + d(c.overdue_by) : ''}` : '') +
+    (c.upcoming_date ? `${late > 1 ? ' · then ' : 'Next instalment '}${money(c.upcoming_amount || 0)} due ${d(c.upcoming_date)}`
+      : (late <= 1 && c.next_due_date ? `Next instalment ${money(c.next_amount || 0)} due ${d(c.next_due_date)}` : ''));
   const heroCls = settled ? (over > 1 ? 'credit' : 'paid') : 'due';
   const heroK = settled ? (over > 1 ? 'Paid in full · credit' : 'Paid in full') : (c.schedule_flag === 'OVERDUE' ? 'Overdue' : 'Balance due');
   const heroV = settled ? (over > 1 ? '+' + money(over) : money(0)) : money(owed);
@@ -2122,7 +2127,7 @@ function statementHtml(c, ledger, items){
     <div class="hero ${heroCls}"><div class="k">${heroK}</div><div class="v">${heroV}</div><div class="m">${heroM}</div></div>
     <div class="grp"><h3>Statement</h3><div class="box">
       ${line('Annual fee', money(fee), 'mute', 'as invoiced by EuroKids')}
-      ${disc > 0 ? line('Our discount', '− ' + money(disc), 'credit') : ''}
+      ${disc > 0 ? line('Concession', '− ' + money(disc), 'credit', 'ours — parents see it as a concession') : ''}
       ${line('<strong>Agreed fee</strong>', '<strong>' + money(agreed) + '</strong>')}
       ${epmsUndated > 0 ? line('Paid to EuroKids', '− ' + money(epmsUndated), 'credit', 'before we started tracking dates') : ''}
       ${pays.map(l => line(l.source === 'epms' ? 'Paid to EuroKids' : 'Paid to us', '− ' + money(l.amount), 'credit',
@@ -2154,7 +2159,7 @@ async function openPlan(uin){
     <div class="grp"><h3>Fee</h3><div class="box">
       <div class="row"><div class="l">Annual fee<span class="sub">EPMS invoiced <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></div>
         <input class="in num" id="pf-total" type="number" value="${total}"></div>
-      <div class="row"><div class="l">Our discount</div><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0"></div>
+      <div class="row"><div class="l">Concession<span class="sub">Comes off our margin; EPMS never sees it.</span></div><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0"></div>
       <div class="row"><div class="l"><strong>Agreed fee</strong></div><input class="in num" id="pf-final" type="number" value="${plan?.final_fee ?? total}" readonly tabindex="-1"></div>
     </div><div id="pf-fee-warn"></div></div>
 
@@ -2415,7 +2420,7 @@ async function tabDiscounts(){
     + `<div class="panel"><div class="ptop"><h2>Per-child discount</h2>
         <span class="hint">Type an amount and press Enter. Everything recalculates.</span></div>
       <div class="tw"><table><thead><tr><th>Child</th><th>Program</th>
-        <th class="r">EPMS says due</th><th style="width:150px">Our discount</th>
+        <th class="r">EPMS says due</th><th style="width:150px">Concession</th>
         <th class="r">Truly due</th><th>Reason</th></tr></thead><tbody>
         ${(rows || []).map(r => `<tr data-uin="${esc(r.uin)}">
           <td>${esc(r.student_name)}</td><td>${esc(r.program_name)}</td>
