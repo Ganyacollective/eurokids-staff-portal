@@ -291,20 +291,6 @@ tbody tr:hover td:last-child a[onclick]{color:var(--ink)}
 .dsec{margin-top:22px}
 .dsec h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px}
 
-/* the statement: reads like a ledger, colour says what the number means */
-.stmt{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:16px}
-.stmt table{width:100%;border-collapse:collapse}
-.stmt td{padding:9px 14px;border-bottom:1px solid var(--line);font-size:14px}
-.stmt tr:last-child td{border-bottom:0}
-.stmt td.r{text-align:right;font-variant-numeric:tabular-nums}
-.stmt .lbl{color:var(--muted)}
-.stmt .sub{font-size:12px;color:var(--faint);padding-left:26px}
-.stmt .credit{color:#146C3A}
-.stmt .total td{font-weight:700;border-top:2px solid var(--ink);background:#FAFAFA;font-size:15px}
-.stmt .total.due td.r{color:var(--crit)}
-.stmt .total.paid td.r{color:#146C3A}
-.stmt .head td{background:#FAFAFA;font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-
 /* row tints — the eye should find the problem rows without reading */
 tr.t-crit td{background:#FFF5F4} tr.t-warn td{background:#FFFAF0} tr.t-good td{background:#F4FBF6}
 tr.t-crit td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
@@ -327,6 +313,159 @@ tbody tr.t-crit:hover td{background:#FFEDEB} tbody tr.t-warn:hover td{background
   .pill-row{gap:6px}
   .pill{font-size:12px;padding:6px 10px}
   td:first-child{min-width:130px}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Apple pass — Sept 2026
+   The philosophy, borrowed from the Human Interface Guidelines:
+   · one primary action per screen, filled blue; everything else is a
+     tinted grey button or a menu
+   · content is grouped into inset lists: a small grey caption, a white
+     rounded group, hairline separators that start at the text
+   · the most important number is the biggest thing on the screen
+   · settings and actions do not float about — they live where the eye
+     expects them: actions at the bottom, lists on the left, tools top-right
+   · system font, tabular numerals, no decoration that does not carry
+     meaning
+   ═══════════════════════════════════════════════════════════════════ */
+:root{ --accent:#0A7AFF; --accent-wash:#EAF3FF; --ios-bg:#F5F5F7; --sep:rgba(60,60,67,.14);
+       --label2:#6E6E73; --fill:rgba(120,120,128,.12); --fill-2:rgba(120,120,128,.2); }
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Inter,"Helvetica Neue",system-ui,sans-serif}
+
+/* buttons: primary filled, secondary tinted, both pill-cornered */
+.btn{background:var(--accent);color:#fff;border-radius:11px;font-weight:600;letter-spacing:-.01em;border:0}
+.btn:hover{opacity:1;background:#0068E0}
+.btn.line,.btn.ghost{background:var(--fill);color:var(--accent);border:0;font-weight:600}
+.btn.line:hover,.btn.ghost:hover{background:var(--fill-2);border:0;color:var(--accent)}
+.btn.sm{border-radius:9px;min-height:34px;padding:5px 12px;font-size:13.5px}
+.btn.danger{background:transparent;color:var(--crit);border:0}
+.btn.danger:hover{background:var(--crit-wash);color:var(--crit)}
+.in{border-radius:10px;border-color:var(--sep)}
+.tab.on{border-bottom-color:var(--accent)}
+.chips .chip.on{background:var(--accent);border-color:var(--accent)}
+.chips .chip{border-color:var(--sep)}
+
+/* ── the sheet ── */
+.drawer{background:var(--ios-bg);width:min(600px,100vw);box-shadow:-1px 0 0 rgba(0,0,0,.05),-24px 0 60px rgba(0,0,0,.14);
+        transition:transform .28s cubic-bezier(.32,.72,0,1)}
+.drawer-bg{background:rgba(0,0,0,.22)}
+.drawer-hd{padding:22px 24px 6px;border-bottom:0;align-items:center}
+.drawer-hd h2{font-size:22px;font-weight:700;letter-spacing:-.022em;line-height:1.2}
+.drawer-hd .hint{font-size:13px;color:var(--label2);margin-top:2px}
+.drawer-x{width:30px;height:30px;border-radius:50%;background:var(--fill);color:#3C3C43;font-size:15px;font-weight:600;
+          display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none}
+.drawer-x:hover{background:var(--fill-2);color:#1A1A1A}
+.drawer-body{padding:0 24px 28px}
+.drawer-foot{background:rgba(245,245,247,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+             border-top:1px solid var(--sep);padding:12px 24px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.drawer-foot:empty{display:none}
+.drawer-foot .btn{flex:1;min-width:120px}
+.drawer-foot .more{flex:1;display:flex;min-width:120px}
+.drawer-foot .more .btn{width:100%}
+.drawer-foot #pf-msg{width:100%;order:-1}
+.drawer-foot #pf-msg:empty{display:none}
+.drawer-foot .err,.drawer-foot .ok{margin-bottom:0}
+.drawer.narrow .drawer-foot{display:none}
+.drawer .dsec h3{font-size:13px;font-weight:400;letter-spacing:.01em;text-transform:uppercase;color:var(--label2);margin:0 0 6px 16px}
+
+/* hero: the number that matters, then the one line that explains it */
+.hero{padding:18px 4px 4px;text-align:left}
+.hero .k{font-size:13px;color:var(--label2);font-weight:500;text-transform:uppercase;letter-spacing:.02em}
+.hero .v{font-size:40px;font-weight:700;letter-spacing:-.035em;line-height:1.1;margin-top:2px;font-variant-numeric:tabular-nums}
+.hero.due .v{color:var(--crit)} .hero.paid .v{color:#146C3A} .hero.credit .v{color:#146C3A}
+.hero .m{font-size:14px;color:var(--label2);margin-top:6px}
+
+/* inset grouped list */
+.grp{margin-top:22px}
+.grp>h3{font-size:13px;font-weight:400;letter-spacing:.01em;text-transform:uppercase;color:var(--label2);margin:0 0 6px 16px}
+.box{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 0 0 .5px rgba(0,0,0,.04)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:46px;padding:10px 16px 10px 0;margin-left:16px;font-size:15px}
+.row+.row,.row+.rowx,.rowx+.row{border-top:1px solid var(--sep)}
+.rowx{margin-left:16px;padding:10px 16px 10px 0}
+.row .l{color:var(--ink);min-width:0}
+.row .l .sub{display:block;font-size:12.5px;color:var(--label2);margin-top:1px}
+.row .v{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink)}
+.row .v.credit{color:#146C3A} .row .v.due{color:var(--crit)}
+.row .v.mute{color:var(--label2)}
+.row.total{font-weight:700} .row.total .v{font-size:17px}
+.row .in{border:0;background:transparent;text-align:right;padding:4px 0;min-height:0;font-size:15px;width:150px;max-width:45vw;border-radius:0;font-variant-numeric:tabular-nums}
+.row .in:focus{box-shadow:none;outline:none;background:var(--accent-wash);border-radius:6px;padding:4px 8px;margin-right:-8px}
+.row .in[readonly]{font-weight:700;pointer-events:none}
+.row input[type=date].in{width:160px}
+.row .in.wide{width:100%;max-width:none;text-align:left}
+.row .l.grow{flex:1}
+.box .foot{font-size:12.5px;color:var(--label2);padding:8px 16px 0;margin:0 0 0 0}
+.grp .foot{font-size:12.5px;color:var(--label2);margin:6px 16px 0}
+.grp .foot.warn{color:var(--warn);background:var(--warn-wash);border-radius:10px;padding:9px 12px;margin:8px 0 0}
+.grp .foot.warn a{color:inherit;font-weight:700}
+.linkrow{display:block;width:100%;text-align:left;background:none;border:0;color:var(--accent);font-weight:500;font-size:15px;
+         padding:12px 16px;cursor:pointer;border-top:1px solid var(--sep)}
+.linkrow:hover{background:#FAFAFA}
+.linkrow:first-child{border-top:0}
+.xbtn{width:26px;height:26px;border-radius:50%;background:var(--fill);border:0;color:#3C3C43;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.xbtn:hover{background:var(--crit-wash);color:var(--crit)}
+.inst{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.note{padding:10px 16px 10px 0;margin-left:16px;border-top:1px solid var(--sep);font-size:14.5px;white-space:pre-wrap}
+.note:first-child{border-top:0}
+.note .who{display:flex;justify-content:space-between;font-size:12.5px;color:var(--label2);margin-top:4px;white-space:normal}
+.note .who a{color:var(--label2)}
+.note-in{display:flex;gap:8px;align-items:flex-end;padding:10px 12px 10px 16px}
+.note-in textarea.in{flex:1;border:0;background:transparent;padding:6px 0;min-height:0;resize:vertical;font-size:15px}
+.note-in textarea.in:focus{box-shadow:none;outline:none}
+
+/* action-sheet style menu (opens upward from the footer) */
+.menu.up{top:auto;bottom:calc(100% + 8px);left:0;right:auto;min-width:280px;border-radius:14px;padding:6px;
+         box-shadow:0 12px 40px rgba(0,0,0,.18),0 0 0 .5px rgba(0,0,0,.06);border:0}
+.menu.up button{padding:11px 12px;border-radius:9px;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.menu.up button .sub{font-size:12.5px;color:var(--label2)}
+.menu .msep{border-top:1px solid var(--sep);margin:6px -6px}
+.menu .mrow{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:14px;cursor:pointer}
+.menu .mrow input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.menu .in{margin:4px 6px 4px;width:calc(100% - 12px);min-height:38px;font-size:14px}
+.more{position:relative}
+
+/* ── views: a sidebar of lists, one toolbar, the table ── */
+.vwrap{display:grid;grid-template-columns:232px 1fr;gap:22px;align-items:start}
+.side{position:sticky;top:64px}
+.side-h{font-size:12px;font-weight:600;color:var(--label2);text-transform:uppercase;letter-spacing:.03em;margin:14px 0 6px 12px}
+.side-h:first-child{margin-top:2px}
+.side-i{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;background:none;border:0;
+        padding:8px 12px;border-radius:9px;font-size:14.5px;cursor:pointer;text-align:left;color:var(--ink)}
+.side-i:hover{background:var(--fill)}
+.side-i.on{background:var(--accent);color:#fff}
+.side-i b{font-weight:500;font-size:13px;color:var(--label2);font-variant-numeric:tabular-nums}
+.side-i.on b{color:rgba(255,255,255,.85)}
+.side-i .dot{width:8px;height:8px;border-radius:50%;flex:none;filter:none;background:var(--faint)}
+.side-add{background:none;border:0;color:var(--accent);font-weight:500;font-size:14px;padding:8px 12px;cursor:pointer;text-align:left;width:100%;border-radius:9px}
+.side-add:hover{background:var(--fill)}
+.vhead{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.vhead h2{font-size:24px;font-weight:700;letter-spacing:-.025em}
+.vhead .meta{font-size:13.5px;color:var(--label2);margin-top:2px}
+.vtools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dirty{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--accent-wash);color:var(--accent);border-radius:10px;padding:9px 14px;font-size:13.5px;margin-bottom:12px}
+.dirty a{color:var(--accent);font-weight:600;cursor:pointer;text-decoration:none}
+.dirty a:hover{text-decoration:underline}
+.dirty .sp{flex:1}
+.fdesc{font-size:13px;color:var(--label2);margin:0 0 10px 2px}
+.fdesc:empty{display:none}
+.menu button .chk{width:16px;color:var(--accent);font-weight:700}
+#vw-sortmenu button,#vw-moremenu button{display:flex;align-items:center;gap:8px;white-space:nowrap}
+#vw-sortmenu,#vw-moremenu{min-width:200px;border-radius:12px;border:0;box-shadow:0 12px 40px rgba(0,0,0,.16),0 0 0 .5px rgba(0,0,0,.06)}
+/* filter panel cards sit on the grey sheet like grouped rows */
+.fcard{border:0;box-shadow:0 0 0 .5px rgba(0,0,0,.04);padding:12px 16px;margin-top:10px}
+.fcard .fop{color:var(--accent)}
+.fcard .fdel{font-size:13px}
+.flist{border:0;box-shadow:0 12px 40px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.06);border-radius:14px}
+.drawer.narrow #fadd{background:none;color:var(--accent);padding-left:0}
+@media(max-width:760px){
+  .vwrap{grid-template-columns:1fr;gap:12px}
+  .side{position:static;display:flex;gap:4px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .side-h{display:none}
+  .side-i{width:auto;white-space:nowrap;background:var(--fill);padding:7px 12px;border-radius:999px;font-size:13.5px}
+  .side-add{width:auto;white-space:nowrap}
+  .drawer-foot .btn{flex:1 1 40%}
+  .row{flex-wrap:wrap} .row .in{width:100%;max-width:none;text-align:left}
+  .row .inst{width:100%;justify-content:flex-start}
 }
 </style>
 </head>
@@ -848,11 +987,12 @@ function openFilterPanel(){
         <button class="btn line sm" id="fadd">+ Add filter</button>
         ${_views.conds.length ? '<a href="#" id="fclear" class="hint">Remove all</a>' : ''}</div>
       <div id="fpick" style="display:none"><input class="in" id="fsearch" placeholder="Search fields…" style="margin-top:8px"><div class="flist" id="flistbox"></div></div>`;
-    const sync = () => { drawConds?.(); condsToBar?.(); run(); paint(); };
+    const sync = () => { run(); paint(); };
     body.querySelectorAll('.seg button').forEach(b => b.onclick = () => { _views.conds[+b.dataset.i].op = b.dataset.op; sync(); });
     body.querySelectorAll('.fopsel').forEach(e => e.onchange = () => { _views.conds[+e.dataset.i].op = e.value; sync(); });
-    body.querySelectorAll('.fval').forEach(e => { const h = () => { _views.conds[+e.dataset.i].value = e.value; run(); el('drawer-sub').textContent = `${(_views.lastRows||[]).length} of ${_views.rows.length} children`; drawConds?.(); condsToBar?.(); }; e.onchange = h; if (e.tagName === 'INPUT') e.oninput = debounce(h, 200); });
-    body.querySelectorAll('.fval2').forEach(e => e.oninput = debounce(() => { _views.conds[+e.dataset.i].value2 = e.value; run(); }, 200));
+    const live = () => { run(); el('drawer-sub').textContent = `${(_views.lastRows||[]).length} of ${_views.rows.length} children`; };
+    body.querySelectorAll('.fval').forEach(e => { const h = () => { _views.conds[+e.dataset.i].value = e.value; live(); }; e.onchange = h; if (e.tagName === 'INPUT') e.oninput = debounce(h, 200); });
+    body.querySelectorAll('.fval2').forEach(e => e.oninput = debounce(() => { _views.conds[+e.dataset.i].value2 = e.value; live(); }, 200));
     body.querySelectorAll('.fdel').forEach(b => b.onclick = () => { _views.conds.splice(+b.dataset.i, 1); sync(); });
     const fc = el('fclear'); if (fc) fc.onclick = ev => { ev.preventDefault(); _views.conds = []; sync(); };
     el('fadd').onclick = () => {
@@ -868,8 +1008,8 @@ function openFilterPanel(){
   };
   paint();
 }
-// hoisted so the panel can call them before tabViews assigns them
-let drawConds = null, condsToBar = null, run = null;
+// hoisted so the panel can call it before tabViews assigns it
+let run = null;
 
 async function tabViews(){
   const b = el('body');
@@ -883,170 +1023,138 @@ async function tabViews(){
   _views.rows = rows || []; _views.list = list || [];
   const enumVals = k => [...new Set(_views.rows.map(r => r[k]).filter(v => v != null && v !== ''))].sort();
 
-  b.innerHTML = head('Views',
-      'Pick who you want to see, then print, download, or email them. Save it if you\'ll want it again.')
-    + `<div style="display:grid;grid-template-columns:260px 1fr;gap:16px" id="vw-grid">
-      <div class="card" style="padding:14px">
-        <label class="lb">Saved views</label>
-        <div id="vw-list"></div>
-        <button class="btn line sm" id="vw-new" style="margin-top:10px;width:100%">+ New blank view</button>
-      </div>
-      <div>
-        <div class="card" style="padding:16px">
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <input class="in" id="vw-name" placeholder="Name this view…" style="flex:1;min-width:200px">
-            <button class="btn" id="vw-save">Save view</button>
-            <button class="btn danger sm" id="vw-del" style="display:none">Delete</button>
-          </div>
-          <div class="chips" id="vw-quick" style="margin-top:14px"></div>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap">
-            <button class="btn line sm" id="vw-filter">⚲ Filter <b id="vw-fcount"></b></button>
-            <span class="hint" id="vw-fdesc"></span>
-          </div>
-
-          <!-- plain filters: the questions actually asked, as dropdowns -->
-          <div id="vw-bar" style="display:none;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px">
-            <div><label class="lb">Class</label><select class="in" id="vb-class"><option value="">Any</option></select></div>
-            <div><label class="lb">Status</label><select class="in" id="vb-status">
-              <option value="">Any</option><option value="OVERDUE">Overdue</option><option value="DUE SOON">Due soon</option>
-              <option value="SETTLED">Paid up</option><option value="OVERPAID">Overpaid</option><option value="NO SCHEDULE">No schedule</option></select></div>
-            <div><label class="lb">Truly due</label><div style="display:flex;gap:6px">
-              <select class="in" id="vb-due-op" style="max-width:110px"><option value="">Any</option><option value=">">more than</option><option value="<">less than</option></select>
-              <input class="in" id="vb-due" type="number" placeholder="₹" style="min-width:0"></div></div>
-            <div><label class="lb">Term 2 due (EPMS)</label><div style="display:flex;gap:6px">
-              <select class="in" id="vb-t2-op" style="max-width:110px"><option value="">Any</option><option value=">">more than</option><option value="<">less than</option></select>
-              <input class="in" id="vb-t2" type="number" placeholder="₹" style="min-width:0"></div></div>
-            <div><label class="lb">Our discount</label><select class="in" id="vb-disc">
-              <option value="">Any</option><option value="none">None recorded</option><option value="some">Some</option></select></div>
-            <div><label class="lb">Parent email</label><select class="in" id="vb-email">
-              <option value="">Any</option><option value="yes">On file</option><option value="no">Missing</option></select></div>
-          </div>
-
-          <details style="display:none"><summary class="hint" style="cursor:pointer">Advanced — any field, any condition</summary>
-            <div id="vw-conds" style="margin-top:10px"></div>
-            <button class="btn line sm" id="vw-add" style="margin-top:8px">+ Add condition</button>
-          </details>
-        </div>
-        <div class="card" style="padding:16px;margin-top:14px">
-          <div class="pill-row" id="vw-summary"></div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
-            <label class="lb" style="margin:0">Sort by</label>
-            <select class="in" id="vw-sort" style="max-width:220px">${VIEW_FIELDS.map(f => `<option value="${f.k}">${f.l}</option>`).join('')}</select>
-            <select class="in" id="vw-dir" style="max-width:130px"><option value="asc">ascending</option><option value="desc">descending</option></select>
-            <span style="flex:1"></span>
-            <button class="btn line sm" id="vw-print">Print list</button>
-            <button class="btn line sm" id="vw-csv">Download CSV</button>
-            <button class="btn sm" id="vw-mail">Email these families →</button>
+  // Like Reminders: lists on the left, the chosen list on the right, tools
+  // top-right. The built-in lists answer the everyday questions; saved views
+  // are the ones you made yourself.
+  b.innerHTML = `<div class="vwrap">
+      <nav class="side" id="vw-side"></nav>
+      <section>
+        <div class="vhead">
+          <div><h2 id="vw-title"></h2><div class="meta" id="vw-meta"></div></div>
+          <div class="vtools">
+            <button class="btn line sm" id="vw-filter">Filter<b id="vw-fcount" style="margin-left:4px"></b></button>
+            <div class="more"><button class="btn line sm" id="vw-sortbtn">Sort</button><div class="menu" id="vw-sortmenu"></div></div>
+            <div class="more"><button class="btn line sm" id="vw-morebtn" aria-label="More">•••</button>
+              <div class="menu" id="vw-moremenu">
+                <button id="vw-print">Print list</button>
+                <button id="vw-csv">Download CSV</button>
+                <div class="msep"></div>
+                <button id="vw-rename">Rename view…</button>
+                <button id="vw-del" style="color:var(--crit)">Delete view</button>
+              </div></div>
+            <button class="btn sm" id="vw-mail">Email these families</button>
           </div>
         </div>
-        <div class="panel" style="margin-top:14px"><div class="tw"><table><thead><tr>
+        <div class="dirty" id="vw-dirty" style="display:none"></div>
+        <div class="fdesc" id="vw-fdesc"></div>
+        <div class="panel"><div class="tw"><table><thead><tr>
           <th>Child</th><th>Class</th><th class="r">Term 1 due</th><th class="r">Term 2 due</th>
           <th class="r">Discount</th><th class="r">Truly due</th><th>Status</th><th>Next due</th></tr></thead>
           <tbody id="vw-rows"></tbody></table></div></div>
-      </div>
+      </section>
     </div>`;
-  if (window.innerWidth < 720) el('vw-grid').style.gridTemplateColumns = '1fr';
 
-  // ── saved views list
-  const drawList = () => {
-    el('vw-list').innerHTML = _views.list.map(v =>
-      `<div class="chip ${_views.current?.id === v.id ? 'on' : ''}" data-id="${v.id}"
-            style="display:block;margin:4px 0;cursor:pointer;padding:8px 10px;border:1px solid var(--line-2);border-radius:8px;white-space:normal">
-         ${esc(v.name)}<div class="hint" style="font-size:11px;margin-top:2px">${(v.conditions||[]).length} condition${(v.conditions||[]).length===1?'':'s'}</div></div>`
-    ).join('') || '<div class="hint">No saved views yet.</div>';
-    document.querySelectorAll('#vw-list .chip').forEach(c => c.onclick = () => loadView(_views.list.find(v => v.id === Number(c.dataset.id))));
-  };
-  const loadView = v => {
-    _views.current = v || null;
-    _views.conds = JSON.parse(JSON.stringify(v?.conditions || []));
-    _views.sort = { field: v?.sort_field || 'student_name', dir: v?.sort_dir || 'asc' };
-    el('vw-name').value = v?.name || '';
-    el('vw-sort').value = _views.sort.field; el('vw-dir').value = _views.sort.dir;
-    el('vw-del').style.display = v ? '' : 'none';
-    drawList(); drawConds(); condsToBar(); run();
-  };
-
-  // ── condition rows
-  drawConds = () => {
-    el('vw-conds').innerHTML = _views.conds.map((c, i) => {
-      const f = VIEW_FIELDS.find(x => x.k === c.field) || VIEW_FIELDS[0];
-      const ops = OPS[f.t];
-      if (!ops.some(o => o[0] === c.op)) c.op = ops[0][0];
-      const needsVal = !['empty','notempty','true','false'].includes(c.op);
-      const valInput = !needsVal ? '' : f.t === 'enum'
-        ? `<select class="in vw-val" data-i="${i}">${enumVals(f.k).map(v => `<option ${String(c.value)===String(v)?'selected':''}>${esc(v)}</option>`).join('')}</select>`
-        : `<input class="in vw-val" data-i="${i}" type="${f.t==='num'?'number':f.t==='date'?'date':'text'}" value="${esc(c.value ?? '')}" placeholder="${f.t==='num'?'amount':''}">`;
-      const val2 = c.op === 'between' ? `<span class="hint">and</span><input class="in vw-val2" data-i="${i}" type="${f.t==='num'?'number':'date'}" value="${esc(c.value2 ?? '')}">` : '';
-      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <span class="hint" style="width:34px">${i === 0 ? 'Where' : 'and'}</span>
-        <select class="in vw-field" data-i="${i}" style="max-width:230px">${VIEW_FIELDS.map(x => `<option value="${x.k}" ${x.k===c.field?'selected':''}>${x.l}</option>`).join('')}</select>
-        <select class="in vw-op" data-i="${i}" style="max-width:150px">${ops.map(o => `<option value="${o[0]}" ${o[0]===c.op?'selected':''}>${o[1]}</option>`).join('')}</select>
-        ${valInput}${val2}
-        <button class="btn line sm vw-rm" data-i="${i}" title="Remove">✕</button>
-      </div>`;
-    }).join('') || '<div class="hint">No conditions — showing every child. Add one to narrow it down.</div>';
-    const bind = (cls, fn) => document.querySelectorAll(cls).forEach(e => { e.onchange = ev => { fn(Number(ev.target.dataset.i), ev.target.value); }; if (e.tagName === 'INPUT') e.oninput = e.onchange; });
-    bind('.vw-field', (i, v) => { _views.conds[i] = { field: v, op: OPS[VIEW_FIELDS.find(x=>x.k===v).t][0][0], value: '' }; drawConds(); run(); });
-    bind('.vw-op',    (i, v) => { _views.conds[i].op = v; drawConds(); run(); });
-    bind('.vw-val',   (i, v) => { _views.conds[i].value = v; run(); });
-    bind('.vw-val2',  (i, v) => { _views.conds[i].value2 = v; run(); });
-    document.querySelectorAll('.vw-rm').forEach(e => e.onclick = () => { _views.conds.splice(Number(e.dataset.i), 1); drawConds(); run(); });
-  };
-  el('vw-add').onclick = () => { _views.conds.push({ field:'true_due', op:'>', value:0 }); drawConds(); run(); };
-
-  // ── the plain bar ↔ conditions ──
-  el('vb-class').innerHTML = '<option value="">Any</option>' + enumVals('program_name').map(v => `<option>${esc(v)}</option>`).join('');
-  const BAR_FIELDS = new Set(['program_name','schedule_flag','true_due','term2_due','our_discount','parent_email1']);
-  const barToConds = () => {
-    const c = [];
-    const v = id => el(id).value;
-    if (v('vb-class'))  c.push({ field:'program_name', op:'=', value: v('vb-class') });
-    if (v('vb-status')) c.push({ field:'schedule_flag', op:'=', value: v('vb-status') });
-    if (v('vb-due-op') && v('vb-due') !== '')  c.push({ field:'true_due',  op: v('vb-due-op'), value: Number(v('vb-due')) });
-    if (v('vb-t2-op')  && v('vb-t2')  !== '')  c.push({ field:'term2_due', op: v('vb-t2-op'),  value: Number(v('vb-t2')) });
-    if (v('vb-disc') === 'none') c.push({ field:'our_discount', op:'=', value:0 });
-    if (v('vb-disc') === 'some') c.push({ field:'our_discount', op:'>', value:0 });
-    if (v('vb-email') === 'yes') c.push({ field:'parent_email1', op:'notempty', value:'' });
-    if (v('vb-email') === 'no')  c.push({ field:'parent_email1', op:'empty', value:'' });
-    // keep any advanced conditions on fields the bar doesn't cover
-    return c.concat(_views.conds.filter(x => !BAR_FIELDS.has(x.field)));
-  };
-  condsToBar = () => {
-    const f = (field, op) => _views.conds.find(x => x.field === field && (!op || x.op === op));
-    el('vb-class').value  = f('program_name','=')?.value ?? '';
-    el('vb-status').value = f('schedule_flag','=')?.value ?? '';
-    const d = f('true_due');  el('vb-due-op').value = d && ['<','>'].includes(d.op) ? d.op : ''; el('vb-due').value = d && ['<','>'].includes(d.op) ? d.value : '';
-    const t = f('term2_due'); el('vb-t2-op').value  = t && ['<','>'].includes(t.op) ? t.op : ''; el('vb-t2').value  = t && ['<','>'].includes(t.op) ? t.value : '';
-    const dc = f('our_discount'); el('vb-disc').value = dc ? (dc.op === '=' && Number(dc.value) === 0 ? 'none' : dc.op === '>' ? 'some' : '') : '';
-    const em = f('parent_email1'); el('vb-email').value = em ? (em.op === 'notempty' ? 'yes' : em.op === 'empty' ? 'no' : '') : '';
-  };
-  ['vb-class','vb-status','vb-due-op','vb-due','vb-t2-op','vb-t2','vb-disc','vb-email'].forEach(id => {
-    const e = el(id); const h = () => { _views.conds = barToConds(); drawConds(); run(); };
-    e.onchange = h; if (e.tagName === 'INPUT') e.oninput = debounce(h, 200);
-  });
-
-  // One click for the questions asked every day. Each replaces the conditions.
+  // The built-in lists. Each replaces the conditions wholesale.
   const QUICK = [
-    ['Paid up',      [{ field:'schedule_flag', op:'=', value:'SETTLED' }]],
+    ['Everyone',     []],
     ['Still owing',  [{ field:'true_due', op:'>', value:0 }]],
     ['Overdue',      [{ field:'schedule_flag', op:'=', value:'OVERDUE' }]],
     ['Due soon',     [{ field:'schedule_flag', op:'=', value:'DUE SOON' }]],
-    ['No schedule',  [{ field:'has_schedule', op:'false', value:'' }]],
+    ['Paid up',      [{ field:'schedule_flag', op:'=', value:'SETTLED' }]],
     ['Overpaid',     [{ field:'schedule_flag', op:'=', value:'OVERPAID' }]],
-    ['Everyone',     []],
+    ['No schedule',  [{ field:'has_schedule', op:'false', value:'' }]],
   ];
-  const drawQuick = () => {
-    el('vw-quick').innerHTML = QUICK.map(([l, c], i) => {
-      const count = _views.rows.filter(r => c.every(x => evalCond(r, x))).length;
-      const on = JSON.stringify(c) === JSON.stringify(_views.conds);
-      return `<span class="chip ${on?'on':''}" data-i="${i}">${l} <b>${count}</b></span>`;
+  const QUICK_TINT = { Overdue:'var(--crit)', 'Due soon':'#D97706', 'Paid up':'#16A34A', Overpaid:'#D97706', 'No schedule':'#D97706' };
+  const SORTS = [['student_name','Name'],['program_name','Class'],['true_due','Truly due'],['term2_due','Term 2 due'],
+                 ['next_due_date','Next due date'],['days_overdue','Days overdue'],['schedule_flag','Status'],['admission_date','Admitted on']];
+  // Which built-in list is selected (when no saved view is), and what the
+  // list looked like when opened, to spot edits. Kept on _views so leaving
+  // the tab and coming back finds everything as it was.
+  let quickIdx = _views.quickIdx ?? 1;
+  let base = _views.base ?? null;
+
+  const snapshot = () => JSON.stringify({ c: _views.conds, s: _views.sort });
+  const isDirty = () => snapshot() !== base;
+  const setBase = () => { base = _views.base = snapshot(); _views.quickIdx = quickIdx; };
+
+  // ── the sidebar
+  const drawSide = () => {
+    const cnt = c => _views.rows.filter(r => c.every(x => evalCond(r, x))).length;
+    el('vw-side').innerHTML =
+      `<div class="side-h">Lists</div>` +
+      QUICK.map(([l, c], i) => `<button class="side-i ${!_views.current && quickIdx === i ? 'on' : ''}" data-q="${i}">
+          <span style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:${QUICK_TINT[l] || 'var(--accent)'}"></span>${l}</span><b>${cnt(c)}</b></button>`).join('') +
+      `<div class="side-h">Saved views</div>` +
+      (_views.list.map(v => `<button class="side-i ${_views.current?.id === v.id ? 'on' : ''}" data-id="${v.id}">
+          <span>${esc(v.name)}</span><b>${cnt(v.conditions || [])}</b></button>`).join('') || '') +
+      `<button class="side-add" id="vw-new">+ New view</button>`;
+    el('vw-side').querySelectorAll('[data-q]').forEach(x => x.onclick = () => loadQuick(Number(x.dataset.q)));
+    el('vw-side').querySelectorAll('[data-id]').forEach(x => x.onclick = () => loadView(_views.list.find(v => v.id === Number(x.dataset.id))));
+    el('vw-new').onclick = async () => {
+      const name = prompt('Name for the new view:', '');
+      if (!name || !name.trim()) return;
+      const rec = { name: name.trim(), conditions: _views.conds, sort_field: _views.sort.field, sort_dir: _views.sort.dir, updated_at: new Date().toISOString(), created_by: session?.user?.id || null };
+      const { data, error: e2 } = await s.schema('eurokids').from('saved_view').insert(rec).select().maybeSingle();
+      if (e2) return alert('Could not save: ' + e2.message);
+      await refreshList(); loadView(data);
+    };
+  };
+  const refreshList = async () => {
+    const { data: list2 } = await s.schema('eurokids').from('saved_view').select('*').order('name');
+    _views.list = list2 || [];
+  };
+
+  const loadQuick = i => {
+    quickIdx = i; _views.current = null;
+    _views.conds = JSON.parse(JSON.stringify(QUICK[i][1]));
+    _views.sort = { field: i === 2 ? 'days_overdue' : 'student_name', dir: i === 2 ? 'desc' : 'asc' };
+    setBase(); drawSide(); run();
+  };
+  const loadView = v => {
+    if (!v) return loadQuick(0);
+    _views.current = v;
+    _views.conds = JSON.parse(JSON.stringify(v.conditions || []));
+    _views.sort = { field: v.sort_field || 'student_name', dir: v.sort_dir || 'asc' };
+    setBase(); drawSide(); run();
+  };
+
+  // ── the "you changed this" bar: save to the view, save as a new one, or put it back
+  const drawDirty = () => {
+    const box = el('vw-dirty');
+    if (!isDirty()) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.innerHTML = `<span>Edited</span><span class="sp"></span>
+      ${_views.current ? `<a id="vw-save">Save to “${esc(_views.current.name)}”</a>` : ''}
+      <a id="vw-saveas">Save as new view…</a><a id="vw-revert">Revert</a>`;
+    const sv = el('vw-save'); if (sv) sv.onclick = async () => {
+      const rec = { conditions: _views.conds, sort_field: _views.sort.field, sort_dir: _views.sort.dir, updated_at: new Date().toISOString() };
+      const { data, error: e2 } = await s.schema('eurokids').from('saved_view').update(rec).eq('id', _views.current.id).select().maybeSingle();
+      if (e2) return alert('Could not save: ' + e2.message);
+      await refreshList(); loadView(data);
+    };
+    el('vw-saveas').onclick = () => el('vw-new').click();
+    el('vw-revert').onclick = () => _views.current ? loadView(_views.current) : loadQuick(quickIdx);
+  };
+
+  // ── sort menu: pick a field; pick it again to flip the direction
+  const drawSort = () => {
+    el('vw-sortmenu').innerHTML = SORTS.map(([k, l]) => {
+      const on = _views.sort.field === k;
+      return `<button data-k="${k}"><span class="chk">${on ? '✓' : ''}</span>${l}${on ? `<span class="sub" style="margin-left:auto;color:var(--label2)">${_views.sort.dir === 'asc' ? '↑' : '↓'}</span>` : ''}</button>`;
     }).join('');
-    document.querySelectorAll('#vw-quick .chip').forEach(ch => ch.onclick = () => {
-      _views.conds = JSON.parse(JSON.stringify(QUICK[Number(ch.dataset.i)][1]));
-      _views.current = null; el('vw-name').value = ''; el('vw-del').style.display = 'none';
-      drawList(); drawConds(); condsToBar(); run();
+    el('vw-sortmenu').querySelectorAll('button').forEach(x => x.onclick = () => {
+      if (_views.sort.field === x.dataset.k) _views.sort.dir = _views.sort.dir === 'asc' ? 'desc' : 'asc';
+      else _views.sort = { field: x.dataset.k, dir: x.dataset.k === 'true_due' || x.dataset.k === 'days_overdue' || x.dataset.k === 'term2_due' ? 'desc' : 'asc' };
+      run();
     });
   };
+  const wireMenu = (btnId, menuId) => {
+    el(btnId).onclick = e => { e.stopPropagation(); document.querySelectorAll('.menu.open').forEach(m => m !== el(menuId) && m.classList.remove('open')); el(menuId).classList.toggle('open'); };
+    el(menuId).onclick = e => { e.stopPropagation(); if (e.target.closest('button')) el(menuId).classList.remove('open'); };
+  };
+  wireMenu('vw-sortbtn', 'vw-sortmenu'); wireMenu('vw-morebtn', 'vw-moremenu');
+  if (!window._vwMenuBound) { window._vwMenuBound = true;
+    document.addEventListener('click', () => document.querySelectorAll('#vw-sortmenu.open,#vw-moremenu.open').forEach(m => m.classList.remove('open'))); }
 
   // ── evaluate + draw
   const matched = () => {
@@ -1061,19 +1169,21 @@ async function tabViews(){
     });
     return rows;
   };
+  const viewName = () => _views.current ? _views.current.name : QUICK[quickIdx][0];
   run = () => {
     const rows = matched();
     _views.lastRows = rows;
-    drawQuick();
-    const fc = el('vw-fcount'); if (fc) fc.textContent = _views.conds.length ? `(${_views.conds.length})` : '';
-    const fd = el('vw-fdesc'); if (fd) fd.textContent = _views.conds.length ? _views.conds.map(describeCond).join(' · and · ') : 'No filters — showing everyone';
+    el('vw-title').textContent = viewName();
+    el('vw-fcount').textContent = _views.conds.length ? String(_views.conds.length) : '';
+    // the sidebar's own list already says what it is; only spell out edits
+    el('vw-fdesc').textContent = (isDirty() || (_views.current && _views.conds.length))
+      ? (_views.conds.length ? 'Where ' + _views.conds.map(describeCond).join(', and ') : 'No filters — everyone') : '';
     const owed = rows.reduce((a, r) => a + Number(r.true_due||0), 0);
-    const t2 = rows.reduce((a, r) => a + Number(r.term2_due||0), 0);
-    el('vw-summary').innerHTML =
-      `<span class="pill big">${rows.length} ${rows.length===1?'child':'children'}</span>` +
-      (has('finance') ? `<span class="pill">${money(owed)} truly due</span>` +
-                        `<span class="pill">${money(t2)} term 2 due</span>` : '') +
-      '';
+    el('vw-meta').textContent = `${rows.length} ${rows.length===1?'child':'children'}` +
+      (has('finance') && owed > 0 ? ` · ${money(owed)} still due` : '');
+    drawDirty(); drawSort();
+    el('vw-rename').style.display = el('vw-del').style.display =
+      el('vw-moremenu').querySelector('.msep').style.display = _views.current ? '' : 'none';
     const tint = r => r.schedule_flag === 'OVERDUE' ? 't-crit' : r.schedule_flag === 'SETTLED' ? 't-good'
       : (r.schedule_flag === 'NO SCHEDULE' || r.schedule_flag === 'OVERPAID') ? 't-warn' : '';
     el('vw-rows').innerHTML = rows.map(r => `<tr class="${tint(r)}" style="cursor:pointer" onclick="openPlan('${esc(r.uin)}')">
@@ -1090,31 +1200,22 @@ async function tabViews(){
     </tr>`).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No child matches these conditions.</td></tr>`;
   };
   el('vw-filter').onclick = openFilterPanel;
-  el('vw-sort').onchange = e => { _views.sort.field = e.target.value; run(); };
-  el('vw-dir').onchange  = e => { _views.sort.dir = e.target.value; run(); };
 
-  // ── save / delete / new
-  el('vw-save').onclick = async e => {
-    const name = el('vw-name').value.trim();
-    if (!name) return alert('Give the view a name first.');
-    const btn = e.currentTarget; btn.disabled = true;
-    const rec = { name, conditions: _views.conds, sort_field: _views.sort.field, sort_dir: _views.sort.dir, updated_at: new Date().toISOString() };
-    const q = _views.current
-      ? s.schema('eurokids').from('saved_view').update(rec).eq('id', _views.current.id).select().maybeSingle()
-      : s.schema('eurokids').from('saved_view').insert({ ...rec, created_by: session?.user?.id || null }).select().maybeSingle();
-    const { data, error: e2 } = await q;
-    btn.disabled = false;
-    if (e2) return alert('Could not save: ' + e2.message);
-    const { data: list2 } = await s.schema('eurokids').from('saved_view').select('*').order('name');
-    _views.list = list2 || []; _views.current = data; drawList();
+  // ── rename / delete
+  el('vw-rename').onclick = async () => {
+    if (!_views.current) return;
+    const name = prompt('Rename this view:', _views.current.name);
+    if (!name || !name.trim() || name.trim() === _views.current.name) return;
+    const { data, error: e2 } = await s.schema('eurokids').from('saved_view').update({ name: name.trim(), updated_at: new Date().toISOString() }).eq('id', _views.current.id).select().maybeSingle();
+    if (e2) return alert('Could not rename: ' + e2.message);
+    await refreshList(); _views.current = data; drawSide(); run();
   };
   el('vw-del').onclick = async () => {
     if (!_views.current || !confirm(`Delete the view “${_views.current.name}”?`)) return;
     const { error: e3 } = await s.schema('eurokids').from('saved_view').delete().eq('id', _views.current.id);
     if (e3) return alert('Could not delete: ' + e3.message);
-    _views.list = _views.list.filter(v => v.id !== _views.current.id); loadView(null);
+    _views.list = _views.list.filter(v => v.id !== _views.current.id); loadQuick(0);
   };
-  el('vw-new').onclick = () => loadView(null);
 
   // ── act on the result
   el('vw-csv').onclick = () => {
@@ -1123,14 +1224,14 @@ async function tabViews(){
     const csv = [cols.join(',')].concat(rows.map(r => cols.map(c => `"${String(r[c] ?? '').replace(/"/g,'""')}"`).join(','))).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' }));
-    a.download = `${(el('vw-name').value || 'view').replace(/[^\w]+/g,'-')}.csv`; a.click();
+    a.download = `${viewName().replace(/[^\w]+/g,'-')}.csv`; a.click();
   };
   // A clean sheet for the coordinator: who to call today, with room to tick
   // and scribble. Opens in a new tab and goes straight to the print dialog.
   el('vw-print').onclick = () => {
     const rows = _views.lastRows || [];
     if (!rows.length) return alert('Nothing to print — the view is empty.');
-    const title = el('vw-name').value.trim() || 'Follow-up list';
+    const title = viewName() || 'Follow-up list';
     const today = new Date().toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
     const owed = rows.reduce((a, r) => a + Number(r.true_due||0), 0);
     const w = window.open('', '_blank');
@@ -1183,7 +1284,11 @@ async function tabViews(){
     tab = 'compose'; renderApp();
   };
 
-  loadView(_views.list[0] || null);
+  // Come back to exactly where you were — edits included.
+  if (base) {
+    if (_views.current) _views.current = _views.list.find(v => v.id === _views.current.id) || null;
+    drawSide(); run();
+  } else loadQuick(1);      // "Still owing" — the question asked most days
 }
 
 /* ── reminders: the automatic fee ladder ─────────────────────
@@ -2343,6 +2448,7 @@ function openDrawer(title, subtitle){
          <div class="drawer-hd"><div><h2 id="drawer-title"></h2><div class="hint" id="drawer-sub"></div></div>
            <button class="drawer-x" id="drawer-x" aria-label="Close">×</button></div>
          <div class="drawer-body" id="drawer-body"></div>
+         <div class="drawer-foot" id="drawer-foot"></div>
        </aside>`);
     bg = el('drawer-bg'); dr = el('drawer');
     bg.onclick = closeDrawer; el('drawer-x').onclick = closeDrawer;
@@ -2350,6 +2456,7 @@ function openDrawer(title, subtitle){
   }
   el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
   el('drawer-body').innerHTML = '<div class="loading">Loading…</div>';
+  el('drawer-foot').innerHTML = '';
   requestAnimationFrame(() => { bg.classList.add('on'); dr.classList.add('on'); });
   document.body.style.overflow = 'hidden';
   return el('drawer-body');
@@ -2375,19 +2482,27 @@ function statementHtml(c, ledger, items){
   const pays = (ledger || []).filter(l => l.counts_to_fees).sort((a,b) => String(a.on_date).localeCompare(String(b.on_date)));
   const epmsKnown = pays.filter(l => l.source === 'epms').reduce((a,l) => a + Number(l.amount), 0);
   const epmsUndated = Math.max(0, Number(c.collected || 0) - epmsKnown);
+  const over = Number(c.overpaid || 0);
   const nextDue = !settled && c.next_due_date ? `Next instalment ${money(c.next_amount || 0)} due ${d(c.next_due_date)}` : '';
-  return `<div class="stmt"><table>
-    <tr class="head"><td colspan="2">Statement</td></tr>
-    <tr><td class="lbl">Annual fee (as invoiced by EuroKids)</td><td class="r">${money(fee)}</td></tr>
-    ${disc > 0 ? `<tr><td class="lbl">Our discount</td><td class="r credit">− ${money(disc)}</td></tr>` : ''}
-    <tr><td class="lbl" style="font-weight:600;color:var(--ink)">Agreed fee</td><td class="r" style="font-weight:600">${money(agreed)}</td></tr>
-    ${epmsUndated > 0 ? `<tr><td class="lbl">Paid to EuroKids <span class="sub" style="padding-left:6px">before we started tracking dates</span></td><td class="r credit">− ${money(epmsUndated)}</td></tr>` : ''}
-    ${pays.map(l => `<tr><td class="lbl">${l.source === 'epms' ? 'Paid to EuroKids' : 'Paid to us'} <span class="sub" style="padding-left:6px">${d(l.on_date)}${l.mode && l.source !== 'epms' ? ' · ' + esc(l.mode) : ''}${Number(l.still_held) > 0.01 ? ' · ' + money(l.still_held) + ' not yet posted' : ''}</span></td>
-       <td class="r credit">− ${money(l.amount)}</td></tr>`).join('')}
-    <tr class="total ${settled ? 'paid' : 'due'}"><td>${settled ? 'Fully paid' : (c.schedule_flag === 'OVERDUE' ? 'Overdue balance' : 'Balance due')}</td><td class="r">${money(owed)}</td></tr>
-    ${nextDue ? `<tr><td colspan="2" class="hint" style="padding-top:8px">${nextDue}</td></tr>` : ''}
-    ${held > 0 ? `<tr><td colspan="2" class="hint" style="background:var(--warn-wash);color:var(--warn)">EuroKids still shows ${money(c.epms_due)} because ${money(held)} of this family's money has not been posted to them yet. The balance above is the honest one.</td></tr>` : ''}
-  </table></div>`;
+  const heroCls = settled ? (over > 1 ? 'credit' : 'paid') : 'due';
+  const heroK = settled ? (over > 1 ? 'Paid in full · credit' : 'Paid in full') : (c.schedule_flag === 'OVERDUE' ? 'Overdue' : 'Balance due');
+  const heroV = settled ? (over > 1 ? '+' + money(over) : money(0)) : money(owed);
+  const heroM = settled ? 'Nothing outstanding.' : (nextDue || 'No instalment scheduled.');
+  const line = (l, v, cls = '', sub = '') =>
+    `<div class="row"><div class="l">${l}${sub ? `<span class="sub">${sub}</span>` : ''}</div><div class="v ${cls}">${v}</div></div>`;
+  return `
+    <div class="hero ${heroCls}"><div class="k">${heroK}</div><div class="v">${heroV}</div><div class="m">${heroM}</div></div>
+    <div class="grp"><h3>Statement</h3><div class="box">
+      ${line('Annual fee', money(fee), 'mute', 'as invoiced by EuroKids')}
+      ${disc > 0 ? line('Our discount', '− ' + money(disc), 'credit') : ''}
+      ${line('<strong>Agreed fee</strong>', '<strong>' + money(agreed) + '</strong>')}
+      ${epmsUndated > 0 ? line('Paid to EuroKids', '− ' + money(epmsUndated), 'credit', 'before we started tracking dates') : ''}
+      ${pays.map(l => line(l.source === 'epms' ? 'Paid to EuroKids' : 'Paid to us', '− ' + money(l.amount), 'credit',
+          `${d(l.on_date)}${l.mode && l.source !== 'epms' ? ' · ' + esc(l.mode) : ''}${Number(l.still_held) > 0.01 ? ' · ' + money(l.still_held) + ' not yet posted' : ''}`)).join('')}
+      <div class="row total"><div class="l">${settled ? 'Balance' : 'Balance due'}</div><div class="v ${settled ? 'credit' : 'due'}">${money(owed)}</div></div>
+    </div>
+    ${held > 0 ? `<div class="foot warn">EuroKids still shows ${money(c.epms_due)} because ${money(held)} of this family's money has not been posted to them yet. The balance above is the honest one.</div>` : ''}
+    </div>`;
 }
 
 async function openPlan(uin){
@@ -2407,72 +2522,58 @@ async function openPlan(uin){
     `${kid?.program_name || ''}${kid?.batch ? ' · ' + kid.batch : ''}${kid?.father_name ? ' · ' + kid.father_name : ''} · ${uin}`);
   body.innerHTML = `
     ${statementHtml(kid || {}, ledger, items)}
-    <div class="dsec"><h3>Fee &amp; plan</h3>
 
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:640px">
-        <div class="fld"><label>Total fee <span class="hint" style="font-weight:400">— what EPMS invoiced this child: <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></label>
-          <input class="in num" id="pf-total" type="number" value="${total}">
-          <div id="pf-fee-warn"></div></div>
-        <div class="fld"><label>Our discount</label><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}"></div>
-        <div class="fld"><label>Final payable</label><input class="in num" id="pf-final" type="number" value="${plan?.final_fee ?? total}" readonly style="background:var(--bone);font-weight:700"></div>
-      </div>
+    <div class="grp"><h3>Fee</h3><div class="box">
+      <div class="row"><div class="l">Annual fee<span class="sub">EPMS invoiced <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></div>
+        <input class="in num" id="pf-total" type="number" value="${total}"></div>
+      <div class="row"><div class="l">Our discount</div><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0"></div>
+      <div class="row"><div class="l"><strong>Agreed fee</strong></div><input class="in num" id="pf-final" type="number" value="${plan?.final_fee ?? total}" readonly tabindex="-1"></div>
+    </div><div id="pf-fee-warn"></div></div>
 
-      <div class="hint" style="margin:16px 0 6px">Instalments — fill the earlier ones and the last is worked out for you.</div>
+    <div class="grp"><h3>Instalments</h3><div class="box">
       <div id="pf-items"></div>
-      <button class="btn line sm" id="pf-add" style="margin-top:8px">+ Add instalment</button>
+      <button class="linkrow" id="pf-add">Add instalment</button>
+    </div><div id="pf-warn"></div>
+    <div class="foot">Fill the earlier ones; the last is worked out so they add up to the agreed fee.</div></div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:640px;margin-top:16px">
-        <div class="fld"><label>Parent email 1</label><input class="in" id="pf-em1" type="email" value="${esc(contact?.parent_email1||'')}"></div>
-        <div class="fld"><label>Parent email 2</label><input class="in" id="pf-em2" type="email" value="${esc(contact?.parent_email2||'')}"></div>
-      </div>
-      <div class="fld" style="max-width:640px"><label>Note for the letter (optional)</label>
-        <input class="in" id="pf-note" value="${esc(plan?.note||'')}" placeholder="e.g. Booking amount covers the welcome kit."></div>
-
-      <div id="pf-warn"></div><div id="pf-msg"></div>
-      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn" id="pf-save">Save plan</button>
-        <button class="btn line" id="pf-send" data-kind="welcome">Save &amp; send welcome letter</button>
-        <button class="btn line" id="pf-send2" data-kind="schedule">Send schedule only</button>
-        <button class="btn line" id="pf-send3" data-kind="receipt">Send paid-in-full receipt</button>
-        <button class="btn line" id="pf-send4" data-kind="statement">Send statement</button>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;
-                    border-top:1px solid var(--line);padding-top:12px;width:100%">
-          <input class="in" id="pf-test-to" type="email" placeholder="your@email.com"
-                 value="${esc(session?.user?.email || '')}" style="max-width:260px">
-          <select class="in" id="pf-test-kind" style="max-width:190px">
-            <option value="welcome">Welcome letter</option>
-            <option value="schedule">Schedule only</option>
-            <option value="receipt">Paid-in-full receipt</option>
-            <option value="statement">Fee statement</option>
-          </select>
-          <button class="btn line sm" id="pf-test">Send a test to me</button>
-          <span class="hint">Goes only to this address — the parents are not copied.</span>
-        </div>
-      </div>
-      <div class="hint" style="margin-top:6px">The welcome letter is the warm first email. “Schedule only” is the plainer re-send when a parent asks for the terms again. Both cc admin@eurokidsjmdenclave.org.</div>
+    <div class="grp"><h3>Parents</h3><div class="box">
+      <div class="row"><div class="l">Email 1</div><input class="in wide" id="pf-em1" type="email" value="${esc(contact?.parent_email1||'')}" placeholder="none on file"></div>
+      <div class="row"><div class="l">Email 2</div><input class="in wide" id="pf-em2" type="email" value="${esc(contact?.parent_email2||'')}" placeholder="optional"></div>
+      <div class="row"><div class="l">Note in letters</div><input class="in wide" id="pf-note" value="${esc(plan?.note||'')}" placeholder="e.g. Booking amount covers the welcome kit."></div>
     </div>
+    ${plan?.welcome_sent_at ? `<div class="foot">Welcome letter sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}. Every letter also goes to admin@eurokidsjmdenclave.org.</div>`
+                            : `<div class="foot">Every letter also goes to admin@eurokidsjmdenclave.org.</div>`}</div>
 
-    <div class="dsec" id="notes-sec"><h3>Notes <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">— internal, never sent to parents</span></h3>
-      <div style="display:flex;gap:8px;align-items:flex-start">
-        <textarea class="in" id="cn-body" rows="2" placeholder="e.g. Father called, will pay by the 20th." style="flex:1"></textarea>
-        <button class="btn sm" id="cn-add">Add</button>
-      </div>
-      <div id="cn-list" style="margin-top:10px"></div>
-    </div>
-      ${plan?.welcome_sent_at ? `<div class="hint" style="margin-top:8px">Letter last sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN')}</div>` : ''}
-    </div>`;
+    <div class="grp" id="notes-sec"><h3>Notes</h3><div class="box">
+      <div class="note-in"><textarea class="in" id="cn-body" rows="1" placeholder="Add a note — e.g. Father called, will pay by the 20th."></textarea>
+        <button class="btn sm" id="cn-add">Add</button></div>
+      <div id="cn-list"></div>
+    </div><div class="foot">Internal. Never sent to parents.</div></div>`;
+
+  el('drawer-foot').innerHTML = `
+    <div id="pf-msg"></div>
+    <div class="more"><button class="btn line" id="pf-sendbtn">Send…</button>
+      <div class="menu up" id="pf-menu">
+        <label class="mrow"><input type="checkbox" id="pf-testmode"> Test — send only to me</label>
+        <input class="in" id="pf-test-to" type="email" placeholder="your@email.com" value="${esc(session?.user?.email || '')}" style="display:none">
+        <div class="msep"></div>
+        <button data-kind="welcome">Welcome letter<span class="sub">saves the plan first</span></button>
+        <button data-kind="schedule">Payment schedule</button>
+        <button data-kind="statement">Fee statement</button>
+        <button data-kind="receipt">Paid-in-full receipt</button>
+      </div></div>
+    <button class="btn" id="pf-save">Save plan</button>`;
 
   let rows = it.map(x => ({ amount: x.amount ?? '', due_date: x.due_date ?? '' }));
 
   const drawItems = () => {
     el('pf-items').innerHTML = rows.map((r,i) => `
-      <div style="display:grid;grid-template-columns:90px 1fr 1fr 40px;gap:10px;align-items:end;margin-bottom:8px;max-width:640px">
-        <div class="hint" style="padding-bottom:9px">Payment ${i+1}</div>
-        <div class="fld" style="margin:0"><label>Amount</label>
-          <input class="in num pf-amt" data-i="${i}" type="number" value="${r.amount}"></div>
-        <div class="fld" style="margin:0"><label>Due date</label>
-          <input class="in pf-due" data-i="${i}" type="date" value="${r.due_date}"></div>
-        <div>${rows.length>1 ? `<button class="btn line sm pf-del" data-i="${i}" style="padding:6px 9px">✕</button>` : ''}</div>
+      <div class="row"><div class="l">Payment ${i+1}</div>
+        <div class="inst">
+          <input class="in num pf-amt" data-i="${i}" type="number" value="${r.amount}" placeholder="Amount" aria-label="Amount" style="width:110px">
+          <input class="in pf-due" data-i="${i}" type="date" value="${r.due_date}" aria-label="Due date">
+          ${rows.length>1 ? `<button class="xbtn pf-del" data-i="${i}" title="Remove">✕</button>` : ''}
+        </div>
       </div>`).join('');
     // The last amount is worked out from the rest, so recomputing it while the
     // user is typing INTO it overwrote every keystroke. Leave it alone then.
@@ -2496,8 +2597,7 @@ async function openPlan(uin){
     const sum = rows.reduce((a, r) => a + (Number(r.amount) || 0), 0);
     const gap = Math.round(sum - final);
     box.innerHTML = (final > 0 && Math.abs(gap) > 1)
-      ? `<div style="background:var(--warn-wash);color:var(--warn);padding:9px 12px;border-radius:8px;margin-top:10px;font-size:13px">
-           The instalments add up to ${money(sum)} but the final payable is ${money(final)} —
+      ? `<div class="foot warn">The instalments add up to ${money(sum)} but the agreed fee is ${money(final)} —
            <strong>${gap > 0 ? money(gap) + ' too much' : money(-gap) + ' short'}</strong>.
            A letter cannot be sent until these agree.</div>` : '';
   };
@@ -2510,9 +2610,8 @@ async function openPlan(uin){
     const box = el('pf-fee-warn'); if (!box) return;
     const t = Number(el('pf-total').value) || 0;
     box.innerHTML = (epmsFee > 0 && Math.abs(t - epmsFee) > 1)
-      ? `<div style="background:var(--warn-wash);color:var(--warn);padding:8px 11px;border-radius:8px;margin-top:6px;font-size:13px">
-           EPMS invoiced <strong>${money(epmsFee)}</strong>, not ${money(t)}.
-           <a href="#" id="pf-use-epms" style="color:inherit;font-weight:700;margin-left:6px">Use the EPMS figure</a></div>`
+      ? `<div class="foot warn">EPMS invoiced <strong>${money(epmsFee)}</strong>, not ${money(t)}.
+           <a href="#" id="pf-use-epms" style="margin-left:6px">Use the EPMS figure</a></div>`
       : '';
     const a = el('pf-use-epms');
     if (a) a.onclick = ev => { ev.preventDefault(); el('pf-total').value = epmsFee; autoLast(); };
@@ -2585,62 +2684,70 @@ async function openPlan(uin){
     }
   };
 
-  const sendLetter = async (btn) => {
+  // One "Send…" menu. A test goes only to the address typed, never to the
+  // parents; a real send is confirmed with who and what before it leaves.
+  const menu = el('pf-menu'), sendBtn = el('pf-sendbtn');
+  sendBtn.onclick = e => { e.stopPropagation(); menu.classList.toggle('open'); };
+  if (!window._pfMenuBound) {   // one listener for the life of the page, not one per open
+    window._pfMenuBound = true;
+    document.addEventListener('click', e => { const m = el('pf-menu'); if (m && !m.contains(e.target)) m.classList.remove('open'); });
+  }
+  menu.addEventListener('click', e => e.stopPropagation());
+  el('pf-testmode').onchange = e => { el('pf-test-to').style.display = e.target.checked ? '' : 'none'; if (e.target.checked) el('pf-test-to').focus(); };
+
+  const sendLetter = async (kind) => {
     el('pf-msg').innerHTML = '';
-    const kind = btn.dataset.kind, label = btn.textContent;
     const name = kid?.student_name || 'this child';
     const owed = Number(kid?.true_due || 0);
+    const testTo = el('pf-testmode').checked ? (el('pf-test-to').value || '').trim() : '';
+    if (el('pf-testmode').checked && !testTo.includes('@')) { el('pf-msg').innerHTML = '<div class="err">Enter an email address to send the test to.</div>'; return; }
 
-    // Nothing goes to a parent without the sender seeing who and what first.
-    const ask =
-      kind === 'welcome'  ? `Send the welcome letter to ${name}'s parents?` +
-                            (plan?.welcome_sent_at ? `\n\nThey were already sent one on ${
-                              new Date(plan.welcome_sent_at).toLocaleDateString('en-IN')}. Send it again?` : '')
-    : kind === 'schedule' ? `Email ${name}'s parents the payment schedule again?`
-    : kind === 'statement' ? `Email ${name}'s parents their fee statement — every payment received and ${owed > 1 ? money(owed) + ' still due' : 'nothing outstanding'}?`
-    :                       `Tell ${name}'s parents their fees are fully paid?` +
-                            (owed > 1 ? `\n\nCAREFUL — this family still owes ${money(owed)}. The letter will say nothing is outstanding.` : '');
-    if (!confirm(ask)) return;
-
-    // Only the welcome letter is a "save then send". Re-sending the terms or a
-    // receipt must never rewrite the plan, and a fully-paid child often has no
-    // schedule rows at all, which savePlan() would refuse.
-    if (kind === 'welcome' && !(await savePlan())) return;
-
-    btn.disabled = true; btn.textContent = 'Sending…';
+    if (!testTo) {
+      const ask =
+        kind === 'welcome'  ? `Send the welcome letter to ${name}'s parents?` +
+                              (plan?.welcome_sent_at ? `\n\nThey were already sent one on ${
+                                new Date(plan.welcome_sent_at).toLocaleDateString('en-IN')}. Send it again?` : '')
+      : kind === 'schedule' ? `Email ${name}'s parents the payment schedule?`
+      : kind === 'statement' ? `Email ${name}'s parents their fee statement — every payment received and ${owed > 1 ? money(owed) + ' still due' : 'nothing outstanding'}?`
+      :                       `Tell ${name}'s parents their fees are fully paid?` +
+                              (owed > 1 ? `\n\nCAREFUL — this family still owes ${money(owed)}. The letter will say nothing is outstanding.` : '');
+      if (!confirm(ask)) return;
+      // Only the welcome letter is a "save then send". Re-sending the terms or
+      // a receipt must never rewrite the plan, and a fully-paid child often
+      // has no schedule rows at all, which savePlan() would refuse.
+      if (kind === 'welcome' && !(await savePlan())) return;
+    }
+    menu.classList.remove('open');
+    const label = sendBtn.textContent; sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
     try {
       const { data: { session: sess } } = await getSb().auth.getSession();
       if (!sess) throw new Error('Your session has expired — please sign in again.');
       const r = await fetch('/api/fees/welcome-email', { method:'POST',
         headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sess.access_token}` },
-        body: JSON.stringify({ uin: _planUin, kind }) });
+        body: JSON.stringify({ uin: _planUin, kind, ...(testTo ? { testTo } : {}) }) });
       const j = await r.json().catch(() => ({ error: `The server returned ${r.status}. The email may not have been sent — check Resend before trying again.` }));
       el('pf-msg').innerHTML = j.ok
-        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Sent to ${esc((j.sent_to||[]).join(', '))} (cc ${esc(j.cc||'')}).</div>`
+        ? `<div class="ok">${testTo
+            ? `Test sent to ${esc(testTo)}. For real it would go to ${esc((j.would_go_to||[]).join(', ') || 'nobody — no parent email on file')}.`
+            : `Sent to ${esc((j.sent_to||[]).join(', '))} (cc ${esc(j.cc||'')}).`}</div>`
         : `<div class="err">${esc(j.error||'Could not send')}</div>`;
-      if (j.ok && kind === 'welcome') openPlan(_planUin);   // refresh the "last sent" stamp
+      if (j.ok && !testTo && kind === 'welcome') openPlan(_planUin);   // refresh the "last sent" stamp
     } catch(e) {
       el('pf-msg').innerHTML = `<div class="err">${esc(e.message)}</div>`;
     } finally {
-      btn.disabled = false; btn.textContent = label;
+      sendBtn.disabled = false; sendBtn.textContent = label;
     }
   };
-  el('pf-send').onclick  = e => sendLetter(e.currentTarget);
-  el('pf-send2').onclick = e => sendLetter(e.currentTarget);
-  el('pf-send3').onclick = e => sendLetter(e.currentTarget);
-  el('pf-send4').onclick = e => sendLetter(e.currentTarget);
+  menu.querySelectorAll('button[data-kind]').forEach(b => b.onclick = () => sendLetter(b.dataset.kind));
 
   // ── notes ──
   const drawNotes = async () => {
     const { data: notes } = await s.schema('eurokids').from('child_note')
       .select('id,body,author,created_at').eq('uin', uin).order('created_at', { ascending: false });
     el('cn-list').innerHTML = (notes || []).map(x => `
-      <div style="padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#FAFAFA">
-        <div style="white-space:pre-wrap">${esc(x.body)}</div>
-        <div class="hint" style="margin-top:4px;display:flex;justify-content:space-between">
+      <div class="note">${esc(x.body)}<div class="who">
           <span>${esc(x.author || '')} · ${new Date(x.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
-          <a href="#" data-id="${x.id}" class="cn-del" style="color:var(--muted)">remove</a></div></div>`).join('')
-      || '<div class="hint">No notes yet.</div>';
+          <a href="#" data-id="${x.id}" class="cn-del">Remove</a></div></div>`).join('');
     document.querySelectorAll('.cn-del').forEach(a => a.onclick = async ev => {
       ev.preventDefault();
       if (!confirm('Remove this note?')) return;
@@ -2657,25 +2764,9 @@ async function openPlan(uin){
     el('cn-body').value = ''; drawNotes();
   };
   drawNotes();
-
-  el('pf-test').onclick = async e => {
-    const btn = e.currentTarget, to = (el('pf-test-to').value || '').trim();
-    if (!to.includes('@')) { el('pf-msg').innerHTML = '<div class="err">Enter an email address to test with.</div>'; return; }
-    const label = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
-    try {
-      const { data: { session: sess } } = await getSb().auth.getSession();
-      if (!sess) throw new Error('Your session has expired — please sign in again.');
-      const r = await fetch('/api/fees/welcome-email', { method:'POST',
-        headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${sess.access_token}` },
-        body: JSON.stringify({ uin: _planUin, kind: el('pf-test-kind').value, testTo: to }) });
-      const j = await r.json().catch(() => ({ error: `The server returned ${r.status}.` }));
-      el('pf-msg').innerHTML = j.ok
-        ? `<div style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Test sent to ${esc(to)}. For real it would go to ${esc((j.would_go_to||[]).join(', ') || 'nobody — no parent email on file')}.</div>`
-        : `<div class="err">${esc(j.error || 'Could not send the test')}</div>`;
-    } catch (err) {
-      el('pf-msg').innerHTML = `<div class="err">${esc(err.message)}</div>`;
-    } finally { btn.disabled = false; btn.textContent = label; }
-  };
+  // the note box grows with the text, like Messages
+  const ta = el('cn-body');
+  ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
 
   el('drawer-body').scrollTop = 0;
 }
