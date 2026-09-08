@@ -5,6 +5,7 @@ import {
   renderEmail, textToHtml, money, day, plainFooter,
   SCHOOL_NAME, statementHtml, statementText, type ThemeKey, type LedgerLine,
 } from "@/lib/brand-email";
+import { sendMail, sendMany, provider as mailProvider, dailyCap } from "@/lib/mailer";
 import { applyFilters, addressesFor, summarise, isRealAddress, type Filters, type ScheduleRow } from "@/lib/recipients";
 import { loadSchedule, bearer } from "@/lib/fee-data";
 
@@ -44,7 +45,7 @@ function merge(text: string, r: ScheduleRow) {
 export async function POST(req: NextRequest) {
   const token = bearer(req);
   if (!token) return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
-  if (!RESEND_API_KEY) return NextResponse.json({ error: "RESEND_API_KEY is not configured in Vercel." }, { status: 400 });
+  if (mailProvider() === "resend" && !RESEND_API_KEY) return NextResponse.json({ error: "No mail provider is configured — set SMTP_HOST/SMTP_USER/SMTP_PASS, or RESEND_API_KEY." }, { status: 400 });
 
   let body: {
     filters?: Filters; subject?: string; message?: string;
@@ -131,17 +132,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Nobody is selected, so there is nothing to preview." }, { status: 400 });
     }
     const { html, text } = sample ? build(sample) : buildPlain();
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-      body: JSON.stringify({
-        from: RESEND_FROM, to: [body.testTo],
-        subject: `[TEST — would go to ${sum.reachable} recipients] `
-                 + (sample ? merge(subject, sample) : subject),
-        html, text, attachments,
-      }),
-    });
-    if (!r.ok) return NextResponse.json({ error: `Resend ${r.status}: ${(await r.text()).slice(0, 300)}` }, { status: 500 });
+    const r = await sendMail({ to: [body.testTo],
+      subject: `[TEST — would go to ${sum.reachable} recipients] ` + (sample ? merge(subject, sample) : subject),
+      html, text, attachments });
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: 500 });
     return NextResponse.json({ ok: true, mode: "test", sent_to: body.testTo, sample: sample?.student_name || "a plain copy", summary: sum });
   }
 
@@ -149,7 +143,7 @@ export async function POST(req: NextRequest) {
   if (!body.confirm) {
     const sample = matched[0];
     return NextResponse.json({
-      ok: true, mode: "preview", summary: sum,
+      ok: true, mode: "preview", summary: sum, provider: mailProvider(), daily_cap: dailyCap(),
       preview_html: sample ? build(sample).html : (extras.length ? buildPlain().html : null),
       preview_for: sample?.student_name || (extras.length ? extras[0] : null),
     });
@@ -182,60 +176,10 @@ export async function POST(req: NextRequest) {
   // second copy — Resend remembers the key for 24 hours.
   const runId = body.sendId || randomUUID();
 
-  if (!attachments.length) {
-    // Resend's batch endpoint takes 100 messages per call, so a school-wide
-    // send is two requests and a couple of seconds rather than 191 requests
-    // paced against a rate limit. It does not accept attachments, hence the
-    // fallback below.
-    for (let i = 0; i < queue.length; i += 100) {
-      const chunk = queue.slice(i, i + 100);
-      try {
-        const res = await fetch("https://api.resend.com/emails/batch", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-            "Idempotency-Key": `${runId}-${i / 100}`,
-          },
-          body: JSON.stringify(chunk.map((m) => ({
-            from: RESEND_FROM, to: m.to, ...ccPart,
-            subject: m.subject, html: m.html, text: m.text,
-          }))),
-        });
-        if (res.ok) chunk.forEach((m) => sent.push(m.label));
-        else {
-          const why = `Resend ${res.status}: ${(await res.text()).slice(0, 160)}`;
-          chunk.forEach((m) => failed.push({ name: m.label, error: why }));
-        }
-      } catch (e) {
-        chunk.forEach((m) => failed.push({ name: m.label, error: (e as Error).message }));
-      }
-    }
-  } else {
-    // With attachments there is no batch endpoint, so send one at a time and
-    // stay inside Resend's 2-per-second allowance.
-    for (const m of queue) {
-      try {
-        const res = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-            "Idempotency-Key": `${runId}-${m.to[0]}`,
-          },
-          body: JSON.stringify({
-            from: RESEND_FROM, to: m.to, ...ccPart,
-            subject: m.subject, html: m.html, text: m.text, attachments,
-          }),
-        });
-        if (res.ok) sent.push(m.label);
-        else failed.push({ name: m.label, error: `Resend ${res.status}: ${(await res.text()).slice(0, 160)}` });
-      } catch (e) {
-        failed.push({ name: m.label, error: (e as Error).message });
-      }
-      await new Promise((s) => setTimeout(s, SEND_GAP_MS));
-    }
-  }
+  const { sent: okNames, failed: badOnes } = await sendMany(
+    queue.map((m) => ({ ...m, cc: body.ccOffice === false ? undefined : [CC], attachments: attachments.length ? attachments : undefined })),
+    { idempotencyKey: runId });
+  sent.push(...okNames); failed.push(...badOnes);
 
   // Keep a record of what went out, so nobody has to guess later.
   await admin.schema("eurokids").from("email_log").insert({
@@ -246,7 +190,7 @@ export async function POST(req: NextRequest) {
   }).then(() => {}, () => {});   // logging must never block a send
 
   return NextResponse.json({
-    ok: true, mode: "sent", sent: sent.length, failed: failed.length,
+    ok: true, mode: "sent", sent: sent.length, failed: failed.length, provider: mailProvider(), daily_cap: dailyCap(),
     failures: failed.slice(0, 30), summary: sum,
   });
 }

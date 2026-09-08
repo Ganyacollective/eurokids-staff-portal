@@ -47,10 +47,11 @@ export async function POST(req: NextRequest) {
     const { data: e } = await admin.schema("eurokids").from("enquiry").select("*").eq("id", b.id).maybeSingle();
     if (!e) return NextResponse.json({ ok: false, error: "Enquiry not found" }, { status: 404 });
     const { sendEnquiryWelcomeEmail, isEmail } = await import("@/lib/enquiry");
+    const eRow = e as import("@/lib/enquiry").EnquiryRow;
     const out: Record<string, string> = {};
     const to = [e.father_email, e.mother_email].filter(isEmail) as string[];
     if (to.length && b.kind !== "whatsapp") {
-      out.email = await sendEnquiryWelcomeEmail(to, e);
+      out.email = await sendEnquiryWelcomeEmail(to, eRow);
       if (out.email === "sent") {
         await admin.schema("eurokids").from("enquiry").update({ welcome_email_sent_at: new Date().toISOString() }).eq("id", e.id);
         await admin.schema("eurokids").from("enquiry_event").insert({ enquiry_id: e.id, kind: "email", summary: `Welcome email sent to ${to.join(", ")}`, actor: who });

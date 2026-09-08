@@ -20,7 +20,7 @@ export async function OPTIONS() { return new NextResponse(null, { status: 204, h
 //         mother_phone, address, message, source?, kiosk_key?, company? (honeypot) }
 export async function POST(req: NextRequest) {
   if (!SERVICE_ROLE) return NextResponse.json({ ok: false, error: "Server misconfigured" }, { status: 500, headers: CORS });
-  let b: Record<string, string | undefined>;
+  let b: Record<string, string | string[] | undefined>;
   try { b = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Invalid request" }, { status: 400, headers: CORS }); }
 
   // Bots fill every field, including the one people cannot see.
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const phone = String(b.phone || "").trim();
   if (!phoneKey(phone)) return NextResponse.json({ ok: false, error: "Please enter a 10-digit mobile number." }, { status: 400, headers: CORS });
-  if (b.email && !isEmail(b.email)) return NextResponse.json({ ok: false, error: "That email address does not look right." }, { status: 400, headers: CORS });
+  if (b.email && !isEmail(String(b.email))) return NextResponse.json({ ok: false, error: "That email address does not look right." }, { status: 400, headers: CORS });
   const parent = String(b.parent_name || "").trim();
   if (!parent && !String(b.child_name || "").trim()) return NextResponse.json({ ok: false, error: "Please tell us your name or your child's." }, { status: 400, headers: CORS });
 
@@ -40,17 +40,19 @@ export async function POST(req: NextRequest) {
 
   const kiosk = !!KIOSK_KEY && b.kiosk_key === KIOSK_KEY;
   const wanted = String(b.source || "") as Source;
-  const source: Source = kiosk ? (wanted === "call" ? "call" : "walk_in")
-    : (["website", "instagram", "referral", "just_dial", "other"].includes(wanted) ? wanted : "website");
+  const source: Source = kiosk ? "Walk In"
+    : (["Website", "Instagram", "Referral", "Just Dial", "Others"].includes(wanted) ? wanted : "Website");
+  const programs = Array.isArray(b.programs) ? (b.programs as string[]) : b.program ? [String(b.program)] : [];
+  const str = (v: string | string[] | undefined) => (Array.isArray(v) ? v.join(", ") : v) || null;
 
   try {
     const r = await captureEnquiry(admin, {
-      source, actor: kiosk ? "reception iPad" : "website",
-      child_name: b.child_name, dob: b.dob || null, sex: b.sex === "Boy" || b.sex === "Girl" ? b.sex : null, program: b.program,
-      father_name: parent, father_phone: phone, father_email: b.email,
-      mother_name: b.mother_name, mother_phone: b.mother_phone, address: b.address, locality: b.locality,
-      message: b.message, sendWelcome: true,
-      detail: { page: b.page || req.headers.get("referer") || null, ua: req.headers.get("user-agent")?.slice(0, 160) || null, ip },
+      source, actor: kiosk ? "reception tablet" : "website",
+      child_name: str(b.child_name), dob: str(b.dob), sex: b.sex === "Boy" || b.sex === "Girl" ? b.sex : null, programs,
+      father_name: parent, father_phone: phone, father_email: str(b.email),
+      mother_name: str(b.mother_name), mother_phone: str(b.mother_phone), mother_email: str(b.mother_email), address: str(b.address),
+      message: str(b.message), sendWelcome: true, notifySchool: true,
+      detail: { page: str(b.page) || req.headers.get("referer") || null, ua: req.headers.get("user-agent")?.slice(0, 160) || null, ip },
     });
     return NextResponse.json({ ok: true, existing: !r.created, welcome: r.welcome }, { headers: CORS });
   } catch (e) {

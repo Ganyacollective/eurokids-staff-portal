@@ -393,3 +393,10 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 .heat i.on{background:var(--orange)}
 .enq-row{border-top:1px solid var(--sep)} .enq-row:first-child{border-top:0}
 .panel>.box{box-shadow:none;border-radius:0}
+
+/* enquiry sentiment bar */
+.heat{display:inline-block;width:64px;height:7px;border-radius:4px;background:var(--fill-2);overflow:hidden;vertical-align:middle}
+.heat i{display:block;height:100%;border-radius:4px}
+.heatn{font-size:var(--fs-sub);color:var(--label-2);margin-left:6px;font-weight:600}
+#eq-table td{vertical-align:top}
+#eq-table .chip{margin:1px 2px 1px 0}

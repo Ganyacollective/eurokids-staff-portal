@@ -2,160 +2,248 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#FF2217">
-<title>Enquire — EuroKids JMD Enclave</title>
+<title>Welcome to EuroKids JMD Enclave</title>
 <link rel="icon" href="/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/brand/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  /* One form, three homes: the school's iPad (?src=walkin&k=KEY — big, resets
-     itself), an iframe on the website (?embed=1 — no chrome, posts its height
-     to the parent), and a plain page for a link in a WhatsApp message. */
-  :root{--brand:#FF2217;--ink:#1D1D1F;--label2:#5F5F66;--label3:#9A9AA3;--field:#F1F1F4;--sep:rgba(60,60,67,.16);--accent:#0A7AFF;--green:#1F9D4A;--red:#E5343A;--r:12px}
+  /* One question at a time, the way Typeform does it: a big bold number, one
+     big field, Enter to go on, the next question slides up. The same page
+     serves the tablet at reception (?src=walkin&k=KEY — resets itself), the
+     website (?embed=1 — inside an iframe) and a plain link. */
+  :root{--brand:#FF2217;--pink:#FFD9D6;--pink-2:#FFE9E7;--ink:#151515;--label2:#5F5F66;--label3:#9A9AA3;--accent:#0A7AFF;--green:#1F9D4A;--red:#E5343A;--sep:rgba(0,0,0,.12)}
   *{box-sizing:border-box}
-  html,body{margin:0;min-height:100%}
-  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Inter,system-ui,sans-serif;color:var(--ink);background:#F4F4F6;-webkit-font-smoothing:antialiased;font-size:16px;line-height:1.45}
+  html,body{margin:0;height:100%}
+  body{font-family:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--ink);background:var(--pink);-webkit-font-smoothing:antialiased;overflow:hidden}
   body.embed{background:transparent}
-  .wrap{max-width:640px;margin:0 auto;padding:28px 20px 60px}
-  body.kiosk .wrap{max-width:760px;padding:40px 32px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;margin-bottom:18px}
-  .brand .dot{width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#FF7A5C,var(--brand) 62%,#A81E12)}
-  body.embed .brand{display:none}
-  h1{font-size:30px;line-height:1.15;letter-spacing:-.025em;margin:0 0 6px}
-  body.kiosk h1{font-size:40px}
-  .lead{color:var(--label2);margin:0 0 22px;font-size:16px}
-  .card{background:#fff;border-radius:var(--r);box-shadow:0 0 0 1px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.04),0 6px 20px -12px rgba(0,0,0,.12);padding:6px 0;margin-bottom:16px}
-  .cap{font-size:13px;font-weight:600;color:var(--label2);margin:22px 0 8px 4px;text-transform:uppercase;letter-spacing:.05em}
-  .row{display:flex;flex-direction:column;gap:6px;padding:12px 18px}
-  .row+.row{border-top:1px solid var(--sep)}
-  label{font-size:14px;font-weight:600;color:var(--ink)}
-  label small{font-weight:400;color:var(--label3);margin-left:6px}
-  input,select,textarea{font:inherit;color:inherit;width:100%;min-height:48px;padding:10px 12px;border:0;border-radius:9px;background:var(--field);font-size:17px}
-  body.kiosk input,body.kiosk select,body.kiosk textarea{min-height:56px;font-size:20px}
-  input:focus,select:focus,textarea:focus{outline:none;background:#fff;box-shadow:0 0 0 3px rgba(10,122,255,.35)}
-  input::placeholder,textarea::placeholder{color:var(--label3)}
-  textarea{min-height:90px;resize:vertical}
-  select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='14' viewBox='0 0 10 14'%3E%3Cpath d='M2 5.5 5 2.5l3 3M2 8.5l3 3 3-3' fill='none' stroke='%236E6E73' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px}
-  .seg{display:flex;flex-wrap:wrap;gap:8px}
-  .seg button{flex:1 1 auto;min-height:48px;padding:8px 14px;border:0;border-radius:9px;background:var(--field);font:inherit;font-size:16px;color:var(--ink);cursor:pointer}
-  body.kiosk .seg button{min-height:56px;font-size:18px}
-  .seg button.on{background:var(--ink);color:#fff;font-weight:600}
-  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(max-width:480px){.two{grid-template-columns:1fr}}
-  .btn{display:flex;align-items:center;justify-content:center;width:100%;min-height:54px;border:0;border-radius:12px;background:linear-gradient(180deg,#FF4A3F,var(--brand));color:#fff;font:inherit;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(255,34,23,.3);margin-top:8px}
-  body.kiosk .btn{min-height:64px;font-size:21px}
-  .btn:disabled{opacity:.5}
-  .hint{font-size:13px;color:var(--label2);margin:10px 4px 0;line-height:1.5}
-  .err{background:rgba(255,56,60,.1);color:#B3232A;padding:10px 14px;border-radius:9px;margin:0 0 12px;font-size:15px}
+  .stage{display:grid;grid-template-columns:minmax(0,46%) minmax(0,1fr);height:100dvh;height:100vh}
+  body.embed .stage,body.narrow .stage{grid-template-columns:1fr}
+  .photo{position:relative;margin:24px 0 24px 24px;border-radius:18px;overflow:hidden;background:linear-gradient(160deg,#FF6B5C,var(--brand) 55%,#B81C12)}
+  body.embed .photo,body.narrow .photo{display:none}
+  .photo img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo .cap{position:absolute;left:0;right:0;bottom:0;padding:26px;background:linear-gradient(transparent,rgba(0,0,0,.55));color:#fff}
+  .photo .cap b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .photo .cap span{opacity:.9;font-size:14px}
+  .pane{position:relative;display:flex;flex-direction:column;min-width:0}
+  .bar{height:4px;background:rgba(0,0,0,.08);margin:24px 24px 0}
+  body.embed .bar{margin-top:8px}
+  .bar i{display:block;height:100%;background:var(--brand);width:0;transition:width .35s cubic-bezier(.32,.72,0,1);border-radius:2px}
+  .slides{position:relative;flex:1;min-height:0}
+  .q{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:24px 8vw;opacity:0;transform:translateY(40px);pointer-events:none;transition:opacity .38s ease,transform .45s cubic-bezier(.32,.72,0,1);overflow:auto}
+  .q.on{opacity:1;transform:none;pointer-events:auto}
+  .q.out{opacity:0;transform:translateY(-40px)}
+  .num{display:flex;align-items:center;gap:8px;color:var(--brand);font-weight:800;font-size:18px;margin-bottom:12px}
+  .num svg{width:16px;height:16px}
+  h2{font-size:clamp(26px,3.4vw,40px);font-weight:800;letter-spacing:-.03em;line-height:1.12;margin:0 0 6px}
+  .sub{color:var(--label2);font-size:clamp(15px,1.4vw,18px);margin:0 0 26px}
+  .field{width:100%;max-width:640px;background:transparent;border:0;border-bottom:3px solid rgba(0,0,0,.18);font:inherit;font-size:clamp(24px,2.8vw,34px);font-weight:600;padding:8px 0 10px;color:var(--ink);border-radius:0;outline:none;transition:border-color .2s}
+  .field:focus{border-color:var(--brand)}
+  .field::placeholder{color:rgba(0,0,0,.28);font-weight:500}
+  .phone{display:flex;align-items:flex-end;gap:12px;max-width:640px}
+  .cc{font:inherit;font-size:clamp(22px,2.4vw,30px);font-weight:600;border:0;border-bottom:3px solid rgba(0,0,0,.18);background:transparent;padding:8px 0 10px;width:110px;appearance:none;-webkit-appearance:none;color:var(--ink);outline:none}
+  .choices{display:flex;flex-direction:column;gap:10px;max-width:520px}
+  .choices button{display:flex;align-items:center;gap:14px;text-align:left;background:rgba(255,255,255,.65);border:2px solid rgba(0,0,0,.08);border-radius:12px;padding:12px 16px;font:inherit;font-size:clamp(17px,1.6vw,21px);font-weight:600;color:var(--ink);cursor:pointer;transition:all .15s;min-height:56px}
+  .choices button:hover{background:#fff;border-color:rgba(0,0,0,.2)}
+  .choices button.on{background:#fff;border-color:var(--brand);box-shadow:0 0 0 3px rgba(255,34,23,.18)}
+  .choices .key{width:28px;height:28px;border-radius:7px;background:rgba(0,0,0,.06);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--label2);flex:none}
+  .choices button.on .key{background:var(--brand);color:#fff}
+  .choices.row{flex-direction:row;flex-wrap:wrap} .choices.row button{flex:1 1 40%}
+  .dob{max-width:640px;display:grid;gap:22px}
+  .dob .r{display:grid;grid-template-columns:90px 1fr 120px;align-items:center;gap:16px}
+  .dob label{font-weight:700;color:var(--label2);font-size:15px}
+  .dob output{font-size:clamp(22px,2.4vw,30px);font-weight:800;text-align:right;letter-spacing:-.02em}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:44px;background:transparent;margin:0}
+  input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:rgba(0,0,0,.14)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:34px;height:34px;border-radius:50%;background:#fff;border:3px solid var(--brand);margin-top:-13px;box-shadow:0 2px 8px rgba(0,0,0,.2);cursor:pointer}
+  input[type=range]::-moz-range-track{height:8px;border-radius:4px;background:rgba(0,0,0,.14)}
+  input[type=range]::-moz-range-thumb{width:30px;height:30px;border-radius:50%;background:#fff;border:3px solid var(--brand);box-shadow:0 2px 8px rgba(0,0,0,.2);cursor:pointer}
+  .age{font-size:15px;color:var(--label2);margin-top:6px}
+  .go{display:flex;align-items:center;gap:14px;margin-top:28px}
+  .ok{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:#fff;border:0;border-radius:10px;padding:14px 22px;font:inherit;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.18);transition:transform .08s}
+  .ok:active{transform:translateY(1px)} .ok:disabled{opacity:.4;cursor:default}
+  .ok svg{width:18px;height:18px}
+  .enter{font-size:13px;color:var(--label2)} .enter b{font-weight:700}
+  .skip{background:none;border:0;color:var(--label2);font:inherit;font-size:15px;text-decoration:underline;cursor:pointer;margin-left:auto}
+  .err{color:var(--red);font-weight:600;margin-top:12px;font-size:15px;min-height:20px}
+  .nav{position:absolute;right:24px;bottom:22px;display:flex;gap:6px;z-index:5}
+  .nav button{width:44px;height:44px;border:0;border-radius:10px;background:var(--ink);color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .nav button:disabled{opacity:.3} .nav svg{width:20px;height:20px}
+  .brandline{position:absolute;left:24px;bottom:26px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;color:var(--label2)}
+  .brandline .dot{width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 34% 32%,#FF7A5C,var(--brand) 62%,#A81E12)}
+  body.embed .brandline,body.embed .nav{display:none}
+  .done .tick{width:88px;height:88px;border-radius:50%;background:var(--green);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:44px;margin-bottom:22px;animation:pop .5s cubic-bezier(.32,1.6,.4,1)}
+  @keyframes pop{from{transform:scale(.4);opacity:0}}
   .hp{position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0}
-  .done{text-align:center;padding:40px 20px}
-  .done .tick{width:72px;height:72px;border-radius:50%;background:var(--green);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:16px}
-  .done h2{font-size:26px;margin:0 0 8px;letter-spacing:-.02em}
-  .done p{color:var(--label2);font-size:17px;margin:0}
-  body.kiosk .done h2{font-size:34px} body.kiosk .done p{font-size:20px}
-  .foot{color:var(--label3);font-size:12.5px;text-align:center;margin-top:22px}
+  @media(max-width:900px){.stage{grid-template-columns:1fr}.photo{display:none}.q{padding:20px 6vw}}
+  @media(prefers-reduced-motion:reduce){.q,.bar i{transition:none}}
 </style>
 </head>
 <body>
-<div class="wrap" id="wrap">
-  <div class="brand"><span class="dot"></span> EuroKids JMD Enclave</div>
-  <h1 id="h1">Welcome — help us know you</h1>
-  <p class="lead" id="lead">Tell us a little about your child and we'll take it from there.</p>
-
-  <form id="f" novalidate>
-    <div id="err"></div>
-    <div class="cap">Your child</div>
-    <div class="card">
-      <div class="row"><label for="child_name">Child's name</label><input id="child_name" name="child_name" autocomplete="off" placeholder="e.g. Aarav Sharma"></div>
-      <div class="row"><label>Looking for</label>
-        <div class="seg" id="program">
-          <button type="button" data-v="Play Group">Play Group</button>
-          <button type="button" data-v="Nursery">Nursery</button>
-          <button type="button" data-v="Euro Junior">Euro Junior</button>
-          <button type="button" data-v="Euro Senior">Euro Senior</button>
-          <button type="button" data-v="Day Care">Day Care</button>
-          <button type="button" data-v="Not sure">Not sure yet</button>
-        </div></div>
-      <div class="row two">
-        <div><label for="dob">Date of birth <small>optional</small></label><input id="dob" name="dob" type="date"></div>
-        <div><label>Child is a</label><div class="seg" id="sex"><button type="button" data-v="Boy">Boy</button><button type="button" data-v="Girl">Girl</button></div></div>
-      </div>
-    </div>
-
-    <div class="cap">You</div>
-    <div class="card">
-      <div class="row"><label for="parent_name">Your name</label><input id="parent_name" name="parent_name" autocomplete="name" placeholder="Parent's full name"></div>
-      <div class="row"><label for="phone">Mobile number</label><input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" maxlength="14"></div>
-      <div class="row"><label for="email">Email <small>so we can send you details</small></label><input id="email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com"></div>
-      <div class="row"><label for="address">Where do you live? <small>area or society</small></label><input id="address" name="address" placeholder="e.g. Undri, Nyati County"></div>
-      <div class="row"><label for="message">Anything you'd like to ask? <small>optional</small></label><textarea id="message" name="message" placeholder="Timings, fees, transport, a good day to visit…"></textarea></div>
-    </div>
-    <input class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
-
-    <button class="btn" id="go" type="submit">Send</button>
-    <p class="hint">We'll call you within a working day. Your details stay with the school and are never shared.</p>
-  </form>
-
-  <div class="done" id="done" style="display:none">
-    <div class="tick">✓</div>
-    <h2 id="done-h">Thank you!</h2>
-    <p id="done-p">We've got your details. Someone from the school will call you shortly.</p>
-  </div>
-  <div class="foot" id="foot">EuroKids JMD Enclave · Undri, Pune · 022 696 22 686</div>
+<div class="stage">
+  <aside class="photo">
+    <img id="photo" alt="" src="/brand/enquire.jpg" onerror="this.remove()">
+    <div class="cap"><b>Welcome to EuroKids JMD Enclave</b><span>Est. 2017 · Trusted by 3000+ parents · 6,000 sq ft play area</span></div>
+  </aside>
+  <main class="pane">
+    <div class="bar"><i id="bar"></i></div>
+    <div class="slides" id="slides"></div>
+    <div class="brandline"><span class="dot"></span> EuroKids JMD Enclave</div>
+    <div class="nav"><button id="prev" aria-label="Previous" disabled><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15V5M5 10l5-5 5 5"/></svg></button><button id="next" aria-label="Next"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5v10M5 10l5 5 5-5"/></svg></button></div>
+  </main>
 </div>
+<input class="hp" id="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
 
 <script>
-  const q = new URLSearchParams(location.search);
-  const SRC = q.get('src') || 'website';
-  const KIOSK = SRC === 'walkin' && !!q.get('k');
-  const EMBED = q.get('embed') === '1';
-  if (KIOSK) document.body.classList.add('kiosk');
-  if (EMBED) document.body.classList.add('embed');
-  if (KIOSK) { document.getElementById('h1').textContent = 'Welcome to EuroKids'; document.getElementById('lead').textContent = 'Please tell us a little about your child while you wait.'; }
-  // The API lives with the hub. In an iframe on the website it is still the
-  // same origin as this page, so a relative URL works everywhere.
-  const API = '/api/public/enquiry';
+const q = new URLSearchParams(location.search);
+const KIOSK = q.get('src') === 'walkin' && !!q.get('k');
+const EMBED = q.get('embed') === '1';
+if (EMBED) document.body.classList.add('embed');
+if (window.innerWidth < 900) document.body.classList.add('narrow');
+const API = '/api/public/enquiry';
+const el = id => document.getElementById(id);
+const OK = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg>`;
+const ARROW = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>`;
 
-  const el = id => document.getElementById(id);
-  const seg = id => { const box = el(id); box.querySelectorAll('button').forEach(b => b.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); }); return () => box.querySelector('.on')?.dataset.v || null; };
-  const program = seg('program'), sex = seg('sex');
+// ── the questions, in the order the school asks them ───────────────────────
+const PROGRAMS = ['Playgroup', 'Nursery', 'Junior KG', 'Senior KG', 'Daycare', 'Summer / Evening Club'];
+const PROG_DB = { 'Playgroup': 'P.G.', 'Nursery': 'Nursery', 'Junior KG': 'Euro Junior', 'Senior KG': 'Euro Senior', 'Daycare': 'Daycare', 'Summer / Evening Club': 'Summercamp' };
+const a = {};   // answers
+const now = new Date();
+const Q = [
+  { id: 'child_name', title: "What is your child's name?", sub: 'First name and surname.', type: 'text', ph: 'e.g. Aarav Sharma', ac: 'off', required: true },
+  { id: 'program', title: 'Which programme are you looking at?', sub: 'Pick one — we can talk about the others when we meet.', type: 'choice', options: PROGRAMS, required: true },
+  { id: 'sex', title: 'Is your child a…', type: 'choice', options: ['Boy', 'Girl'], row: true, required: true },
+  { id: 'dob', title: "When was your child born?", sub: 'Slide to set the day, month and year.', type: 'dob', required: true },
+  { id: 'parent_name', title: "Father's name", type: 'text', ph: 'Full name', ac: 'name', required: true },
+  { id: 'phone', title: "Father's mobile number", sub: "We'll call you on this number.", type: 'phone', required: true },
+  { id: 'email', title: "Father's email", sub: 'For the fee details and a note about your visit.', type: 'email', ph: 'name@example.com', ac: 'email', required: false },
+  { id: 'mother_name', title: "Mother's name", type: 'text', ph: 'Full name', ac: 'off', required: false },
+  { id: 'mother_phone', title: "Mother's mobile number", type: 'phone', required: false },
+  { id: 'address', title: 'Where do you live?', sub: 'Your area or society is enough.', type: 'text', ph: 'e.g. Undri, Nyati County', ac: 'street-address', required: false },
+];
 
-  // tell the host page how tall we are, so the iframe never scrolls inside itself
-  const post = () => { if (EMBED && window.parent !== window) parent.postMessage({ ekEnquireHeight: document.documentElement.scrollHeight }, '*'); };
-  new ResizeObserver(post).observe(document.body); post();
-
-  el('f').onsubmit = async ev => {
-    ev.preventDefault();
-    const err = el('err'); err.innerHTML = '';
-    const phone = el('phone').value.replace(/\D/g, '');
-    if (phone.replace(/^91/, '').length !== 10) { err.innerHTML = '<div class="err">Please enter a 10-digit mobile number.</div>'; el('phone').focus(); return; }
-    if (!el('parent_name').value.trim() && !el('child_name').value.trim()) { err.innerHTML = '<div class="err">Please tell us your name or your child\'s.</div>'; el('parent_name').focus(); return; }
-    const go = el('go'); go.disabled = true; go.textContent = 'Sending…';
-    const body = {
-      child_name: el('child_name').value.trim(), program: program(), dob: el('dob').value || null, sex: sex(),
-      parent_name: el('parent_name').value.trim(), phone, email: el('email').value.trim(),
-      address: el('address').value.trim(), message: el('message').value.trim(),
-      company: document.querySelector('[name=company]').value,
-      source: KIOSK ? 'walk_in' : (q.get('src') || 'website'), kiosk_key: q.get('k') || undefined, page: document.referrer || location.href,
-    };
-    try {
-      const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || 'Something went wrong');
-      el('f').style.display = 'none'; el('done').style.display = '';
-      if (KIOSK) { el('done-p').textContent = 'Please take a seat — someone will be with you in a moment.'; }
-      else if (j.existing) { el('done-h').textContent = 'Welcome back!'; el('done-p').textContent = 'We have your details already. We\'ll be in touch shortly.'; }
-      post();
-      if (window.parent !== window) parent.postMessage({ ekEnquireDone: true }, '*');
-      // the iPad at reception goes back to a clean form for the next family
-      if (KIOSK) setTimeout(() => location.reload(), 6000);
-    } catch (e) {
-      err.innerHTML = `<div class="err">${e.message}. You can also call us on 022 696 22 686.</div>`;
-      go.disabled = false; go.textContent = 'Send';
+function render(){
+  const s = el('slides');
+  s.innerHTML = Q.map((x, i) => {
+    let body = '';
+    if (x.type === 'text' || x.type === 'email') body = `<input class="field" id="f-${x.id}" type="${x.type === 'email' ? 'email' : 'text'}" inputmode="${x.type === 'email' ? 'email' : 'text'}" autocomplete="${x.ac || 'off'}" autocapitalize="${x.type === 'email' ? 'off' : 'words'}" placeholder="${x.ph || ''}" enterkeyhint="next">`;
+    if (x.type === 'phone') body = `<div class="phone"><select class="cc" id="cc-${x.id}"><option value="91">🇮🇳 +91</option><option value="971">🇦🇪 +971</option><option value="1">🇺🇸 +1</option><option value="44">🇬🇧 +44</option><option value="65">🇸🇬 +65</option><option value="61">🇦🇺 +61</option></select>
+      <input class="field" id="f-${x.id}" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="10-digit number" enterkeyhint="next" style="flex:1"></div>`;
+    if (x.type === 'choice') body = `<div class="choices ${x.row ? 'row' : ''}" id="f-${x.id}">${x.options.map((o, k) => `<button type="button" data-v="${o}"><span class="key">${String.fromCharCode(65 + k)}</span>${o}</button>`).join('')}</div>`;
+    if (x.type === 'dob') {
+      const y = now.getFullYear();
+      body = `<div class="dob">
+        <div class="r"><label>Day</label><input type="range" id="dob-d" min="1" max="31" value="15"><output id="o-d">15</output></div>
+        <div class="r"><label>Month</label><input type="range" id="dob-m" min="1" max="12" value="${now.getMonth() + 1}"><output id="o-m"></output></div>
+        <div class="r"><label>Year</label><input type="range" id="dob-y" min="${y - 8}" max="${y}" value="${y - 3}"><output id="o-y">${y - 3}</output></div>
+        <div class="age" id="age"></div></div>`;
     }
+    return `<section class="q" data-i="${i}">
+      <div class="num">${i + 1} ${ARROW}</div>
+      <h2>${x.title}${x.required ? '' : ' <span style="color:var(--label3);font-weight:500;font-size:.6em">(optional)</span>'}</h2>
+      ${x.sub ? `<p class="sub">${x.sub}</p>` : ''}
+      ${body}
+      <div class="err" id="e-${x.id}"></div>
+      <div class="go"><button class="ok" data-next>OK ${OK}</button><span class="enter">press <b>Enter ↵</b></span>${x.required ? '' : `<button class="skip" data-skip>Skip</button>`}</div>
+    </section>`;
+  }).join('') + `<section class="q done" data-i="${Q.length}">
+      <div class="tick">✓</div>
+      <h2 id="done-h">Thank you so much!</h2>
+      <p class="sub" id="done-p">We have your details. ${KIOSK ? 'Please take a seat — someone will be with you in a moment.' : EMBED ? 'You can watch the videos above while you wait — someone from the school will call you shortly.' : 'Someone from the school will call you shortly.'}</p>
+      <div class="go"><button class="ok" id="again">New submission ${OK}</button></div>
+    </section>`;
+
+  // wire
+  s.querySelectorAll('.choices').forEach(box => box.querySelectorAll('button').forEach(b => b.onclick = () => {
+    box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on');
+    a[box.id.slice(2)] = b.dataset.v; setTimeout(() => go(1), 260);
+  }));
+  s.querySelectorAll('[data-next]').forEach(b => b.onclick = () => go(1));
+  s.querySelectorAll('[data-skip]').forEach(b => b.onclick = () => { const x = Q[cur]; a[x.id] = ''; go(1, true); });
+  s.querySelectorAll('.field').forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(1); } }));
+  s.querySelectorAll('input[type=tel]').forEach(f => f.addEventListener('input', () => { f.value = f.value.replace(/\D/g, '').slice(0, 10); }));
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const dob = () => {
+    const d = +el('dob-d').value, m = +el('dob-m').value, y = +el('dob-y').value;
+    const dim = new Date(y, m, 0).getDate(); el('dob-d').max = dim; const dd = Math.min(d, dim);
+    el('o-d').textContent = dd; el('o-m').textContent = MONTHS[m - 1]; el('o-y').textContent = y;
+    const born = new Date(y, m - 1, dd); const months = Math.max(0, (now.getFullYear() - y) * 12 + (now.getMonth() - (m - 1)) - (now.getDate() < dd ? 1 : 0));
+    el('age').textContent = born > now ? 'That date is in the future.' : `${Math.floor(months / 12)} year${Math.floor(months / 12) === 1 ? '' : 's'} ${months % 12} month${months % 12 === 1 ? '' : 's'} old`;
+    a.dob = born > now ? null : `${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
   };
+  ['dob-d', 'dob-m', 'dob-y'].forEach(id => el(id).oninput = dob); dob();
+  el('again').onclick = reset;
+  document.addEventListener('keydown', e => {
+    const x = Q[cur]; if (!x || x.type !== 'choice') return;
+    const k = e.key.toUpperCase().charCodeAt(0) - 65;
+    if (k >= 0 && k < x.options.length) el('f-' + x.id).querySelectorAll('button')[k].click();
+  });
+}
+
+let cur = 0;
+function show(i){
+  document.querySelectorAll('.q').forEach(s => { const n = +s.dataset.i; s.classList.toggle('on', n === i); s.classList.toggle('out', n < i); });
+  cur = i; el('bar').style.width = `${Math.min(100, (i / Q.length) * 100)}%`;
+  el('prev').disabled = i === 0 || i >= Q.length; el('next').disabled = i >= Q.length;
+  const x = Q[i]; if (x && (x.type === 'text' || x.type === 'email' || x.type === 'phone')) setTimeout(() => el('f-' + x.id)?.focus(), 420);
+  post();
+}
+function value(x){
+  if (x.type === 'choice') return a[x.id] || '';
+  if (x.type === 'dob') return a.dob;
+  if (x.type === 'phone') { const d = (el('f-' + x.id).value || '').replace(/\D/g, ''); return d ? '+' + el('cc-' + x.id).value + d : ''; }
+  return (el('f-' + x.id).value || '').trim();
+}
+function valid(x, v){
+  if (x.required && !v) return x.type === 'choice' ? 'Please pick one.' : x.type === 'dob' ? 'Please set a date that is not in the future.' : 'Please fill this in.';
+  if (v && x.type === 'phone' && !/^\+\d{1,3}\d{10}$/.test(v)) return 'A mobile number has 10 digits.';
+  if (v && x.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "That email doesn't look right.";
+  return '';
+}
+function go(dir, skipping){
+  if (dir > 0 && cur < Q.length) {
+    const x = Q[cur]; const v = value(x);
+    const e = skipping ? '' : valid(x, v);
+    el('e-' + x.id).textContent = e; if (e) { el('f-' + x.id)?.focus?.(); return; }
+    a[x.id] = v;
+    if (cur === Q.length - 1) return submit();
+  }
+  show(Math.max(0, Math.min(Q.length, cur + dir)));
+}
+el('prev').onclick = () => go(-1); el('next').onclick = () => go(1);
+
+async function submit(){
+  const btn = document.querySelector(`.q[data-i="${Q.length - 1}"] .ok`); btn.disabled = true; btn.textContent = 'Sending…';
+  const body = {
+    child_name: a.child_name, programs: [PROG_DB[a.program] || a.program], sex: a.sex, dob: a.dob,
+    parent_name: a.parent_name, phone: a.phone, email: a.email || '', mother_name: a.mother_name || '', mother_phone: a.mother_phone || '',
+    address: a.address || '', company: el('hp').value,
+    source: KIOSK ? 'Walk In' : (q.get('src') === 'walkin' ? 'Website' : 'Website'), kiosk_key: q.get('k') || undefined, page: document.referrer || location.href,
+  };
+  try {
+    const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Something went wrong');
+    if (j.existing) { el('done-h').textContent = 'Welcome back!'; }
+    show(Q.length);
+    if (window.parent !== window) parent.postMessage({ ekEnquireDone: true }, '*');
+    if (KIOSK) setTimeout(reset, 12000);
+  } catch (e) {
+    btn.disabled = false; btn.innerHTML = 'OK ' + OK;
+    el('e-' + Q[Q.length - 1].id).textContent = e.message + ' — or call us on 022 696 22 686.';
+  }
+}
+function reset(){ for (const k in a) delete a[k]; render(); show(0); }
+function post(){ if (EMBED && window.parent !== window) parent.postMessage({ ekEnquireHeight: Math.max(640, document.documentElement.scrollHeight) }, '*'); }
+
+render(); show(0);
+// the tablet at reception must never go to sleep on a half-finished form
+if (KIOSK && 'wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => {});
 </script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sendMail } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -132,11 +133,7 @@ export async function POST(req: NextRequest) {
       errors.push("Email skipped: RESEND_API_KEY is not configured in Vercel.");
     } else {
       try {
-        const r = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${RESEND_API_KEY}` },
-          body: JSON.stringify({ from: RESEND_FROM, to: [personalEmail], subject, text: textBody, html: htmlBody }),
-        });
+        const r = await sendMail({ to: [personalEmail], subject, text: textBody, html: htmlBody });
         if (r.ok) {
           sent.email = true;
         } else {

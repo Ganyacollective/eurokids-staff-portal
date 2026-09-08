@@ -1,3 +1,4 @@
+import { sendMail } from "@/lib/mailer";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME } from "@/lib/brand-email";
@@ -128,18 +129,9 @@ export async function POST(req: NextRequest) {
 
   if (body.preview) return NextResponse.json({ ok: true, preview_html: html, to });
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-    body: JSON.stringify({
-      from: RESEND_FROM, to, cc: [CC],
-      subject: `Payment received — ${money(r.amount_rupees)} for ${payerName} | ${SCHOOL_NAME}`,
-      text, html,
-    }),
-  });
-  if (!res.ok) {
-    return NextResponse.json({ error: `Resend ${res.status}: ${(await res.text()).slice(0, 220)}` }, { status: 500 });
-  }
+  const res = await sendMail({ to, cc: [CC],
+    subject: `Payment received — ${money(r.amount_rupees)} for ${payerName} | ${SCHOOL_NAME}`, text, html });
+  if (!res.ok) return NextResponse.json({ error: res.error }, { status: 500 });
 
   await a.schema("eurokids").from("receipt_offline")
     .update({ receipt_sent_at: new Date().toISOString() }).eq("id", receiptId);

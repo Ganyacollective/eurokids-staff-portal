@@ -1,3 +1,4 @@
+import { sendMail } from "@/lib/mailer";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME, statementHtml, statementText, type LedgerLine } from "@/lib/brand-email";
@@ -205,20 +206,13 @@ export async function POST(req: NextRequest) {
   // A test goes to one chosen address and nowhere near the parents, so the
   // exact letter can be checked before it is sent for real.
   const isTest = !!(body.testTo || "").trim();
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-    body: JSON.stringify({
-      from: RESEND_FROM,
-      to: isTest ? [body.testTo!.trim()] : to,
-      ...(isTest ? {} : { cc: [CC] }),
-      subject: isTest ? `[TEST — would go to ${to.join(", ")}] ${subject}` : subject,
-      text, html,
-    }),
+  const r = await sendMail({
+    to: isTest ? [body.testTo!.trim()] : to,
+    ...(isTest ? {} : { cc: [CC] }),
+    subject: isTest ? `[TEST — would go to ${to.join(", ")}] ${subject}` : subject,
+    text, html,
   });
-  if (!r.ok) {
-    return NextResponse.json({ error: `Resend ${r.status}: ${(await r.text()).slice(0, 220)}` }, { status: 500 });
-  }
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: 500 });
 
   if (isTest) {
     return NextResponse.json({ ok: true, kind, test: true, sent_to: [body.testTo!.trim()], would_go_to: to });

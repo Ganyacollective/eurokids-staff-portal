@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sendMail } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -83,11 +84,7 @@ export async function POST(req: NextRequest) {
   // 1) Resend email
   if (RESEND_API_KEY && HR_NOTIFY_EMAIL) {
     try {
-      const r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${RESEND_API_KEY}` },
-        body: JSON.stringify({ from: RESEND_FROM, to: [HR_NOTIFY_EMAIL], subject, text: textBody, html: htmlBody }),
-      });
+      const r = await sendMail({ to: [HR_NOTIFY_EMAIL], subject, text: textBody, html: htmlBody });
       results.email = r.ok ? "sent" : `failed: ${r.status}`;
     } catch (e: unknown) { results.email = "failed: " + (e instanceof Error ? e.message : String(e)); }
   } else { results.email = "skipped (no RESEND_API_KEY or HR_NOTIFY_EMAIL)"; }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sendMail } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 
@@ -98,16 +99,12 @@ export async function POST(req: NextRequest) {
   if (RESEND_API_KEY && HR_NOTIFY_EMAIL) {
     dispatches.push((async () => {
       try {
-        const r = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-          body: JSON.stringify({
-            from: RESEND_FROM, to: [HR_NOTIFY_EMAIL],
+        const r = await sendMail({
+            to: [HR_NOTIFY_EMAIL],
             subject: `${emp.display_name} applied for ${leave_type} (${total_days} day${total_days === 1 ? "" : "s"})`,
             text: `${emp.display_name} just applied for ${leave_type}.\n\nDates: ${dateText}\nDays: ${total_days}\nReason: ${reason}\nSubmitted anonymously (no sign-in)\n\nReview: ${portalUrl}/`,
             html: `<div style="font-family:sans-serif"><h2 style="color:#21409A">New leave request</h2><p><strong>${emp.display_name}</strong>${emp.designation?` <span style="color:#666">(${emp.designation})</span>`:""}</p><p><strong>Type:</strong> ${leave_type}<br><strong>Dates:</strong> ${dateText}<br><strong>Days:</strong> ${total_days}<br><strong>Reason:</strong> ${escapeHtml(reason)}</p><p style="color:#888;font-size:11pt">Submitted without login.</p><a href="${portalUrl}/" style="background:#F58220;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Open HR portal</a></div>`,
-          }),
-        });
+          });
         results.hr_email = r.ok ? "sent" : `failed:${r.status}`;
       } catch (e) { results.hr_email = "err:" + (e as Error).message; }
     })());
@@ -121,16 +118,12 @@ export async function POST(req: NextRequest) {
   } else {
     dispatches.push((async () => {
       try {
-        const r = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-          body: JSON.stringify({
-            from: RESEND_FROM, to: [emp.email],
+        const r = await sendMail({
+            to: [emp.email!],
             subject: "We've received your leave application",
             text: `Hello ${emp.display_name?.split(" ")[0] || ""},\n\nThank you for applying. Here's what we received:\n\nType: ${leave_type}\nDates: ${dateText}\nDays: ${total_days}\nReason: ${reason}\n\nHR will review and let you know shortly. If you did not submit this, please tell the office immediately.\n\n— Eurokids JMD Enclave`,
             html: `<div style="font-family:sans-serif;max-width:520px"><h2 style="color:#21409A">Thank you for applying</h2><p>Hello ${emp.display_name?.split(" ")[0]||""},</p><p>We've received your leave application. Here's a copy for your records:</p><table style="border-collapse:collapse;font-size:14px;margin:14px 0"><tr><td style="padding:6px 12px 6px 0;color:#718096">Type</td><td><strong>${leave_type}</strong></td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096">Dates</td><td>${dateText}</td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096">Days</td><td>${total_days}</td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096;vertical-align:top">Reason</td><td>${escapeHtml(reason)}</td></tr></table><p>HR will review and let you know shortly. If you did not submit this application, please tell the office right away.</p><p style="color:#888;font-size:11pt">— Eurokids JMD Enclave</p></div>`,
-          }),
-        });
+          });
         if (r.ok) {
           results.teacher_confirm = "sent";
         } else {

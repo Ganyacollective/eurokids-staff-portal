@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sendMail } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, moneyH, money, day, plainFooter, esc, SCHOOL_NAME } from "@/lib/brand-email";
 import { addressesFor, type ScheduleRow } from "@/lib/recipients";
@@ -127,18 +128,10 @@ export async function GET(req: NextRequest) {
         ...(r.next_amount ? [`This instalment: ${money(r.next_amount)} due ${day(r.next_due_date)}`] : []),
         plainFooter()].join("\n");
       try {
-        const res = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${RESEND_API_KEY}`,
-            "Idempotency-Key": `reminder-${r.uin}-${r.next_due_date}-${step}`,
-          },
-          body: JSON.stringify({
-            from: RESEND_FROM, to, ...(settings.cc_office ? { cc: [CC] } : {}),
+        const res = await sendMail({
+            to, ...(settings.cc_office ? { cc: [CC] } : {}),
             subject: `${copy.title} — ${r.student_name} | ${SCHOOL_NAME}`, html, text,
-          }),
-        });
+          });
         result = res.ok ? "sent" : `failed: Resend ${res.status} ${(await res.text()).slice(0, 120)}`;
       } catch (e) {
         result = "failed: " + (e as Error).message;

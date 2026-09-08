@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (known) enquiryId = known.id;
   else if (direction === "inbound") {
-    const r = await captureEnquiry(admin, { source: "call", father_phone: caller, actor: "ivr", at,
+    const r = await captureEnquiry(admin, { source: "Call", father_phone: caller, actor: "ivr", at,
       detail: { agent, status, provider }, sendWelcome: false });
     enquiryId = r.enquiry.id;
   }
