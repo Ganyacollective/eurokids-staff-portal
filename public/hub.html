@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=18">
-<link rel="prefetch" href="/brand/enquiries.js?v=18" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=19">
+<link rel="prefetch" href="/brand/enquiries.js?v=19" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -846,6 +846,7 @@ async function tabViews(){
   run = () => {
     const rows = matched();
     _views.lastRows = rows;
+    setPlanOrder(rows);            // ‹ › in the child sheet follow this view
     el('vw-title').textContent = viewName();
     el('vw-fcount').textContent = _views.conds.length ? String(_views.conds.length) : '';
     // the sidebar's own list already says what it is; only spell out edits
@@ -1468,6 +1469,9 @@ async function tabOverview(){
     s.schema('eurokids').from('v_promise').select('*').in('status', ['open']).order('promised_on'),
   ]);
   if (error) return el('body').innerHTML = fail(error);
+  // Her day is this list, in this order, so ‹ › walks it without going back
+  // to the page between each family.
+  setPlanOrder(work);
   const today = new Date().toISOString().slice(0, 10);
   const overdue = roster.filter(r => r.schedule_flag === 'OVERDUE');
   const dueSoon = roster.filter(r => r.schedule_flag === 'DUE SOON');
@@ -1700,6 +1704,8 @@ function renderChildren(){
   else if (_kidSort === 'oldest') rows.sort((a,b) => (a.admission_date||'').localeCompare(b.admission_date||''));
   else if (_kidSort === 'name')   rows.sort((a,b) => (a.student_name||'').localeCompare(b.student_name||''));
   else if (_kidSort === 'due')    rows.sort((a,b) => Number(b.true_due) - Number(a.true_due));
+
+  setPlanOrder(rows);              // ‹ › in the child sheet follow this roster
 
   // Counts per program for the filter chips
   const countFor = p => _kids.filter(r => (r.program_name||'') === p).length;
@@ -2118,6 +2124,32 @@ async function delReceipt(id){
 // query was slower than that. Wait for the tab to actually finish painting.
 async function openPlanFrom(uin){ openPlan(uin); }
 
+/* ── working down a list ────────────────────────────────────────────────
+   Calling twenty families in a row meant closing the sheet, finding the
+   place in the list again, and clicking the next name. Whichever list is on
+   screen records the order it drew, so the sheet can simply step along it. */
+let _planOrder = [];
+const setPlanOrder = rows => { _planOrder = (rows || []).map(r => r.uin).filter(Boolean); };
+function stepChild(dir){
+  const i = _planOrder.indexOf(_planUin);
+  if (i < 0) return;
+  const next = _planOrder[i + dir];
+  if (next) openPlan(next);
+}
+// Grey out the end of the list rather than hiding the control, so the buttons
+// do not jump about as you move through.
+function paintStep(){
+  const i = _planOrder.indexOf(_planUin);
+  const p = el('drawer-prev'), n = el('drawer-next');
+  if (!p || !n) return;
+  if (i < 0 || _planOrder.length < 2) { p.style.display = n.style.display = 'none'; return; }
+  p.style.display = n.style.display = '';
+  p.disabled = i === 0; n.disabled = i === _planOrder.length - 1;
+  p.style.opacity = p.disabled ? '.3' : ''; n.style.opacity = n.disabled ? '.3' : '';
+  const sub = el('drawer-sub');
+  if (sub) sub.textContent += ` · ${i + 1} of ${_planOrder.length}`;
+}
+
 /* ── payment plans: agreed fee, our discount, instalments, welcome letter ── */
 let _planUin = null;
 let _planF = { q: '', cls: '', sort: 'new' };   // survives drawer open/close and tab switches
@@ -2184,6 +2216,7 @@ async function tabPlans(){
     else if (sort === 'overdue') rows.sort((a,b) => (b.schedule_flag==='OVERDUE') - (a.schedule_flag==='OVERDUE') || Number(b.true_due||0) - Number(a.true_due||0));
     else if (sort === 'missing') rows.sort((a,b) => (a.has_schedule?1:0) - (b.has_schedule?1:0) || Number(b.true_due||0) - Number(a.true_due||0));
 
+    setPlanOrder(rows);            // ‹ › in the child sheet follow this list
     el('plan-h').textContent = `${rows.length} ${rows.length === 1 ? 'child' : 'children'}`;
     el('plan-rows').innerHTML = rows.map(k => {
       const fee = Number(k.final_fee || 0);
@@ -2215,6 +2248,8 @@ function openDrawer(title, subtitle){
        <aside id="drawer" class="drawer" role="dialog" aria-modal="true">
          <div class="drawer-hd"><div><h2 id="drawer-title"></h2><div class="hint" id="drawer-sub"></div></div>
            <div style="display:flex;gap:6px;flex:none">
+             <button class="drawer-x" id="drawer-prev" aria-label="Previous child" title="Previous child (↑)" style="display:none">‹</button>
+             <button class="drawer-x" id="drawer-next" aria-label="Next child" title="Next child (↓)" style="display:none">›</button>
              <button class="drawer-x" id="drawer-wide" aria-label="Expand" title="Expand to full width">⤢</button>
              <button class="drawer-x" id="drawer-x" aria-label="Close">×</button></div></div>
          <div class="drawer-body" id="drawer-body"></div>
@@ -2230,7 +2265,18 @@ function openDrawer(title, subtitle){
       el('drawer-wide').title = on ? 'Back to the side panel' : 'Expand to full width';
       try { localStorage.setItem('ek-drawer-wide', on ? '1' : ''); } catch (_) {}
     };
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+    el('drawer-prev').onclick = () => stepChild(-1);
+    el('drawer-next').onclick = () => stepChild(1);
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') return closeDrawer();
+      // Working down a list of families is the job, so the arrows move between
+      // them — unless the cursor is in a field, where they belong to the field.
+      if (!el('drawer')?.classList.contains('on')) return;
+      const t = e.target, typing = t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); stepChild(1); }
+      if (e.key === 'ArrowUp'   || e.key === 'k') { e.preventDefault(); stepChild(-1); }
+    });
   }
   el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
   let wide = false; try { wide = localStorage.getItem('ek-drawer-wide') === '1'; } catch (_) {}
@@ -2238,6 +2284,8 @@ function openDrawer(title, subtitle){
   el('drawer-wide').textContent = wide ? '⤡' : '⤢';
   el('drawer-body').innerHTML = '<div class="loading">Loading…</div>';
   el('drawer-foot').innerHTML = '';
+  // Only a child sheet can step to the next one; openPlan turns these back on.
+  el('drawer-prev').style.display = el('drawer-next').style.display = 'none';
   requestAnimationFrame(() => { bg.classList.add('on'); dr.classList.add('on'); });
   document.body.style.overflow = 'hidden';
   return el('drawer-body');
@@ -2319,6 +2367,7 @@ async function openPlan(uin){
   const known = (_cache.get('sched')?.val || []).find(k => k.uin === uin);
   const body = openDrawer(known?.student_name || uin,
     known ? `${known.program_name || ''}${known.batch ? ' · ' + known.batch : ''}${known.father_name ? ' · ' + known.father_name : ''} · ${uin}` : uin);
+  paintStep();
   if (known) body.innerHTML = statementHtml(known, [], []) +
     `<div class="grp"><div class="box"><div class="rowx"><div class="skel" style="width:60%"></div></div>
       <div class="rowx"><div class="skel" style="width:85%"></div></div><div class="rowx"><div class="skel" style="width:40%"></div></div></div></div>`;
@@ -2337,6 +2386,7 @@ async function openPlan(uin){
 
   el('drawer-title').textContent = kid?.student_name || uin;
   el('drawer-sub').textContent = `${kid?.program_name || ''}${kid?.batch ? ' · ' + kid.batch : ''}${kid?.father_name ? ' · ' + kid.father_name : ''} · ${uin}`;
+  paintStep();
   const openPromise = (promises || []).find(p => p.status === 'open');
   body.innerHTML = `
     ${statementHtml(kid || {}, ledger, items)}
@@ -2748,7 +2798,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=18"></script>
+<script src="/brand/enquiries.js?v=19"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

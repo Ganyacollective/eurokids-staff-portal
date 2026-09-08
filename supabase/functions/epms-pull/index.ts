@@ -96,14 +96,25 @@ Deno.serve(async (req) => {
   const { data: mods } = await sbPublic.from('module_access').select('module')
     .eq('user_id', who.user.id).in('module', ['epms_admin', 'finance']);
   const ownerEmails = ['abhinav@ganya.in'];
-  if (!(mods && mods.length) && !ownerEmails.includes((who.user.email || '').toLowerCase())) {
-    return json({ ok: false, error: 'You do not have permission to sync from EPMS.' }, 403);
-  }
+  const allowed = (mods && mods.length) || ownerEmails.includes((who.user.email || '').toLowerCase());
 
   const sb = createClient(url, serviceKey, { db: { schema: 'epms' } });
 
+  // Every attempt leaves a trace, including the ones that never got started.
+  // Otherwise a refusal is invisible: the office presses Sync, nothing appears
+  // to happen, and "Last synced" still reads whenever the cron last ran.
+  const refuse = async (msg: string, status: number) => {
+    const at = new Date().toISOString();
+    await sb.from('sync_runs').insert({ report: 'payment_due', route: 'epms-pull',
+      triggered_by: who.user.email,
+      finished_at: at, status: 'error', error: msg });
+    return json({ ok: false, error: msg }, status);
+  };
+
+  if (!allowed) return await refuse('You do not have permission to sync from EPMS.', 403);
+
   const user = Deno.env.get('EPMS_USER'), pass = Deno.env.get('EPMS_PASS');
-  if (!user || !pass) return json({ ok: false, error: 'EPMS_USER / EPMS_PASS are not set in Edge Function secrets.' }, 400);
+  if (!user || !pass) return await refuse('EPMS_USER / EPMS_PASS are not set in Edge Function secrets.', 400);
 
   const fid = Deno.env.get('EPMS_FID') ?? '2077';
   const fyid = Deno.env.get('EPMS_FYID') ?? '25';
@@ -117,9 +128,18 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: 'A sync is already running. Give it a minute and try again.' }, 409);
   }
 
-  const run = await sb.from('sync_runs').insert({ report: 'payment_due', route: 'epms-pull', triggered_by: who.user.email })
+  // triggered_by used to be a uuid with a foreign key to auth.users while this
+  // line wrote an email address into it, so every insert failed on the type and
+  // no run was ever recorded. The sync itself worked, which is why "Last synced"
+  // stayed frozen at the last scheduled run and a colleague's manual sync looked
+  // as though it had done nothing. The column is now text (migration
+  // sync_runs_triggered_by_is_text), and a failed insert stops the run instead
+  // of letting it succeed invisibly.
+  const run = await sb.from('sync_runs').insert({ report: 'payment_due', route: 'epms-pull',
+      triggered_by: who.user.email })
     .select('id').single();
   const runId = run.data?.id;
+  if (!runId) return json({ ok: false, error: 'Could not open a sync log entry: ' + (run.error?.message || 'unknown') }, 500);
   const fail = async (msg: string, status = 500) => {
     await sb.from('sync_runs').update({ finished_at: new Date().toISOString(), status: 'error', error: msg }).eq('id', runId);
     return json({ ok: false, error: msg }, status);
