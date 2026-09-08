@@ -366,7 +366,7 @@ async function deleteHubUser(uid, email){
 function renderApp(){
   const avail = Object.keys(TABS).filter(t => TABS[t].need());
   if (!avail.includes(tab)) tab = avail[0];
-  const item = t => `<button class="sb-i ${t === tab ? 'on' : ''}" data-tab="${t}">${ICON[TABS[t].icon]}<span>${TABS[t].label}</span></button>`;
+  const item = t => `<button class="sb-i ${t === tab ? 'on' : ''}" data-tab="${t}" data-sect="${TABS[t].sect}"><span class="ic">${ICON[TABS[t].icon]}</span><span>${TABS[t].label}</span></button>`;
 
   if (!el('shell')) {
     const who = profile?.full_name || session.user.email;
@@ -377,8 +377,8 @@ function renderApp(){
         ${SECTIONS.map(sec => { const ts = avail.filter(t => TABS[t].sect === sec); return ts.length
           ? `<div class="sb-h">${sec}</div>${ts.map(item).join('')}` : ''; }).join('')}
         <div class="sb-h">Apps</div>
-        <a class="sb-i" id="sb-home">${ICON.back}<span>All Apps</span></a>
-        ${canStaff ? `<a class="sb-i" href="/staff">${ICON.arrow}<span>Staff Portal</span></a>` : ''}
+        <a class="sb-i" id="sb-home" data-sect="Apps"><span class="ic">${ICON.back}</span><span>All Apps</span></a>
+        ${canStaff ? `<a class="sb-i" href="/staff" data-sect="Apps"><span class="ic">${ICON.arrow}</span><span>Staff Portal</span></a>` : ''}
         <div class="sb-foot"><span title="${esc(session.user.email)}">${esc(who)}</span><a id="out">Sign Out</a></div>
       </nav>
       <main class="main" id="main">
@@ -456,7 +456,8 @@ async function renderScheduleFlags(){
   el('sf-mail').onclick = () => {
     tab = 'compose';
     renderApp();
-    setTimeout(() => { const m = el('cmp-money'); if (m) { m.value = 'overdue'; m.dispatchEvent(new Event('change')); } }, 350);
+    // land with the overdue letter already written
+    setTimeout(() => { const t = el('cmp-tpl'); if (t) { t.value = '1'; t.dispatchEvent(new Event('change')); } }, 350);
   };
 }
 
@@ -603,12 +604,15 @@ let run = null;
 
 async function tabViews(){
   const b = el('body');
-  b.innerHTML = '<div class="loading">Loading…</div>';
+  b.innerHTML = `<div class="ph"><div><h1>Views</h1></div></div>` +
+    [1,2,3,4,5,6].map(() => `<div style="display:flex;gap:16px;margin:14px 0"><div class="skel" style="width:180px"></div><div class="skel" style="width:90px"></div><div class="skel" style="flex:1"></div></div>`).join('');
   const s = getSb();
-  const [{ data: rows, error }, { data: list }] = await Promise.all([
+  // v_schedule is a heavy view; hold it for a short while so coming back to
+  // this tab, or opening the filter panel, does not wait on the database.
+  const [{ data: rows, error }, { data: list }] = await cached('views:data', () => Promise.all([
     s.schema('eurokids').from('v_schedule').select('*').limit(2000),
     s.schema('eurokids').from('saved_view').select('*').order('name'),
-  ]);
+  ]));
   if (error) return b.innerHTML = fail(error);
   _views.rows = rows || []; _views.list = list || [];
   const enumVals = k => [...new Set(_views.rows.map(r => r[k]).filter(v => v != null && v !== ''))].sort();
@@ -690,6 +694,7 @@ async function tabViews(){
     };
   };
   const refreshList = async () => {
+    invalidate('views');
     const { data: list2 } = await s.schema('eurokids').from('saved_view').select('*').order('name');
     _views.list = list2 || [];
   };
@@ -968,6 +973,61 @@ async function tabReminders(){
    who it reaches. The default action is a preview, never a send.      */
 let _cmp = { filters:{ money:'all' }, attachments:[], recipients:[], facets:null, picked:[], roll:[] };
 
+// Ready-made letters. Each sets the audience, the look, the subject and the
+// body; merge fields fill in per family on the server. Pick one, glance,
+// send — nobody should have to compose "your fees are overdue" from scratch.
+const EMAIL_TEMPLATES = [
+  { name: 'Fee instalment due soon', money: 'owing', theme: 'school', fees: false,
+    subject: 'Fee instalment for {{child}} due on {{due_date}}',
+    body: `Dear Parent,
+
+A gentle reminder that the next fee instalment for {{child}} ({{class}}) of {{next_amount}} is due on {{due_date}}.
+
+You can pay online through the EuroKids parent link, or at the school office by UPI, cheque or cash. If you have already paid in the last few days, please ignore this note — payments can take a day or two to reflect.
+
+Thank you for your continued trust in us.` },
+
+  { name: 'Fees overdue', money: 'overdue', theme: 'notice', fees: true,
+    subject: 'Overdue fees for {{child}} — {{amount_due}} outstanding',
+    body: `Dear Parent,
+
+Our records show that fees for {{child}} ({{class}}) are past their due date. The outstanding balance is {{amount_due}}; the full statement is below.
+
+We would be grateful if this could be settled within the next 7 days. If you have already paid, or if you would like to discuss a payment arrangement, please call the office on 022 696 22 686 or reply to this email — we are always happy to help.` },
+
+  { name: 'Due date has changed', money: 'owing', theme: 'notice', fees: false,
+    subject: 'Revised fee due date for {{child}}',
+    body: `Dear Parent,
+
+Please note that the due date for the next fee instalment for {{child}} ({{class}}) has been revised. The instalment of {{next_amount}} is now due on {{due_date}}, and the balance outstanding on the account is {{amount_due}}.
+
+Fees not received by the revised date will be treated as overdue. If you have any questions, please contact the office on 022 696 22 686.` },
+
+  { name: 'Fee statement', money: 'all', theme: 'school', fees: true,
+    subject: 'Fee statement for {{child}}',
+    body: `Dear Parent,
+
+Please find below the fee statement for {{child}} ({{class}}) as of today — every payment we have received and what remains.
+
+If anything looks out of place, reply to this email or call the office on 022 696 22 686 and we will sort it out.` },
+
+  { name: 'Thank you — fees fully paid', money: 'settled', theme: 'calm', fees: false,
+    subject: 'Thank you — fees for {{child}} are fully paid',
+    body: `Dear Parent,
+
+Thank you. The fees for {{child}} ({{class}}) for this academic year are fully paid, and nothing is outstanding on the account.
+
+We appreciate your promptness, and we look forward to a wonderful year with {{first_name}}.` },
+
+  { name: 'Holiday or event notice', money: 'all', theme: 'celebration', fees: false,
+    subject: 'A note from EuroKids JMD Enclave',
+    body: `Dear Parent,
+
+[What is happening, when, and what {{first_name}} should bring or wear.]
+
+We look forward to seeing you there.` },
+];
+
 async function feesApi(path, body){
   const { data:{ session:s } } = await getSb().auth.getSession();
   if (!s) return { ok:false, error:'Your session has expired — please sign in again.' };
@@ -1027,6 +1087,8 @@ async function tabCompose(){
   </div></div>
 
   <div class="grp"><h3>Message</h3><div class="box">
+    <div class="row"><div class="l">Template<span class="sub">Fills everything below; edit freely afterwards.</span></div>
+      <select id="cmp-tpl" class="in"><option value="">Write my own</option>${EMAIL_TEMPLATES.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('')}</select></div>
     <div class="row"><div class="l">Subject</div><input id="cmp-subject" class="in wide" placeholder="e.g. Janmashtami celebration on 6 September"></div>
     <div class="row"><div class="l">Look</div><select id="cmp-theme" class="in">
         <option value="school">School blue</option>
@@ -1036,7 +1098,7 @@ async function tabCompose(){
         <option value="notice">Payment notice amber</option>
         <option value="calm">Calm green</option>
       </select></div>
-    <div class="rowx"><textarea id="cmp-message" class="in" rows="9" placeholder="Dear Parent,&#10;&#10;Write normally. Leave a blank line between paragraphs." style="border:0;padding:0;width:100%"></textarea></div>
+    <div class="rowx"><textarea id="cmp-message" class="in" rows="9" placeholder="Dear Parent,&#10;&#10;Write normally. Leave a blank line between paragraphs." style="width:100%"></textarea></div>
     <label class="row" style="cursor:pointer"><span class="l">Add each family’s fee statement underneath<span class="sub">Every payment received and what is left, per child.</span></span><input type="checkbox" class="sw" id="cmp-fees"></label>
     <div class="row"><div class="l">Attachments<span class="sub" id="cmp-filelist"></span></div><input id="cmp-files" type="file" multiple class="in" style="width:auto;text-align:left"></div>
   </div>
@@ -1131,6 +1193,18 @@ async function tabCompose(){
 
   const refreshSoon = debounce(refresh, 250);
   ['cmp-money','cmp-cutoff','cmp-nosched'].forEach(id => el(id).onchange = refreshSoon);
+
+  // A template fills the letter and points it at the right families.
+  el('cmp-tpl').onchange = () => {
+    const t = EMAIL_TEMPLATES[Number(el('cmp-tpl').value)]; if (!t) return;
+    const typed = el('cmp-message').value.trim();
+    if (typed && !confirm('Replace what you have written with the template?')) { el('cmp-tpl').value = ''; return; }
+    el('cmp-subject').value = t.subject; el('cmp-message').value = t.body;
+    el('cmp-theme').value = t.theme; el('cmp-fees').checked = t.fees;
+    el('cmp-money').value = t.money;
+    refresh();
+    el('cmp-message').focus();
+  };
 
   el('cmp-files').onchange = async e => {
     _cmp.attachments = [];
@@ -2226,6 +2300,7 @@ async function openPlan(uin){
     await s.schema('eurokids').from('child_contact').upsert({
       uin: _planUin, parent_email1: el('pf-em1').value.trim() || null,
       parent_email2: el('pf-em2').value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: 'uin' });
+    invalidate('views');
     return true;
   };
 
@@ -2315,6 +2390,7 @@ async function openPlan(uin){
     const { error: ne } = await s.schema('eurokids').from('child_note')
       .insert({ uin, body, author: who, created_by: session?.user?.id || null });
     if (ne) return alert('Could not save the note: ' + ne.message);
+    invalidate('views');
     el('cn-body').value = ''; drawNotes();
   };
   drawNotes();
