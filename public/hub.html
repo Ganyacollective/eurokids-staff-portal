@@ -12,10 +12,9 @@
 <link rel="apple-touch-icon" href="/brand/icons/apple-touch-icon.png">
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/brand/hub.css">
+<link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
+<link rel="stylesheet" href="/brand/hub.css?v=14">
+<link rel="prefetch" href="/brand/enquiries.js?v=14" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -70,6 +69,17 @@ async function cached(key, loader){
   _cache.set(key, { at: Date.now(), val });
   return val;
 }
+// Children, Views, Fees & Plans and the compose picker all want the same
+// roster. Fetching it once and sharing it turns three waits into one.
+const SCHED_COLS = 'uin,student_name,father_name,program_name,batch,admission_date,parent_email1,parent_email2,mobile1,mobile2,'
+  + 'total_fee,final_fee,agreed_fee,welcome_sent_at,note,eurokids_discount,note_count,latest_note,'
+  + 'term1_due,term2_due,epms_invoiced,collected,epms_due,our_discount,uncredited_cash,paid_so_far,true_due,overpaid,'
+  + 'instalments,scheduled_total,has_schedule,schedule_mismatch,next_amount,next_due_date,schedule_flag,days_overdue,'
+  + 'overdue_amount,overdue_by,upcoming_amount,upcoming_date';
+const schedule = () => cached('sched', async () => {
+  const { data, error } = await getSb().schema('eurokids').from('v_schedule').select(SCHED_COLS).limit(2000);
+  if (error) throw error; return data || [];
+});
 const invalidate = (prefix) => {
   if (!prefix) return _cache.clear();
   [..._cache.keys()].filter(k => k.startsWith(prefix)).forEach(k => _cache.delete(k));
@@ -672,11 +682,9 @@ async function tabViews(){
   const s = getSb();
   // v_schedule is a heavy view; hold it for a short while so coming back to
   // this tab, or opening the filter panel, does not wait on the database.
-  const [{ data: rows, error }, { data: list }] = await cached('views:data', () => Promise.all([
-    s.schema('eurokids').from('v_schedule').select('*').limit(2000),
-    s.schema('eurokids').from('saved_view').select('*').order('name'),
-  ]));
-  if (error) return b.innerHTML = fail(error);
+  let rows, list;
+  try { [rows, { data: list }] = await Promise.all([schedule(), cached('views:saved', () => s.schema('eurokids').from('saved_view').select('*').order('name'))]); }
+  catch (e) { return b.innerHTML = fail(e); }
   _views.rows = rows || []; _views.list = list || [];
   const enumVals = k => [...new Set(_views.rows.map(r => r[k]).filter(v => v != null && v !== ''))].sort();
 
@@ -965,7 +973,7 @@ async function tabReminders(){
   const steps = (st?.steps || [-15, -5, 3]);
   const label = d => d < 0 ? `${-d} days before` : d === 0 ? 'on the day' : `${d} days after`;
   const nameOf = {};
-  (await s.schema('eurokids').from('v_schedule').select('uin,student_name').limit(2000)).data?.forEach(r => nameOf[r.uin] = r.student_name);
+  (await schedule().catch(() => [])).forEach(r => nameOf[r.uin] = r.student_name);
 
   b.innerHTML = head('Automatic fee reminders',
       'Runs every morning at 9. Only families who still owe are contacted, using their true balance after discount and after any cash you hold.')
@@ -1218,9 +1226,9 @@ async function tabCompose(){
       _cmp.chipsDrawn = true;
     }
     if (!_cmp.roll.length) {
-      const { data: roll } = await getSb().schema('eurokids').from('v_schedule')
-        .select('uin,student_name,program_name').order('student_name').limit(2000);
-      _cmp.roll = roll || [];
+      _cmp.roll = (await schedule().catch(() => []))
+        .map(k => ({ uin: k.uin, student_name: k.student_name, program_name: k.program_name }))
+        .sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || ''));
     }
     // Always repaint the datalist: without it the "name specific children" box
     // could never match anything on a second visit.
@@ -1736,7 +1744,7 @@ async function tabLiability(){
   const s = getSb();
   const [{ data: recs, error }, { data: kids }] = await Promise.all([
     s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }).limit(2000),
-    s.schema('eurokids').from('v_schedule').select('uin,student_name,program_name').order('student_name').limit(2000),
+    schedule().then(rows => ({ data: rows.slice().sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || '')) })),
   ]);
   if (error) return el('body').innerHTML = fail(error);
   _liab.recs = recs || [];
@@ -2063,12 +2071,9 @@ async function tabPlans(){
   const s = getSb();
   // One view now carries the fee, both term dues and the schedule state, so the
   // list can answer "who owes what, and is their plan set up" in a single read.
-  const { data: kids, error } = await s.schema('eurokids').from('v_schedule')
-    .select('uin,student_name,program_name,admission_date,final_fee,total_fee,our_discount,'
-          + 'term1_due,term2_due,true_due,overpaid,welcome_sent_at,has_schedule,schedule_flag,next_due_date,latest_note,note_count')
-    .order('admission_date', { ascending: false, nullsFirst: false })
-    .limit(2000);
-  if (error) return el('body').innerHTML = fail(error);
+  let kids;
+  try { kids = (await schedule()).slice().sort((a, b2) => (b2.admission_date || '').localeCompare(a.admission_date || '')); }
+  catch (e) { return el('body').innerHTML = fail(e); }
 
   // The real EPMS names are 'Play Group', 'Nursery', 'Euro Junior', 'Euro Senior'.
   // Matching on 'jr'/'sr' never hit either of the last two, so filtering by
@@ -2396,7 +2401,7 @@ async function openPlan(uin){
     await s.schema('eurokids').from('child_contact').upsert({
       uin: _planUin, parent_email1: el('pf-em1').value.trim() || null,
       parent_email2: el('pf-em2').value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: 'uin' });
-    invalidate('views');
+    invalidate();
     return true;
   };
 
@@ -2588,7 +2593,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js"></script>
+<script src="/brand/enquiries.js?v=14"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

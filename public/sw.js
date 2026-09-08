@@ -5,10 +5,10 @@
    balances and receipts must never be stale, and Supabase calls carry auth
    headers that must not be replayed from a cache. */
 
-const VERSION = 'ek-v14';
+const VERSION = 'ek-v15';
 const SHELL = [
   '/', '/hub.html', '/staff', '/portal.html', '/teacher', '/teacher.html',
-  '/brand/portal.css', '/brand/hub.css', '/brand/enquiries.js', '/brand/email-signature.png',
+  '/brand/portal.css', '/brand/hub.css?v=14', '/brand/enquiries.js?v=14', '/brand/email-signature.png',
   '/brand/icons/icon-192.png', '/brand/icons/icon-512.png',
   '/manifest.webmanifest',
 ];
@@ -39,17 +39,21 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   if (isShell(url)) {
-    // Network first, cache as the fallback. Stale-while-revalidate meant every
-    // deploy showed up one reload late — a fix would be live on the server
-    // while the screen still wore the old stylesheet. Online, this always
-    // serves what was just deployed; offline (or on a slow link) the cached
-    // shell still opens the app.
+    // Assets carry ?v= in their URL, so a new deploy is a new cache key and
+    // cache-first is both instant and correct. Only the HTML documents go to
+    // the network first — they are small, and they carry the version stamps.
+    const isDoc = req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/' || url.pathname === '/staff' || url.pathname === '/teacher';
     e.respondWith(
       caches.open(VERSION).then(async (c) => {
-        const timeout = new Promise((r) => setTimeout(() => r(null), 3000));
+        const cached = await c.match(req);
+        if (!isDoc && cached) {
+          // refresh quietly for next time; the screen does not wait
+          fetch(req).then((res) => { if (res && res.ok) c.put(req, res.clone()); }).catch(() => {});
+          return cached;
+        }
         const fresh = fetch(req).then((res) => { if (res && res.ok) c.put(req, res.clone()); return res; }).catch(() => null);
-        const res = await Promise.race([fresh, timeout]);
-        return res || (await c.match(req)) || (await fresh) || new Response('Offline', { status: 503 });
+        const res = await Promise.race([fresh, new Promise((r) => setTimeout(() => r(null), 1200))]);
+        return res || cached || (await fresh) || new Response('Offline', { status: 503 });
       })
     );
     return;
