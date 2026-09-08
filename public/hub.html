@@ -265,6 +265,24 @@ tbody tr:hover td:last-child a[onclick]{color:var(--ink)}
         box-shadow:-12px 0 40px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .18s ease-out;
         display:flex;flex-direction:column}
 .drawer.on{transform:none}
+.drawer.narrow{width:min(400px,100vw)}
+.fcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px;background:#fff}
+.fcard .fhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.fcard .fname{font-weight:650;font-size:15px}
+.fcard .fop{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 0;display:inline-flex;align-items:center;gap:4px}
+.fcard .fop:hover{color:var(--ink)}
+.fcard .fdel{background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px;padding:4px 6px;border-radius:6px}
+.fcard .fdel:hover{background:#F3F4F6;color:var(--crit)}
+.fand{display:flex;align-items:center;gap:10px;margin:12px 0 0;color:var(--muted);font-size:13px}
+.fand::before,.fand::after{content:'';flex:1;border-top:1px solid var(--line)}
+.seg{display:inline-flex;border:1.5px solid var(--line-2);border-radius:9px;overflow:hidden;margin-top:8px}
+.seg button{background:#fff;border:0;padding:8px 14px;font-size:14px;cursor:pointer;color:var(--muted)}
+.seg button+button{border-left:1.5px solid var(--line-2)}
+.seg button.on{background:#F1F2F4;color:var(--ink);font-weight:600}
+.flist{border:1px solid var(--line);border-radius:12px;margin-top:8px;max-height:320px;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.08);background:#fff}
+.flist button{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:10px 12px;font-size:14px;cursor:pointer}
+.flist button:hover{background:#F3F4F6}
+.flist .ic{width:18px;text-align:center;color:var(--muted);font-size:13px}
 .drawer-hd{padding:18px 22px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .drawer-hd h2{font-size:18px;font-weight:650;margin:0}
 .drawer-body{overflow:auto;padding:0 22px 40px;flex:1}
@@ -744,13 +762,14 @@ const VIEW_FIELDS = [
   { k:'father_name',   l:'Father',                    t:'text' },
 ];
 const OPS = {
-  num:   [['=','is'],['!=','is not'],['<','less than'],['<=','at most'],['>','more than'],['>=','at least'],['between','between']],
-  date:  [['=','on'],['<','before'],['>','after'],['between','between'],['empty','is blank'],['notempty','is set']],
-  text:  [['contains','contains'],['=','is'],['!=','is not'],['startswith','starts with'],['empty','is blank'],['notempty','is set']],
-  enum:  [['=','is'],['!=','is not']],
-  bool:  [['true','is yes'],['false','is no']],
-  exists:[['notempty','yes'],['empty','no']],
+  num:   [['=','is equal to'],['!=','is not equal to'],['<','is less than'],['<=','is at most'],['>','is greater than'],['>=','is at least'],['between','is between']],
+  date:  [['=','is on'],['<','is before'],['>','is after'],['between','is between'],['empty','is blank'],['notempty','is not blank']],
+  text:  [['contains','contains'],['=','is equal to'],['!=','is not equal to'],['startswith','starts with'],['empty','is blank'],['notempty','is not blank']],
+  enum:  [['=','is equal to'],['!=','is not equal to']],
+  bool:  [['true','is equal to'],['false','is equal to']],
+  exists:[['notempty','is not blank'],['empty','is blank']],
 };
+const FIELD_ICON = { num:'₹', date:'📅', text:'T', enum:'≡', bool:'☑', exists:'☑' };
 let _views = { rows:[], list:[], conds:[], sort:{ field:'student_name', dir:'asc' }, current:null };
 
 function evalCond(r, c){
@@ -796,6 +815,62 @@ const describeCond = c => {
   return `${f.l} ${op}${val}`;
 };
 
+// Coda-style filter panel: one card per filter, a control that fits the
+// field's type, a searchable list to add another. Live count at the top.
+function openFilterPanel(){
+  const dr = el('drawer'); const body = openDrawer('Filter', ''); dr.classList.add('narrow');
+  _afterDrawerClose = () => { dr.classList.remove('narrow'); };
+  const enumVals = k => [...new Set(_views.rows.map(r => r[k]).filter(v => v != null && v !== ''))].sort();
+  const paint = () => {
+    const total = _views.rows.length, shown = (_views.lastRows || []).length;
+    el('drawer-sub').textContent = `${shown} of ${total} children`;
+    const cards = _views.conds.map((c, i) => {
+      const f = VIEW_FIELDS.find(x => x.k === c.field) || VIEW_FIELDS[0];
+      const ops = OPS[f.t]; if (!ops.some(o => o[0] === c.op)) c.op = ops[0][0];
+      const opLabel = ops.find(o => o[0] === c.op)?.[1] || c.op;
+      let ctl = '';
+      if (f.t === 'bool' || f.t === 'exists') {
+        const yes = f.t === 'bool' ? 'true' : 'notempty', no = f.t === 'bool' ? 'false' : 'empty';
+        ctl = `<div class="seg"><button data-i="${i}" data-op="${yes}" class="${c.op===yes?'on':''}">✓ Yes</button><button data-i="${i}" data-op="${no}" class="${c.op===no?'on':''}">— No</button></div>`;
+      } else if (!['empty','notempty'].includes(c.op)) {
+        if (f.t === 'enum') ctl = `<select class="in fval" data-i="${i}" style="margin-top:8px"><option value="">Select…</option>${enumVals(f.k).map(v => `<option ${String(c.value)===String(v)?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
+        else ctl = `<input class="in fval" data-i="${i}" type="${f.t==='num'?'number':f.t==='date'?'date':'text'}" value="${esc(c.value ?? '')}" placeholder="${f.t==='num'?'Amount':'Value'}" style="margin-top:8px">`
+             + (c.op === 'between' ? `<div class="hint" style="margin:6px 0 0">and</div><input class="in fval2" data-i="${i}" type="${f.t==='num'?'number':'date'}" value="${esc(c.value2 ?? '')}">` : '');
+      }
+      const opSel = (f.t === 'bool' || f.t === 'exists') ? '' :
+        `<select class="fop fopsel" data-i="${i}">${ops.map(o => `<option value="${o[0]}" ${o[0]===c.op?'selected':''}>${o[1]}</option>`).join('')}</select>`;
+      return `${i ? '<div class="fand">And</div>' : ''}
+        <div class="fcard"><div class="fhead"><div><div class="fname">${esc(f.l)}</div>${opSel}</div>
+          <button class="fdel" data-i="${i}" title="Remove">🗑</button></div>${ctl}</div>`;
+    }).join('');
+    body.innerHTML = `${cards || '<div class="hint" style="margin-top:12px">No filters — showing everyone.</div>'}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
+        <button class="btn line sm" id="fadd">+ Add filter</button>
+        ${_views.conds.length ? '<a href="#" id="fclear" class="hint">Remove all</a>' : ''}</div>
+      <div id="fpick" style="display:none"><input class="in" id="fsearch" placeholder="Search fields…" style="margin-top:8px"><div class="flist" id="flistbox"></div></div>`;
+    const sync = () => { drawConds?.(); condsToBar?.(); run(); paint(); };
+    body.querySelectorAll('.seg button').forEach(b => b.onclick = () => { _views.conds[+b.dataset.i].op = b.dataset.op; sync(); });
+    body.querySelectorAll('.fopsel').forEach(e => e.onchange = () => { _views.conds[+e.dataset.i].op = e.value; sync(); });
+    body.querySelectorAll('.fval').forEach(e => { const h = () => { _views.conds[+e.dataset.i].value = e.value; run(); el('drawer-sub').textContent = `${(_views.lastRows||[]).length} of ${_views.rows.length} children`; drawConds?.(); condsToBar?.(); }; e.onchange = h; if (e.tagName === 'INPUT') e.oninput = debounce(h, 200); });
+    body.querySelectorAll('.fval2').forEach(e => e.oninput = debounce(() => { _views.conds[+e.dataset.i].value2 = e.value; run(); }, 200));
+    body.querySelectorAll('.fdel').forEach(b => b.onclick = () => { _views.conds.splice(+b.dataset.i, 1); sync(); });
+    const fc = el('fclear'); if (fc) fc.onclick = ev => { ev.preventDefault(); _views.conds = []; sync(); };
+    el('fadd').onclick = () => {
+      el('fpick').style.display = ''; el('fsearch').focus();
+      const list = q => el('flistbox').innerHTML = VIEW_FIELDS.filter(f => !q || f.l.toLowerCase().includes(q)).map(f =>
+        `<button data-k="${f.k}"><span class="ic">${FIELD_ICON[f.t]||'·'}</span>${esc(f.l)}</button>`).join('');
+      list('');
+      el('fsearch').oninput = () => list(el('fsearch').value.trim().toLowerCase());
+      el('flistbox').onclick = ev => { const b = ev.target.closest('button'); if (!b) return;
+        const f = VIEW_FIELDS.find(x => x.k === b.dataset.k);
+        _views.conds.push({ field: f.k, op: OPS[f.t][0][0], value: f.t === 'num' ? 0 : '' }); sync(); };
+    };
+  };
+  paint();
+}
+// hoisted so the panel can call them before tabViews assigns them
+let drawConds = null, condsToBar = null, run = null;
+
 async function tabViews(){
   const b = el('body');
   b.innerHTML = '<div class="loading">Loading…</div>';
@@ -824,9 +899,13 @@ async function tabViews(){
             <button class="btn danger sm" id="vw-del" style="display:none">Delete</button>
           </div>
           <div class="chips" id="vw-quick" style="margin-top:14px"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap">
+            <button class="btn line sm" id="vw-filter">⚲ Filter <b id="vw-fcount"></b></button>
+            <span class="hint" id="vw-fdesc"></span>
+          </div>
 
           <!-- plain filters: the questions actually asked, as dropdowns -->
-          <div id="vw-bar" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px">
+          <div id="vw-bar" style="display:none;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px">
             <div><label class="lb">Class</label><select class="in" id="vb-class"><option value="">Any</option></select></div>
             <div><label class="lb">Status</label><select class="in" id="vb-status">
               <option value="">Any</option><option value="OVERDUE">Overdue</option><option value="DUE SOON">Due soon</option>
@@ -843,7 +922,7 @@ async function tabViews(){
               <option value="">Any</option><option value="yes">On file</option><option value="no">Missing</option></select></div>
           </div>
 
-          <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Advanced — any field, any condition</summary>
+          <details style="display:none"><summary class="hint" style="cursor:pointer">Advanced — any field, any condition</summary>
             <div id="vw-conds" style="margin-top:10px"></div>
             <button class="btn line sm" id="vw-add" style="margin-top:8px">+ Add condition</button>
           </details>
@@ -888,7 +967,7 @@ async function tabViews(){
   };
 
   // ── condition rows
-  const drawConds = () => {
+  drawConds = () => {
     el('vw-conds').innerHTML = _views.conds.map((c, i) => {
       const f = VIEW_FIELDS.find(x => x.k === c.field) || VIEW_FIELDS[0];
       const ops = OPS[f.t];
@@ -932,7 +1011,7 @@ async function tabViews(){
     // keep any advanced conditions on fields the bar doesn't cover
     return c.concat(_views.conds.filter(x => !BAR_FIELDS.has(x.field)));
   };
-  const condsToBar = () => {
+  condsToBar = () => {
     const f = (field, op) => _views.conds.find(x => x.field === field && (!op || x.op === op));
     el('vb-class').value  = f('program_name','=')?.value ?? '';
     el('vb-status').value = f('schedule_flag','=')?.value ?? '';
@@ -982,17 +1061,19 @@ async function tabViews(){
     });
     return rows;
   };
-  const run = () => {
+  run = () => {
     const rows = matched();
     _views.lastRows = rows;
     drawQuick();
+    const fc = el('vw-fcount'); if (fc) fc.textContent = _views.conds.length ? `(${_views.conds.length})` : '';
+    const fd = el('vw-fdesc'); if (fd) fd.textContent = _views.conds.length ? _views.conds.map(describeCond).join(' · and · ') : 'No filters — showing everyone';
     const owed = rows.reduce((a, r) => a + Number(r.true_due||0), 0);
     const t2 = rows.reduce((a, r) => a + Number(r.term2_due||0), 0);
     el('vw-summary').innerHTML =
       `<span class="pill big">${rows.length} ${rows.length===1?'child':'children'}</span>` +
       (has('finance') ? `<span class="pill">${money(owed)} truly due</span>` +
                         `<span class="pill">${money(t2)} term 2 due</span>` : '') +
-      (_views.conds.length ? `<span class="hint" style="width:100%;margin-top:4px">${_views.conds.map(describeCond).join(' · and · ')}</span>` : '');
+      '';
     const tint = r => r.schedule_flag === 'OVERDUE' ? 't-crit' : r.schedule_flag === 'SETTLED' ? 't-good'
       : (r.schedule_flag === 'NO SCHEDULE' || r.schedule_flag === 'OVERPAID') ? 't-warn' : '';
     el('vw-rows').innerHTML = rows.map(r => `<tr class="${tint(r)}" style="cursor:pointer" onclick="openPlan('${esc(r.uin)}')">
@@ -1008,6 +1089,7 @@ async function tabViews(){
       <td class="hint">${r.next_due_date ? longDate(r.next_due_date) : '—'}</td>
     </tr>`).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No child matches these conditions.</td></tr>`;
   };
+  el('vw-filter').onclick = openFilterPanel;
   el('vw-sort').onchange = e => { _views.sort.field = e.target.value; run(); };
   el('vw-dir').onchange  = e => { _views.sort.dir = e.target.value; run(); };
 
