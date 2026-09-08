@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=17">
-<link rel="prefetch" href="/brand/enquiries.js?v=17" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=18">
+<link rel="prefetch" href="/brand/enquiries.js?v=18" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -81,7 +81,7 @@ const SCHED_COLS = 'uin,student_name,father_name,program_name,batch,admission_da
   + 'total_fee,final_fee,agreed_fee,welcome_sent_at,note,eurokids_discount,note_count,latest_note,'
   + 'term1_due,term2_due,epms_invoiced,collected,epms_due,our_discount,uncredited_cash,paid_so_far,true_due,overpaid,'
   + 'instalments,scheduled_total,has_schedule,schedule_mismatch,next_amount,next_due_date,schedule_flag,days_overdue,'
-  + 'overdue_amount,overdue_by,upcoming_amount,upcoming_date';
+  + 'overdue_amount,overdue_by,upcoming_amount,upcoming_date,epms_discount_kind,discount_reason';
 const schedule = () => cached('sched', async () => {
   const { data, error } = await getSb().schema('eurokids').from('v_schedule').select(SCHED_COLS).limit(2000);
   if (error) throw error; return data || [];
@@ -563,14 +563,15 @@ const VIEW_FIELDS = [
   { k:'schedule_mismatch', l:'Schedule does not add up', t:'bool' },
   { k:'welcome_sent_at', l:'Welcome letter sent',     t:'exists' },
   { k:'parent_email1', l:'Has parent email',          t:'exists' },
-  { k:'eurokids_discount', l:'EuroKids discount label', t:'text' },
+  { k:'epms_discount_kind', l:'EuroKids scheme (corporate/sibling/…)', t:'enum' },
+  { k:'discount_reason', l:'Concession reason',        t:'text' },
   { k:'father_name',   l:'Father',                    t:'text' },
 ];
 const OPS = {
   num:   [['=','is equal to'],['!=','is not equal to'],['<','is less than'],['<=','is at most'],['>','is greater than'],['>=','is at least'],['between','is between']],
   date:  [['=','is on'],['<','is before'],['>','is after'],['between','is between'],['empty','is blank'],['notempty','is not blank']],
   text:  [['contains','contains'],['=','is equal to'],['!=','is not equal to'],['startswith','starts with'],['empty','is blank'],['notempty','is not blank']],
-  enum:  [['=','is equal to'],['!=','is not equal to']],
+  enum:  [['=','is equal to'],['!=','is not equal to'],['empty','is blank'],['notempty','is not blank']],
   bool:  [['true','is equal to'],['false','is equal to']],
   exists:[['notempty','is not blank'],['empty','is blank']],
 };
@@ -2251,6 +2252,19 @@ let _afterDrawerClose = null;
 // The statement: what was agreed, what came off, what came in (with dates
 // where we have them), and what is left. Green is money in the family's
 // favour, red is money still owed.
+// The concessions we fund ourselves, in the school's own words. One list, so
+// the sheet, the statement and the parent's email always agree.
+const CONCESSION_REASONS = ['Paid in full', 'Early payment', 'Second child at the school',
+  'Annual function fee waived', 'Uniform not taken', 'Settlers opted out',
+  'Joined mid-term', 'Long-standing family', 'Financial hardship', 'Other'];
+// EuroKids' own schemes arrive on the EPMS invoice already applied.
+// "Corporate Discount" → "corporate discount"; "Sibling" → "sibling discount".
+function epmsSchemeLabel(k){
+  const s = String(k || '').trim();
+  if (!s || /^no discount$/i.test(s)) return '';
+  return /discount$/i.test(s) ? s.toLowerCase() : `${s.toLowerCase()} discount`;
+}
+
 function statementHtml(c, ledger, items){
   const fee = Number(c.total_fee || c.epms_invoiced || 0);
   const disc = Number(c.our_discount || 0);
@@ -2274,11 +2288,18 @@ function statementHtml(c, ledger, items){
   const heroM = settled ? 'Nothing outstanding.' : (nextDue || 'No instalment scheduled.');
   const line = (l, v, cls = '', sub = '') =>
     `<div class="row"><div class="l">${l}${sub ? `<span class="sub">${sub}</span>` : ''}</div><div class="v ${cls}">${v}</div></div>`;
+  // Two different things that both look like "a discount", and confusing them
+  // is how a fee ends up wrong. EuroKids' own schemes (corporate, sibling,
+  // defence, staff) are applied *before* EPMS invoices us, so they are already
+  // inside the annual fee — we name them, we never subtract them again.
+  // A concession is money off our own margin, and it must say what it was for.
+  const scheme = epmsSchemeLabel(c.epms_discount_kind);
+  const why = String(c.discount_reason || '').trim();
   return `
     <div class="hero ${heroCls}"><div class="k">${heroK}</div><div class="v">${heroV}</div><div class="m">${heroM}</div></div>
     <div class="grp"><h3>Statement</h3><div class="box">
-      ${line('Annual fee', money(fee), 'mute', 'as invoiced by EuroKids')}
-      ${disc > 0 ? line('Concession', '− ' + money(disc), 'credit', 'ours — parents see it as a concession') : ''}
+      ${line('Annual fee', money(fee), 'mute', scheme ? `already after the ${esc(scheme)}` : 'as invoiced by EuroKids')}
+      ${disc > 0 ? line('Concession', '− ' + money(disc), 'credit', why ? esc(why) + ' — funded by us' : '⚠︎ no reason recorded — open Fee below and say why') : ''}
       ${line('<strong>Agreed fee</strong>', '<strong>' + money(agreed) + '</strong>')}
       ${epmsUndated > 0 ? line('Paid to EuroKids', '− ' + money(epmsUndated), 'credit', 'before we started tracking dates') : ''}
       ${pays.map(l => line(l.source === 'epms' ? 'Paid to EuroKids' : 'Paid to us', '− ' + money(l.amount), 'credit',
@@ -2321,9 +2342,16 @@ async function openPlan(uin){
     ${statementHtml(kid || {}, ledger, items)}
 
     <div class="grp"><h3>Fee</h3><div class="box">
+      ${epmsSchemeLabel(kid?.epms_discount_kind) ? `<div class="row"><div class="l">EuroKids scheme<span class="sub">Applied before EPMS invoiced us — it is already inside the annual fee below. Do not enter it again as a concession.</span></div>
+        <div class="v"><span class="chip c-acc">${esc(kid.epms_discount_kind)}</span></div></div>` : ''}
       <div class="row"><div class="l">Annual fee<span class="sub">EPMS invoiced <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></div>
         <input class="in num" id="pf-total" type="number" value="${total}"></div>
-      <div class="row"><div class="l">Concession<span class="sub">Comes off our margin; EPMS never sees it.</span></div><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0"></div>
+      <div class="row"><div class="l">Concession<span class="sub">Off our own margin. EPMS never sees it.</span></div><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0"></div>
+      <div class="row" id="pf-why-row"><div class="l">What for<span class="sub">Shown to the parent on their statement.</span></div>
+        <select class="in" id="pf-why"><option value="">— choose —</option>
+          ${CONCESSION_REASONS.concat(plan?.discount_reason && !CONCESSION_REASONS.includes(plan.discount_reason) ? [plan.discount_reason] : [])
+            .map(r => `<option ${plan?.discount_reason === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+        </select></div>
       <div class="row"><div class="l"><strong>Agreed fee</strong></div><input class="in num" id="pf-final" type="number" value="${plan?.final_fee ?? total}" readonly tabindex="-1"></div>
     </div><div id="pf-fee-warn"></div></div>
 
@@ -2427,9 +2455,23 @@ async function openPlan(uin){
     const a = el('pf-use-epms');
     if (a) a.onclick = ev => { ev.preventDefault(); el('pf-total').value = epmsFee; autoLast(); };
   };
+  // The reason only matters when there is money to explain — and a family on a
+  // EuroKids scheme is where a concession most often gets double-counted, so
+  // that combination is called out rather than quietly accepted.
+  const scheme = epmsSchemeLabel(kid?.epms_discount_kind);
+  const warnWhy = () => {
+    const row = el('pf-why-row'), box = el('pf-fee-warn');
+    const d = Number(el('pf-disc').value) || 0;
+    if (row) row.style.display = d > 0 ? '' : 'none';
+    if (box && d > 0 && scheme) box.insertAdjacentHTML('beforeend',
+      `<div class="foot warn">This family already has a <strong>${esc(kid.epms_discount_kind)}</strong>, and EPMS invoiced
+         ${money(epmsFee)} with it applied. Enter a concession here only if you are giving something
+         <em>further</em>, out of our own margin.</div>`);
+  };
   const autoLast = () => {
     recalcFinal();
     warnFee();
+    warnWhy();
     const final = Number(el('pf-final').value)||0;
     if (rows.length < 2) { if (rows.length===1 && !rows[0].amount) { rows[0].amount = final;
       const f = document.querySelector('.pf-amt[data-i="0"]'); if (f) f.value = final; } return; }
@@ -2450,6 +2492,8 @@ async function openPlan(uin){
   const savePlan = async () => {
     const total = Number(el('pf-total').value)||0, disc = Number(el('pf-disc').value)||0;
     const final = Math.max(0, total - disc);
+    const why = el('pf-why') ? el('pf-why').value.trim() : '';
+    if (disc > 0 && !why) { el('pf-msg').innerHTML = '<div class="err">Say what the concession is for — it appears on the parent’s statement.</div>'; return false; }
     const clean = rows.filter(r => Number(r.amount) > 0 && r.due_date);
     if (!clean.length) { el('pf-msg').innerHTML = '<div class="err">Add at least one instalment with an amount and a date.</div>'; return false; }
     const sum = clean.reduce((a,r)=>a+Number(r.amount),0);
@@ -2458,6 +2502,7 @@ async function openPlan(uin){
     const s = getSb();
     const p = await s.schema('eurokids').from('payment_plan').upsert({
       uin: _planUin, total_fee: total, our_discount: disc, final_fee: final,
+      discount_reason: disc > 0 ? why : null,
       note: el('pf-note').value || null, updated_at: new Date().toISOString() }, { onConflict: 'uin' });
     if (p.error) { el('pf-msg').innerHTML = `<div class="err">${esc(p.error.message)}</div>`; return false; }
 
@@ -2703,7 +2748,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=17"></script>
+<script src="/brand/enquiries.js?v=18"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

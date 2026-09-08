@@ -124,6 +124,31 @@ export type StatementChild = {
   next_due_date?: string | null; next_amount?: number | string | null;
   overdue_amount?: number | string | null; overdue_by?: string | null;
   upcoming_amount?: number | string | null; upcoming_date?: string | null;
+  // Why the fee is what it is. Two different things, never to be confused:
+  //  · epms_discount_kind — corporate / sibling / defence / staff. EuroKids
+  //    applies it before invoicing, so it is ALREADY inside the annual fee.
+  //    It is named, never subtracted a second time.
+  //  · discount_reason — the concession we fund ourselves, off our own
+  //    margin, which is the only thing that reduces the fee here.
+  epms_discount_kind?: string | null; discount_reason?: string | null;
+};
+
+// The concessions we grant ourselves. Kept in one place so the child sheet,
+// the statement and the email all use the same words.
+export const CONCESSION_REASONS = [
+  "Paid in full", "Early payment", "Second child at the school",
+  "Annual function fee waived", "Uniform not taken", "Settlers opted out",
+  "Joined mid-term", "Long-standing family", "Financial hardship", "Other",
+];
+// EuroKids' own discount schemes. These arrive on the EPMS invoice and are
+// already reflected in the fee it bills, so they explain the number rather
+// than reduce it.
+export const EPMS_DISCOUNTS = ["Corporate Discount", "Sibling", "Defence Discount", "Staff"];
+// "Corporate Discount" → "corporate discount"; "Sibling" → "sibling discount".
+export const epmsDiscountLabel = (k?: string | null) => {
+  const s = String(k || "").trim();
+  if (!s || /^no discount$/i.test(s)) return null;
+  return /discount$/i.test(s) ? s.toLowerCase() : `${s.toLowerCase()} discount`;
 };
 
 const GREEN = "#146C3A", RED = "#A3231A", INK = "#1A202C", MUTE = "#4B5563";
@@ -156,9 +181,15 @@ export function statementHtml(c: StatementChild, ledger: LedgerLine[] = []) {
     `<tr><td style="padding:9px 0;color:${MUTE};border-bottom:1px solid #EEF0F2;vertical-align:top">${k}</td>
          <td style="padding:9px 0 9px 12px;text-align:right;border-bottom:1px solid #EEF0F2;white-space:nowrap;vertical-align:top;${cls}">${v}</td></tr>`;
   const green = `color:${GREEN}`;
+  // A EuroKids scheme discount is already inside the invoiced fee, so it is
+  // named under the annual fee, not deducted again. Only a concession we fund
+  // ourselves comes off, and it says what it was given for.
+  const sub = (t: string) => `<div style="font-size:12px;color:#9CA3AF;margin-top:2px">${esc(t)}</div>`;
+  const scheme = epmsDiscountLabel(c.epms_discount_kind);
+  const why = String(c.discount_reason || "").trim();
   const lines = [
-    row("Annual fee", moneyH(fee)),
-    disc > 0 ? row("Concession", "− " + moneyH(disc), green) : "",
+    row(`Annual fee${scheme ? sub(`after your ${scheme}`) : ""}`, moneyH(fee)),
+    disc > 0 ? row(`Concession${why ? sub(why) : ""}`, "− " + moneyH(disc), green) : "",
     undated > 0 ? row("Paid so far", "− " + moneyH(undated), green) : "",
     ...pays.map((l) => row(
       `Paid${l.on_date ? ` <span style="color:#9CA3AF;font-size:12px">${day(l.on_date)}${l.mode && l.source !== "epms" ? " · " + esc(l.mode) : ""}</span>` : ""}`,
@@ -180,9 +211,11 @@ export function statementText(c: StatementChild, ledger: LedgerLine[] = []) {
   const fee = Number(c.total_fee || c.epms_invoiced || 0), disc = Number(c.our_discount || 0);
   const owed = Number(c.true_due || 0), late = Number(c.overdue_amount || 0);
   const pays = ledger.filter((l) => l.counts_to_fees);
+  const scheme = epmsDiscountLabel(c.epms_discount_kind);
+  const why = String(c.discount_reason || "").trim();
   return [
-    `Annual fee:      ${money(fee)}`,
-    ...(disc > 0 ? [`Concession:      − ${money(disc)}`] : []),
+    `Annual fee:      ${money(fee)}${scheme ? `  (after your ${scheme})` : ""}`,
+    ...(disc > 0 ? [`Concession:      − ${money(disc)}${why ? `  (${why})` : ""}`] : []),
     ...pays.map((l) => `Paid ${l.on_date ? day(l.on_date) : ""}: − ${money(l.amount)}`),
     owed <= 1 ? `Balance:         NIL — fully paid` : `Balance due:     ${money(owed)}`,
     ...(owed > 1 && late > 1 ? [`Overdue:         ${money(late)}${c.overdue_by ? " (was due by " + day(c.overdue_by) + ")" : ""}`] : []),

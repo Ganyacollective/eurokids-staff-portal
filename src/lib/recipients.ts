@@ -37,6 +37,11 @@ export type ScheduleRow = {
   next_due_date: string | null;
   schedule_flag: string;
   days_overdue: number | null;
+  // A EuroKids scheme (corporate, sibling, defence, staff) is already inside
+  // total_fee, so it explains the figure rather than reducing it again.
+  epms_discount_kind: string | null;
+  // Why we gave a concession of our own; it is printed on the statement.
+  discount_reason: string | null;
 };
 
 export type Filters = {
