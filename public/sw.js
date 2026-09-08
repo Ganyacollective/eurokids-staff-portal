@@ -5,7 +5,7 @@
    balances and receipts must never be stale, and Supabase calls carry auth
    headers that must not be replayed from a cache. */
 
-const VERSION = 'ek-v7';
+const VERSION = 'ek-v8';
 const SHELL = [
   '/', '/hub.html', '/staff', '/portal.html', '/teacher', '/teacher.html',
   '/brand/portal.css', '/brand/hub.css', '/brand/email-signature.png',
@@ -39,12 +39,17 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   if (isShell(url)) {
-    // Stale-while-revalidate: instant open, quietly refreshed.
+    // Network first, cache as the fallback. Stale-while-revalidate meant every
+    // deploy showed up one reload late — a fix would be live on the server
+    // while the screen still wore the old stylesheet. Online, this always
+    // serves what was just deployed; offline (or on a slow link) the cached
+    // shell still opens the app.
     e.respondWith(
       caches.open(VERSION).then(async (c) => {
-        const cached = await c.match(req);
+        const timeout = new Promise((r) => setTimeout(() => r(null), 3000));
         const fresh = fetch(req).then((res) => { if (res && res.ok) c.put(req, res.clone()); return res; }).catch(() => null);
-        return cached || (await fresh) || new Response('Offline', { status: 503 });
+        const res = await Promise.race([fresh, timeout]);
+        return res || (await c.match(req)) || (await fresh) || new Response('Offline', { status: 503 });
       })
     );
     return;
