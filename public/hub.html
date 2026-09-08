@@ -258,6 +258,43 @@ tbody tr:hover td:last-child a[onclick]{color:var(--ink)}
 .user-edit{background:#FAFBFC;border-top:1px solid var(--line);padding:14px 18px}
 .user-edit label{margin-right:14px;font-size:14px}
 
+/* ── the child drawer: opens on the right, list stays put ── */
+.drawer-bg{position:fixed;inset:0;background:rgba(17,17,17,.28);z-index:60;opacity:0;transition:opacity .15s}
+.drawer-bg.on{opacity:1}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100vw);background:#fff;z-index:61;
+        box-shadow:-12px 0 40px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .18s ease-out;
+        display:flex;flex-direction:column}
+.drawer.on{transform:none}
+.drawer-hd{padding:18px 22px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.drawer-hd h2{font-size:18px;font-weight:650;margin:0}
+.drawer-body{overflow:auto;padding:0 22px 40px;flex:1}
+.drawer-x{background:none;border:0;font-size:22px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:8px}
+.drawer-x:hover{background:#F3F4F6;color:var(--ink)}
+.dsec{margin-top:22px}
+.dsec h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px}
+
+/* the statement: reads like a ledger, colour says what the number means */
+.stmt{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:16px}
+.stmt table{width:100%;border-collapse:collapse}
+.stmt td{padding:9px 14px;border-bottom:1px solid var(--line);font-size:14px}
+.stmt tr:last-child td{border-bottom:0}
+.stmt td.r{text-align:right;font-variant-numeric:tabular-nums}
+.stmt .lbl{color:var(--muted)}
+.stmt .sub{font-size:12px;color:var(--faint);padding-left:26px}
+.stmt .credit{color:#146C3A}
+.stmt .total td{font-weight:700;border-top:2px solid var(--ink);background:#FAFAFA;font-size:15px}
+.stmt .total.due td.r{color:var(--crit)}
+.stmt .total.paid td.r{color:#146C3A}
+.stmt .head td{background:#FAFAFA;font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+
+/* row tints — the eye should find the problem rows without reading */
+tr.t-crit td{background:#FFF5F4} tr.t-warn td{background:#FFFAF0} tr.t-good td{background:#F4FBF6}
+tr.t-crit td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
+tr.t-warn td:first-child{box-shadow:inset 3px 0 0 #D97706}
+tr.t-good td:first-child{box-shadow:inset 3px 0 0 #16A34A}
+tbody tr.t-crit:hover td{background:#FFEDEB} tbody tr.t-warn:hover td{background:#FFF3DC} tbody tr.t-good:hover td{background:#E9F7ED}
+.money-due{color:var(--crit);font-weight:650} .money-ok{color:#146C3A;font-weight:600} .money-disc{color:#146C3A}
+
 /* phones */
 @media(max-width:640px){
   .stage{padding:0 14px 40px}
@@ -772,7 +809,7 @@ async function tabViews(){
   const enumVals = k => [...new Set(_views.rows.map(r => r[k]).filter(v => v != null && v !== ''))].sort();
 
   b.innerHTML = head('Views',
-      'Stack any conditions — every one must be true — then sort, save, export, or email the result. Like a Coda filter, on live data.')
+      'Pick who you want to see, then print, download, or email them. Save it if you\'ll want it again.')
     + `<div style="display:grid;grid-template-columns:260px 1fr;gap:16px" id="vw-grid">
       <div class="card" style="padding:14px">
         <label class="lb">Saved views</label>
@@ -787,8 +824,29 @@ async function tabViews(){
             <button class="btn danger sm" id="vw-del" style="display:none">Delete</button>
           </div>
           <div class="chips" id="vw-quick" style="margin-top:14px"></div>
-          <div id="vw-conds" style="margin-top:14px"></div>
-          <button class="btn line sm" id="vw-add" style="margin-top:10px">+ Add condition</button>
+
+          <!-- plain filters: the questions actually asked, as dropdowns -->
+          <div id="vw-bar" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px">
+            <div><label class="lb">Class</label><select class="in" id="vb-class"><option value="">Any</option></select></div>
+            <div><label class="lb">Status</label><select class="in" id="vb-status">
+              <option value="">Any</option><option value="OVERDUE">Overdue</option><option value="DUE SOON">Due soon</option>
+              <option value="SETTLED">Paid up</option><option value="OVERPAID">Overpaid</option><option value="NO SCHEDULE">No schedule</option></select></div>
+            <div><label class="lb">Truly due</label><div style="display:flex;gap:6px">
+              <select class="in" id="vb-due-op" style="max-width:110px"><option value="">Any</option><option value=">">more than</option><option value="<">less than</option></select>
+              <input class="in" id="vb-due" type="number" placeholder="₹" style="min-width:0"></div></div>
+            <div><label class="lb">Term 2 due (EPMS)</label><div style="display:flex;gap:6px">
+              <select class="in" id="vb-t2-op" style="max-width:110px"><option value="">Any</option><option value=">">more than</option><option value="<">less than</option></select>
+              <input class="in" id="vb-t2" type="number" placeholder="₹" style="min-width:0"></div></div>
+            <div><label class="lb">Our discount</label><select class="in" id="vb-disc">
+              <option value="">Any</option><option value="none">None recorded</option><option value="some">Some</option></select></div>
+            <div><label class="lb">Parent email</label><select class="in" id="vb-email">
+              <option value="">Any</option><option value="yes">On file</option><option value="no">Missing</option></select></div>
+          </div>
+
+          <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Advanced — any field, any condition</summary>
+            <div id="vw-conds" style="margin-top:10px"></div>
+            <button class="btn line sm" id="vw-add" style="margin-top:8px">+ Add condition</button>
+          </details>
         </div>
         <div class="card" style="padding:16px;margin-top:14px">
           <div class="pill-row" id="vw-summary"></div>
@@ -826,7 +884,7 @@ async function tabViews(){
     el('vw-name').value = v?.name || '';
     el('vw-sort').value = _views.sort.field; el('vw-dir').value = _views.sort.dir;
     el('vw-del').style.display = v ? '' : 'none';
-    drawList(); drawConds(); run();
+    drawList(); drawConds(); condsToBar(); run();
   };
 
   // ── condition rows
@@ -857,6 +915,37 @@ async function tabViews(){
   };
   el('vw-add').onclick = () => { _views.conds.push({ field:'true_due', op:'>', value:0 }); drawConds(); run(); };
 
+  // ── the plain bar ↔ conditions ──
+  el('vb-class').innerHTML = '<option value="">Any</option>' + enumVals('program_name').map(v => `<option>${esc(v)}</option>`).join('');
+  const BAR_FIELDS = new Set(['program_name','schedule_flag','true_due','term2_due','our_discount','parent_email1']);
+  const barToConds = () => {
+    const c = [];
+    const v = id => el(id).value;
+    if (v('vb-class'))  c.push({ field:'program_name', op:'=', value: v('vb-class') });
+    if (v('vb-status')) c.push({ field:'schedule_flag', op:'=', value: v('vb-status') });
+    if (v('vb-due-op') && v('vb-due') !== '')  c.push({ field:'true_due',  op: v('vb-due-op'), value: Number(v('vb-due')) });
+    if (v('vb-t2-op')  && v('vb-t2')  !== '')  c.push({ field:'term2_due', op: v('vb-t2-op'),  value: Number(v('vb-t2')) });
+    if (v('vb-disc') === 'none') c.push({ field:'our_discount', op:'=', value:0 });
+    if (v('vb-disc') === 'some') c.push({ field:'our_discount', op:'>', value:0 });
+    if (v('vb-email') === 'yes') c.push({ field:'parent_email1', op:'notempty', value:'' });
+    if (v('vb-email') === 'no')  c.push({ field:'parent_email1', op:'empty', value:'' });
+    // keep any advanced conditions on fields the bar doesn't cover
+    return c.concat(_views.conds.filter(x => !BAR_FIELDS.has(x.field)));
+  };
+  const condsToBar = () => {
+    const f = (field, op) => _views.conds.find(x => x.field === field && (!op || x.op === op));
+    el('vb-class').value  = f('program_name','=')?.value ?? '';
+    el('vb-status').value = f('schedule_flag','=')?.value ?? '';
+    const d = f('true_due');  el('vb-due-op').value = d && ['<','>'].includes(d.op) ? d.op : ''; el('vb-due').value = d && ['<','>'].includes(d.op) ? d.value : '';
+    const t = f('term2_due'); el('vb-t2-op').value  = t && ['<','>'].includes(t.op) ? t.op : ''; el('vb-t2').value  = t && ['<','>'].includes(t.op) ? t.value : '';
+    const dc = f('our_discount'); el('vb-disc').value = dc ? (dc.op === '=' && Number(dc.value) === 0 ? 'none' : dc.op === '>' ? 'some' : '') : '';
+    const em = f('parent_email1'); el('vb-email').value = em ? (em.op === 'notempty' ? 'yes' : em.op === 'empty' ? 'no' : '') : '';
+  };
+  ['vb-class','vb-status','vb-due-op','vb-due','vb-t2-op','vb-t2','vb-disc','vb-email'].forEach(id => {
+    const e = el(id); const h = () => { _views.conds = barToConds(); drawConds(); run(); };
+    e.onchange = h; if (e.tagName === 'INPUT') e.oninput = debounce(h, 200);
+  });
+
   // One click for the questions asked every day. Each replaces the conditions.
   const QUICK = [
     ['Paid up',      [{ field:'schedule_flag', op:'=', value:'SETTLED' }]],
@@ -864,6 +953,7 @@ async function tabViews(){
     ['Overdue',      [{ field:'schedule_flag', op:'=', value:'OVERDUE' }]],
     ['Due soon',     [{ field:'schedule_flag', op:'=', value:'DUE SOON' }]],
     ['No schedule',  [{ field:'has_schedule', op:'false', value:'' }]],
+    ['Overpaid',     [{ field:'schedule_flag', op:'=', value:'OVERPAID' }]],
     ['Everyone',     []],
   ];
   const drawQuick = () => {
@@ -875,7 +965,7 @@ async function tabViews(){
     document.querySelectorAll('#vw-quick .chip').forEach(ch => ch.onclick = () => {
       _views.conds = JSON.parse(JSON.stringify(QUICK[Number(ch.dataset.i)][1]));
       _views.current = null; el('vw-name').value = ''; el('vw-del').style.display = 'none';
-      drawList(); drawConds(); run();
+      drawList(); drawConds(); condsToBar(); run();
     });
   };
 
@@ -903,15 +993,18 @@ async function tabViews(){
       (has('finance') ? `<span class="pill">${money(owed)} truly due</span>` +
                         `<span class="pill">${money(t2)} term 2 due</span>` : '') +
       (_views.conds.length ? `<span class="hint" style="width:100%;margin-top:4px">${_views.conds.map(describeCond).join(' · and · ')}</span>` : '');
-    el('vw-rows').innerHTML = rows.map(r => `<tr>
-      <td><a style="cursor:pointer" onclick="openStatement('${esc(r.uin)}')"><strong>${esc(r.student_name)}</strong></a>
+    const tint = r => r.schedule_flag === 'OVERDUE' ? 't-crit' : r.schedule_flag === 'SETTLED' ? 't-good'
+      : (r.schedule_flag === 'NO SCHEDULE' || r.schedule_flag === 'OVERPAID') ? 't-warn' : '';
+    el('vw-rows').innerHTML = rows.map(r => `<tr class="${tint(r)}" style="cursor:pointer" onclick="openPlan('${esc(r.uin)}')">
+      <td><strong>${esc(r.student_name)}</strong>
+        ${r.latest_note ? `<div style="font-size:12px;opacity:.75;margin-top:2px">📝 ${esc(String(r.latest_note).slice(0,70))}${String(r.latest_note).length>70?'…':''}</div>` : ''}
         <br><span class="uin">${esc(r.uin)}</span></td>
       <td>${esc(r.program_name||'')}</td>
       <td class="r num">${Number(r.term1_due)>0?money(r.term1_due):'—'}</td>
       <td class="r num">${Number(r.term2_due)>0?money(r.term2_due):'—'}</td>
-      <td class="r num">${Number(r.our_discount)>0?money(r.our_discount):'—'}</td>
-      <td class="r num" style="font-weight:600">${Number(r.true_due)>0?money(r.true_due):'<span class="chip c-good">paid</span>'}</td>
-      <td><span class="chip ${r.schedule_flag==='OVERDUE'?'c-crit':r.schedule_flag==='SETTLED'?'c-good':r.schedule_flag==='NO SCHEDULE'?'c-warn':'c-mute'}">${esc((r.schedule_flag||'').toLowerCase())}</span></td>
+      <td class="r num money-disc">${Number(r.our_discount)>0?'− '+money(r.our_discount):'<span style="color:var(--faint)">·</span>'}</td>
+      <td class="r num">${Number(r.true_due)>0?`<span class="${r.schedule_flag==='OVERDUE'?'money-due':''}" style="font-weight:650">${money(r.true_due)}</span>`:(Number(r.overpaid)>1?`<span class="money-ok">+${money(r.overpaid)}</span>`:'<span class="money-ok">paid</span>')}</td>
+      <td><span class="chip ${r.schedule_flag==='OVERDUE'?'c-crit':r.schedule_flag==='SETTLED'?'c-good':(r.schedule_flag==='NO SCHEDULE'||r.schedule_flag==='OVERPAID')?'c-warn':'c-mute'}">${esc((r.schedule_flag||'').toLowerCase().replace('settled','paid up'))}</span></td>
       <td class="hint">${r.next_due_date ? longDate(r.next_due_date) : '—'}</td>
     </tr>`).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No child matches these conditions.</td></tr>`;
   };
@@ -2031,88 +2124,7 @@ async function sendReceipt(id, a){
 }
 
 /* ── a child's full statement ───────────────────────────────────── */
-async function openStatement(uin){
-  const s = getSb();
-  const [{ data: c }, { data: led }, { data: items }] = await Promise.all([
-    s.schema('eurokids').from('v_schedule').select('*').eq('uin', uin).maybeSingle(),
-    s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date'),
-    s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date,label').eq('uin', uin).order('seq'),
-  ]);
-  if (!c) return alert('Could not load that child.');
-
-  // Falling back to what EPMS invoiced: without it a child with no plan showed
-  // "Fee for the year ₹0" directly above a real balance due.
-  const fee = Number(c.final_fee || c.total_fee || c.epms_invoiced || 0);
-  const disc = Number(c.our_discount || 0);
-  const held = Number(c.uncredited_cash || 0);
-  const epmsGot = Number(c.collected || 0);
-  const owed = Number(c.true_due || 0);
-  const fees = (led || []).filter(l => l.counts_to_fees);
-  const other = (led || []).filter(l => !l.counts_to_fees);
-  const d = x => x ? new Date(x + 'T00:00:00Z').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' }) : '—';
-
-  const row = (k, v, style='') => `<tr><td style="padding:7px 0;color:var(--muted);${style}">${k}</td>
-    <td class="r num" style="padding:7px 0;${style}">${v}</td></tr>`;
-
-  let bal = fee - disc;
-  const movement = fees.map(l => {
-    bal -= Number(l.amount);
-    return `<tr><td class="hint">${d(l.on_date)}</td>
-      <td>${esc(l.description)}${l.source === 'offline' ? ` <span class="chip c-mute">${esc(l.mode)}</span>` : ''}
-        ${Number(l.still_held) > 0.01 ? ` <span class="chip c-warn">${money(l.still_held)} not yet posted</span>` : ''}</td>
-      <td class="r num" style="color:var(--good)">− ${money(l.amount)}</td>
-      <td class="r num">${money(Math.max(0, bal))}</td></tr>`;
-  }).join('');
-
-  el('plan-editor') || document.body.insertAdjacentHTML('beforeend', '<div id="plan-editor"></div>');
-  const box = el('stmt') || (() => {
-    document.body.insertAdjacentHTML('beforeend', '<div id="stmt"></div>'); return el('stmt');
-  })();
-  box.innerHTML = `
-  <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow:auto;padding:28px"
-       onclick="if(event.target===this)this.remove()">
-    <div style="max-width:760px;margin:0 auto;background:var(--card);border-radius:14px;padding:26px">
-      <div class="ph" style="margin-bottom:16px"><div>
-        <h1 style="font-size:22px">${esc(c.student_name)}</h1>
-        <div class="s">${esc(c.program_name || '')}${c.batch ? ' · ' + esc(c.batch) : ''} · ${esc(uin)}</div></div>
-        <button class="btn sm line" onclick="el('stmt').remove()">Close</button></div>
-
-      <table style="width:100%;border-collapse:collapse;font-size:14px">
-        ${row('Fee for the year', money(c.total_fee || fee))}
-        ${disc > 0 ? row('Our discount (out of our margin)', '<span style="color:var(--good)">− ' + money(disc) + '</span>') : ''}
-        ${row('<strong>Final payable</strong>', '<strong>' + money(fee) + '</strong>', 'border-top:1px solid var(--line)')}
-      </table>
-
-      <div style="font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px">Payments received</div>
-      <div class="tw"><table><thead><tr><th>Date</th><th>What</th><th class="r">Amount</th><th class="r">Balance</th></tr></thead>
-        <tbody>${movement || `<tr><td colspan="4" style="padding:16px;text-align:center;color:var(--muted)">Nothing received yet.</td></tr>`}</tbody></table></div>
-
-      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:16px">
-        ${row('Recorded by EuroKids', money(epmsGot))}
-        ${held > 0 ? row('With us, not yet posted to EuroKids', '<span style="color:var(--warn)">' + money(held) + '</span>') : ''}
-        <tr><td style="padding:11px 0;border-top:2px solid var(--ink);font-weight:700">Balance due</td>
-            <td class="r num" style="padding:11px 0;border-top:2px solid var(--ink);font-weight:700;font-size:17px">${money(owed)}</td></tr>
-        ${c.next_due_date && owed > 1 ? `<tr><td colspan="2" class="hint" style="padding-top:6px">Next instalment due ${d(c.next_due_date)}</td></tr>` : ''}
-      </table>
-
-      ${held > 0 ? `<div class="hint" style="background:var(--warn-wash);color:var(--warn);padding:10px 13px;border-radius:9px;margin-top:12px">
-        EuroKids still shows ${money(c.epms_due)} outstanding because ${money(held)} of this family's money has not been posted to them yet.
-        The balance above is the honest one — do not chase them for it.</div>` : ''}
-
-      ${other.length ? `<div style="font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px">Other collections — not fees</div>
-        <div class="tw"><table><thead><tr><th>Date</th><th>What</th><th>Mode</th><th class="r">Amount</th></tr></thead><tbody>
-        ${other.map(l => `<tr><td class="hint">${d(l.on_date)}</td><td>${esc(l.description)}</td>
-          <td><span class="chip c-mute">${esc(l.mode)}</span></td>
-          <td class="r num">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-
-      ${items && items.length ? `<div style="font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 6px">Agreed schedule</div>
-        <div class="tw"><table><thead><tr><th>Instalment</th><th>Due on</th><th class="r">Amount</th></tr></thead><tbody>
-        ${items.map(i => `<tr><td>${esc(i.label || 'Payment ' + i.seq)}</td><td class="hint">${d(i.due_date)}</td>
-          <td class="r num">${money(i.amount)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-    </div>
-  </div>`;
-}
-
+async function openStatement(uin){ return openPlan(uin); }
 async function setReflected(id, on){
   const { error } = await getSb().schema('eurokids').from('receipt_offline')
     .update({ reflected_in_epms: on }).eq('id', id);
@@ -2146,16 +2158,11 @@ async function delReceipt(id){
 
 // Guessing at a 400 ms delay meant the link did nothing whenever the roster
 // query was slower than that. Wait for the tab to actually finish painting.
-async function openPlanFrom(uin){
-  app = 'admissions'; tab = 'plans';
-  el('stage').innerHTML = '<div class="loading">Loading…</div>';
-  renderApp();
-  await tabPlans();
-  openPlan(uin);
-}
+async function openPlanFrom(uin){ openPlan(uin); }
 
 /* ── payment plans: agreed fee, our discount, instalments, welcome letter ── */
 let _planUin = null;
+let _planF = { q: '', cls: '', sort: 'new' };   // survives drawer open/close and tab switches
 
 async function tabPlans(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
@@ -2163,8 +2170,8 @@ async function tabPlans(){
   // One view now carries the fee, both term dues and the schedule state, so the
   // list can answer "who owes what, and is their plan set up" in a single read.
   const { data: kids, error } = await s.schema('eurokids').from('v_schedule')
-    .select('uin,student_name,program_name,admission_date,final_fee,total_fee,'
-          + 'term1_due,term2_due,true_due,welcome_sent_at,has_schedule,schedule_flag,next_due_date')
+    .select('uin,student_name,program_name,admission_date,final_fee,total_fee,our_discount,'
+          + 'term1_due,term2_due,true_due,overpaid,welcome_sent_at,has_schedule,schedule_flag,next_due_date,latest_note,note_count')
     .order('admission_date', { ascending: false, nullsFirst: false })
     .limit(2000);
   if (error) return el('body').innerHTML = fail(error);
@@ -2181,23 +2188,24 @@ async function tabPlans(){
     .sort((a, b) => classRank(a) - classRank(b));
   const withPlan = (kids || []).filter(k => Number(k.final_fee || 0) > 0).length;
   const flagChip = k =>
-    !k.has_schedule ? '<span class="chip c-warn">no schedule</span>'
+    k.schedule_flag === 'OVERPAID' ? '<span class="chip c-warn">overpaid</span>'
+    : !k.has_schedule ? '<span class="chip c-warn">no schedule</span>'
     : k.schedule_flag === 'OVERDUE' ? '<span class="chip c-crit">overdue</span>'
     : k.schedule_flag === 'SETTLED' ? '<span class="chip c-good">paid up</span>'
     : k.schedule_flag === 'DUE SOON' ? '<span class="chip c-mute">due soon</span>' : '';
+  const tint = k => k.schedule_flag === 'OVERDUE' ? 't-crit'
+    : (k.schedule_flag === 'SETTLED' ? 't-good' : (k.schedule_flag === 'NO SCHEDULE' || k.schedule_flag === 'OVERPAID') ? 't-warn' : '');
 
   el('body').innerHTML = head('Fees &amp; Plans',
       'Fee, discount, instalments, letter — per child.')
     + `<div class="panel" style="padding:14px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:280px">
+        <input class="in" id="plan-q" placeholder="Find a child…" style="max-width:280px" value="${esc(_planF.q)}">
         <select class="in" id="plan-class" style="max-width:180px">
           <option value="">All classes</option>
-          ${CLASSES.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+          ${CLASSES.map(c => `<option ${_planF.cls === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
         <select class="in" id="plan-sort" style="max-width:210px">
-          <option value="new">Newest admission first</option>
-          <option value="class">Class, then name</option>
-          <option value="due">Most owed first</option>
-          <option value="missing">Needs a schedule first</option></select>
+          ${[['new','Newest admission first'],['class','Class, then name'],['due','Most owed first'],['overdue','Most overdue first'],['missing','Needs a schedule first']]
+            .map(([v,l]) => `<option value="${v}" ${_planF.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
       </div>
       <div class="panel"><div class="ptop"><h2 id="plan-h">All children</h2>
         <span class="hint">${withPlan} of ${(kids||[]).length} have a fee agreed</span></div>
@@ -2208,29 +2216,32 @@ async function tabPlans(){
       <div id="plan-editor"></div>`;
 
   const paint = () => {
-    const q = (el('plan-q').value || '').trim().toLowerCase();
-    const cls = el('plan-class').value.toLowerCase();
-    const sort = el('plan-sort').value;
+    _planF = { q: el('plan-q').value || '', cls: el('plan-class').value, sort: el('plan-sort').value };
+    const q = _planF.q.trim().toLowerCase();
+    const cls = _planF.cls.toLowerCase();
+    const sort = _planF.sort;
     let rows = (kids || []).filter(k =>
       (!q || (k.student_name || '').toLowerCase().includes(q) || (k.uin || '').toLowerCase().includes(q)) &&
       (!cls || (k.program_name || '').trim().toLowerCase() === cls));
 
     if (sort === 'class')        rows.sort((a,b) => classRank(a.program_name) - classRank(b.program_name) || (a.student_name||'').localeCompare(b.student_name||''));
     else if (sort === 'due')     rows.sort((a,b) => Number(b.true_due||0) - Number(a.true_due||0));
+    else if (sort === 'overdue') rows.sort((a,b) => (b.schedule_flag==='OVERDUE') - (a.schedule_flag==='OVERDUE') || Number(b.true_due||0) - Number(a.true_due||0));
     else if (sort === 'missing') rows.sort((a,b) => (a.has_schedule?1:0) - (b.has_schedule?1:0) || Number(b.true_due||0) - Number(a.true_due||0));
 
     el('plan-h').textContent = `${rows.length} ${rows.length === 1 ? 'child' : 'children'}`;
     el('plan-rows').innerHTML = rows.map(k => {
       const fee = Number(k.final_fee || 0);
-      return `<tr><td><strong>${esc(k.student_name)}</strong><br>
+      return `<tr class="${tint(k)}" style="cursor:pointer" onclick="openPlan('${esc(k.uin)}')"><td><strong>${esc(k.student_name)}</strong>
+          ${k.latest_note ? `<div class="hint" style="font-size:12px;color:var(--ink);opacity:.75;margin-top:2px">📝 ${esc(String(k.latest_note).slice(0, 70))}${String(k.latest_note).length > 70 ? '…' : ''}</div>` : ''}
           <span class="uin">${esc(k.uin)}</span></td>
         <td>${esc(k.program_name || '')}</td>
-        <td class="r num">${fee > 0 ? money(fee) : '<span class="chip c-warn">not set</span>'}</td>
+        <td class="r num">${fee > 0 ? money(fee) + (Number(k.our_discount) > 0 ? `<div class="money-disc" style="font-size:12px">− ${money(k.our_discount)}</div>` : '') : '<span class="chip c-warn">not set</span>'}</td>
         <td class="r num" style="color:var(--faint)">${Number(k.term1_due) > 0 ? `<span style="color:var(--ink)">${money(k.term1_due)}</span>` : '·'}</td>
         <td class="r num" style="color:var(--faint)">${Number(k.term2_due) > 0 ? `<span style="color:var(--ink)">${money(k.term2_due)}</span>` : '·'}</td>
-        <td class="r num" style="font-weight:650">${Number(k.true_due) > 0 ? money(k.true_due) : '<span style="color:var(--faint);font-weight:400">·</span>'}</td>
+        <td class="r num">${Number(k.true_due) > 0 ? `<span class="${k.schedule_flag==='OVERDUE'?'money-due':''}" style="font-weight:650">${money(k.true_due)}</span>` : (Number(k.overpaid) > 1 ? `<span class="money-ok">+${money(k.overpaid)}</span>` : '<span class="money-ok">paid</span>')}</td>
         <td>${flagChip(k)}${k.welcome_sent_at ? ' <span class="chip c-mute">letter sent</span>' : ''}</td>
-        <td class="r"><a onclick="openPlan('${esc(k.uin)}')">${fee > 0 ? 'Open' : 'Set up'} ›</a></td></tr>`;
+        <td class="r" style="color:var(--faint)">›</td></tr>`;
     }).join('') || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted)">No match.</td></tr>`;
   };
   paint();
@@ -2239,24 +2250,82 @@ async function tabPlans(){
   ['plan-class','plan-sort'].forEach(id => el(id).onchange = paint);   // selects: once
 }
 
+// One drawer for a child, used from every tab. Opening it never re-renders
+// the list behind it, so filters and scroll position survive.
+function openDrawer(title, subtitle){
+  let bg = el('drawer-bg'), dr = el('drawer');
+  if (!bg) {
+    document.body.insertAdjacentHTML('beforeend',
+      `<div id="drawer-bg" class="drawer-bg"></div>
+       <aside id="drawer" class="drawer" role="dialog" aria-modal="true">
+         <div class="drawer-hd"><div><h2 id="drawer-title"></h2><div class="hint" id="drawer-sub"></div></div>
+           <button class="drawer-x" id="drawer-x" aria-label="Close">×</button></div>
+         <div class="drawer-body" id="drawer-body"></div>
+       </aside>`);
+    bg = el('drawer-bg'); dr = el('drawer');
+    bg.onclick = closeDrawer; el('drawer-x').onclick = closeDrawer;
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+  }
+  el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
+  el('drawer-body').innerHTML = '<div class="loading">Loading…</div>';
+  requestAnimationFrame(() => { bg.classList.add('on'); dr.classList.add('on'); });
+  document.body.style.overflow = 'hidden';
+  return el('drawer-body');
+}
+function closeDrawer(){
+  el('drawer-bg')?.classList.remove('on'); el('drawer')?.classList.remove('on');
+  document.body.style.overflow = '';
+  if (typeof _afterDrawerClose === 'function') { const f = _afterDrawerClose; _afterDrawerClose = null; f(); }
+}
+let _afterDrawerClose = null;
+
+// The statement: what was agreed, what came off, what came in (with dates
+// where we have them), and what is left. Green is money in the family's
+// favour, red is money still owed.
+function statementHtml(c, ledger, items){
+  const fee = Number(c.total_fee || c.epms_invoiced || 0);
+  const disc = Number(c.our_discount || 0);
+  const agreed = Number(c.agreed_fee || (fee - disc));
+  const held = Number(c.uncredited_cash || 0);
+  const owed = Number(c.true_due || 0);
+  const settled = owed <= 1;
+  const d = x => x ? longDate(x) : '';
+  const pays = (ledger || []).filter(l => l.counts_to_fees).sort((a,b) => String(a.on_date).localeCompare(String(b.on_date)));
+  const epmsKnown = pays.filter(l => l.source === 'epms').reduce((a,l) => a + Number(l.amount), 0);
+  const epmsUndated = Math.max(0, Number(c.collected || 0) - epmsKnown);
+  const nextDue = !settled && c.next_due_date ? `Next instalment ${money(c.next_amount || 0)} due ${d(c.next_due_date)}` : '';
+  return `<div class="stmt"><table>
+    <tr class="head"><td colspan="2">Statement</td></tr>
+    <tr><td class="lbl">Annual fee (as invoiced by EuroKids)</td><td class="r">${money(fee)}</td></tr>
+    ${disc > 0 ? `<tr><td class="lbl">Our discount</td><td class="r credit">− ${money(disc)}</td></tr>` : ''}
+    <tr><td class="lbl" style="font-weight:600;color:var(--ink)">Agreed fee</td><td class="r" style="font-weight:600">${money(agreed)}</td></tr>
+    ${epmsUndated > 0 ? `<tr><td class="lbl">Paid to EuroKids <span class="sub" style="padding-left:6px">before we started tracking dates</span></td><td class="r credit">− ${money(epmsUndated)}</td></tr>` : ''}
+    ${pays.map(l => `<tr><td class="lbl">${l.source === 'epms' ? 'Paid to EuroKids' : 'Paid to us'} <span class="sub" style="padding-left:6px">${d(l.on_date)}${l.mode && l.source !== 'epms' ? ' · ' + esc(l.mode) : ''}${Number(l.still_held) > 0.01 ? ' · ' + money(l.still_held) + ' not yet posted' : ''}</span></td>
+       <td class="r credit">− ${money(l.amount)}</td></tr>`).join('')}
+    <tr class="total ${settled ? 'paid' : 'due'}"><td>${settled ? 'Fully paid' : (c.schedule_flag === 'OVERDUE' ? 'Overdue balance' : 'Balance due')}</td><td class="r">${money(owed)}</td></tr>
+    ${nextDue ? `<tr><td colspan="2" class="hint" style="padding-top:8px">${nextDue}</td></tr>` : ''}
+    ${held > 0 ? `<tr><td colspan="2" class="hint" style="background:var(--warn-wash);color:var(--warn)">EuroKids still shows ${money(c.epms_due)} because ${money(held)} of this family's money has not been posted to them yet. The balance above is the honest one.</td></tr>` : ''}
+  </table></div>`;
+}
+
 async function openPlan(uin){
   _planUin = uin;
   const s = getSb();
   const [{ data: kid }, { data: plan }, { data: items }, { data: contact }] = await Promise.all([
-    s.schema('eurokids').from('v_schedule')
-      .select('student_name,father_name,program_name,epms_invoiced,term1_due,term2_due,true_due,collected,schedule_flag')
-      .eq('uin', uin).maybeSingle(),
+    s.schema('eurokids').from('v_schedule').select('*').eq('uin', uin).maybeSingle(),
     s.schema('eurokids').from('payment_plan').select('*').eq('uin', uin).maybeSingle(),
     s.schema('eurokids').from('payment_plan_item').select('seq,amount,due_date,label').eq('uin', uin).order('seq'),
     s.schema('eurokids').from('child_contact').select('*').eq('uin', uin).maybeSingle(),
   ]);
+  const { data: ledger } = await s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date');
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
   const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
 
-  el('plan-editor').innerHTML = `
-    <div class="panel" style="padding:20px;margin-top:16px">
-      <div class="ptop" style="padding:0 0 12px"><h2>${esc(kid?.student_name||uin)}</h2>
-        <span class="hint">${esc(kid?.program_name||'')} · ${esc(uin)}</span></div>
+  const body = openDrawer(kid?.student_name || uin,
+    `${kid?.program_name || ''}${kid?.batch ? ' · ' + kid.batch : ''}${kid?.father_name ? ' · ' + kid.father_name : ''} · ${uin}`);
+  body.innerHTML = `
+    ${statementHtml(kid || {}, ledger, items)}
+    <div class="dsec"><h3>Fee &amp; plan</h3>
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:640px">
         <div class="fld"><label>Total fee <span class="hint" style="font-weight:400">— what EPMS invoiced this child: <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></label>
@@ -2295,9 +2364,17 @@ async function openPlan(uin){
           <button class="btn line sm" id="pf-test">Send a test to me</button>
           <span class="hint">Goes only to this address — the parents are not copied.</span>
         </div>
-        <button class="btn line" onclick="el('plan-editor').innerHTML=''">Close</button>
       </div>
       <div class="hint" style="margin-top:6px">The welcome letter is the warm first email. “Schedule only” is the plainer re-send when a parent asks for the terms again. Both cc admin@eurokidsjmdenclave.org.</div>
+    </div>
+
+    <div class="dsec" id="notes-sec"><h3>Notes <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">— internal, never sent to parents</span></h3>
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <textarea class="in" id="cn-body" rows="2" placeholder="e.g. Father called, will pay by the 20th." style="flex:1"></textarea>
+        <button class="btn sm" id="cn-add">Add</button>
+      </div>
+      <div id="cn-list" style="margin-top:10px"></div>
+    </div>
       ${plan?.welcome_sent_at ? `<div class="hint" style="margin-top:8px">Letter last sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN')}</div>` : ''}
     </div>`;
 
@@ -2417,7 +2494,11 @@ async function openPlan(uin){
 
   el('pf-save').onclick = async () => {
     el('pf-msg').innerHTML = '';
-    if (await savePlan()) { el('pf-msg').innerHTML = '<div class="ok-msg" style="background:var(--good-wash);color:var(--good);padding:9px 12px;border-radius:8px;margin-top:10px">Plan saved.</div>'; tabPlans(); }
+    if (await savePlan()) {
+      el('pf-msg').innerHTML = '<div class="ok">Plan saved.</div>';
+      _afterDrawerClose = () => { if (tab === 'plans') tabPlans(); else if (tab === 'views') tabViews(); };
+      setTimeout(() => openPlan(_planUin), 500);       // refresh the statement in place
+    }
   };
 
   const sendLetter = async (btn) => {
@@ -2463,6 +2544,34 @@ async function openPlan(uin){
   el('pf-send2').onclick = e => sendLetter(e.currentTarget);
   el('pf-send3').onclick = e => sendLetter(e.currentTarget);
 
+  // ── notes ──
+  const drawNotes = async () => {
+    const { data: notes } = await s.schema('eurokids').from('child_note')
+      .select('id,body,author,created_at').eq('uin', uin).order('created_at', { ascending: false });
+    el('cn-list').innerHTML = (notes || []).map(x => `
+      <div style="padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#FAFAFA">
+        <div style="white-space:pre-wrap">${esc(x.body)}</div>
+        <div class="hint" style="margin-top:4px;display:flex;justify-content:space-between">
+          <span>${esc(x.author || '')} · ${new Date(x.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+          <a href="#" data-id="${x.id}" class="cn-del" style="color:var(--muted)">remove</a></div></div>`).join('')
+      || '<div class="hint">No notes yet.</div>';
+    document.querySelectorAll('.cn-del').forEach(a => a.onclick = async ev => {
+      ev.preventDefault();
+      if (!confirm('Remove this note?')) return;
+      await s.schema('eurokids').from('child_note').delete().eq('id', Number(a.dataset.id));
+      drawNotes();
+    });
+  };
+  el('cn-add').onclick = async () => {
+    const body = (el('cn-body').value || '').trim(); if (!body) return;
+    const who = (profile?.full_name || session?.user?.email || '').split('@')[0];
+    const { error: ne } = await s.schema('eurokids').from('child_note')
+      .insert({ uin, body, author: who, created_by: session?.user?.id || null });
+    if (ne) return alert('Could not save the note: ' + ne.message);
+    el('cn-body').value = ''; drawNotes();
+  };
+  drawNotes();
+
   el('pf-test').onclick = async e => {
     const btn = e.currentTarget, to = (el('pf-test-to').value || '').trim();
     if (!to.includes('@')) { el('pf-msg').innerHTML = '<div class="err">Enter an email address to test with.</div>'; return; }
@@ -2482,7 +2591,7 @@ async function openPlan(uin){
     } finally { btn.disabled = false; btn.textContent = label; }
   };
 
-  el('plan-editor').scrollIntoView({ behavior:'smooth', block:'start' });
+  el('drawer-body').scrollTop = 0;
 }
 
 /* ── discounts: where the phantom dues get corrected ──── */
