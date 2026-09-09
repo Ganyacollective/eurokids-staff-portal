@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=21">
-<link rel="prefetch" href="/brand/enquiries.js?v=21" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=22">
+<link rel="prefetch" href="/brand/enquiries.js?v=22" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2138,7 +2138,7 @@ function stepChild(dir){
   const i = _planOrder.indexOf(_planUin);
   if (i < 0) return;
   const next = _planOrder[i + dir];
-  if (next) openPlan(next);
+  if (next && leavingIsSafe()) openPlan(next);
 }
 // Grey out the end of the list rather than hiding the control, so the buttons
 // do not jump about as you move through.
@@ -2288,13 +2288,25 @@ function openDrawer(title, subtitle){
   el('drawer-wide').textContent = wide ? '⤡' : '⤢';
   el('drawer-body').innerHTML = '<div class="loading">Loading…</div>';
   el('drawer-foot').innerHTML = '';
+  // The fields the previous occupant was guarding no longer exist.
+  _unsaved = null; markSaved = null;
   // Only a child sheet can step to the next one; openPlan turns these back on.
   el('drawer-prev').style.display = el('drawer-next').style.display = 'none';
   requestAnimationFrame(() => { bg.classList.add('on'); dr.classList.add('on'); });
   document.body.style.overflow = 'hidden';
   return el('drawer-body');
 }
-function closeDrawer(){
+// Set by the child sheet: answers "is there typing here that has not been
+// saved?". Nothing leaves the sheet without asking first.
+let _unsaved = null, markSaved = null;
+function leavingIsSafe(){
+  const what = typeof _unsaved === 'function' ? _unsaved() : null;
+  if (!what) return true;
+  return confirm(`You have changed ${what} but not pressed Save plan.\n\nLeave anyway and lose the change?`);
+}
+function closeDrawer(force){
+  if (force !== true && !leavingIsSafe()) return;
+  _unsaved = null;
   el('drawer-bg')?.classList.remove('on'); el('drawer')?.classList.remove('on');
   document.body.style.overflow = '';
   if (typeof _afterDrawerClose === 'function') { const f = _afterDrawerClose; _afterDrawerClose = null; f(); }
@@ -2315,6 +2327,25 @@ function epmsSchemeLabel(k){
   const s = String(k || '').trim();
   if (!s || /^no discount$/i.test(s)) return '';
   return /discount$/i.test(s) ? s.toLowerCase() : `${s.toLowerCase()} discount`;
+}
+
+// The promise section, on its own, so recording a promise can repaint just this
+// box. It used to re-open the whole sheet, which threw away any instalment date
+// or fee you had typed but not yet saved.
+function promiseBoxHtml(p, kid){
+  const today = new Date().toISOString().slice(0, 10);
+  return `
+      ${p ? `<div class="row"><div class="l">${p.promised_on < today ? '<strong style="color:var(--red)">Promised and not paid</strong>' : '<strong>Promised</strong>'}
+          <span class="sub">${p.amount ? money(p.amount) : 'the balance'} by ${longDate(p.promised_on)}${p.spoke_to ? ' · spoke to ' + esc(p.spoke_to) : ''}${p.taken_by ? ' · noted by ' + esc(p.taken_by) : ''}${p.note ? '<br>“' + esc(p.note) + '”' : ''}</span></div>
+        <button class="btn line sm" id="pr-cancel">Clear</button></div>` : ''}
+      <div class="row"><div class="l">They will pay</div><div class="inst">
+        <input class="in num" id="pr-amt" type="number" placeholder="${esc(String(Math.round(Number(kid?.true_due || 0))))}" style="width:120px">
+        <span class="hint">by</span><input class="in" id="pr-date" type="date" value="${new Date(Date.now() + 3 * 864e5).toISOString().slice(0,10)}"></div></div>
+      <div class="row"><div class="l">Spoke to</div><input class="in wide" id="pr-who" placeholder="e.g. father, on the phone"></div>
+      <div class="rowx"><textarea class="in" id="pr-note" rows="2" placeholder="What they said — e.g. salary on the 2nd, will transfer that evening." style="width:100%"></textarea></div>
+      <label class="row" style="cursor:pointer"><span class="l">Remind the parent that morning<span class="sub">One email on the day, in their own words. Nothing is sent if the money has already arrived.</span></span>
+        <input type="checkbox" class="sw" id="pr-remind" checked></label>
+      <button class="linkrow" id="pr-save">Record this promise</button>`;
 }
 
 function statementHtml(c, ledger, items){
@@ -2373,6 +2404,7 @@ function statementHtml(c, ledger, items){
 
 async function openPlan(uin){
   _planUin = uin;
+  _unsaved = null;          // the sheet being replaced no longer has a claim
   const s = getSb();
   // The roster is already in memory, so the name, the class and the balance
   // can be on screen before a single request goes out. Everything else — the
@@ -2463,18 +2495,8 @@ async function openPlan(uin){
         : '<div class="rowx hint">Nothing has been sent to this family yet.</div>'}
     </div><div class="foot">The office is no longer copied on every message — this is the record.</div></div>
 
-    <div class="grp" id="promise-sec"><h3>Promise to pay</h3><div class="box">
-      ${openPromise ? `<div class="row"><div class="l">${openPromise.promised_on < new Date().toISOString().slice(0,10) ? '<strong style="color:var(--red)">Promised and not paid</strong>' : '<strong>Promised</strong>'}
-          <span class="sub">${openPromise.amount ? money(openPromise.amount) : 'the balance'} by ${longDate(openPromise.promised_on)}${openPromise.spoke_to ? ' · spoke to ' + esc(openPromise.spoke_to) : ''}${openPromise.taken_by ? ' · noted by ' + esc(openPromise.taken_by) : ''}${openPromise.note ? '<br>“' + esc(openPromise.note) + '”' : ''}</span></div>
-        <button class="btn line sm" id="pr-cancel">Clear</button></div>` : ''}
-      <div class="row"><div class="l">They will pay</div><div class="inst">
-        <input class="in num" id="pr-amt" type="number" placeholder="${esc(String(Math.round(Number(kid?.true_due || 0))))}" style="width:120px">
-        <span class="hint">by</span><input class="in" id="pr-date" type="date" value="${new Date(Date.now() + 3 * 864e5).toISOString().slice(0,10)}"></div></div>
-      <div class="row"><div class="l">Spoke to</div><input class="in wide" id="pr-who" placeholder="e.g. father, on the phone"></div>
-      <div class="rowx"><textarea class="in" id="pr-note" rows="2" placeholder="What they said — e.g. salary on the 2nd, will transfer that evening." style="width:100%"></textarea></div>
-      <label class="row" style="cursor:pointer"><span class="l">Remind the parent that morning<span class="sub">One email on the day, in their own words. Nothing is sent if the money has already arrived.</span></span>
-        <input type="checkbox" class="sw" id="pr-remind" checked></label>
-      <button class="linkrow" id="pr-save">Record this promise</button>
+    <div class="grp" id="promise-sec"><h3>Promise to pay</h3><div class="box" id="promise-box">
+      ${promiseBoxHtml(openPromise, kid)}
     </div><div class="foot">It appears on the dashboard on the day, and the note goes into the log below.</div></div>
 
     <div class="grp" id="notes-sec"><h3>Call log &amp; notes</h3><div class="box">
@@ -2631,6 +2653,7 @@ async function openPlan(uin){
       uin: _planUin, parent_email1: el('pf-em1').value.trim() || null,
       parent_email2: el('pf-em2').value.trim() || null, updated_at: new Date().toISOString() }, { onConflict: 'uin' });
     invalidate();
+    if (typeof markSaved === 'function') markSaved();   // this is now the baseline
     return true;
   };
 
@@ -2724,31 +2747,66 @@ async function openPlan(uin){
     el('cn-body').value = ''; drawNotes();
   };
   // ── promise to pay ──
-  const prCancel = el('pr-cancel');
-  if (prCancel) prCancel.onclick = async () => {
-    if (!confirm('Clear this promise? It stops the reminder and takes it off the dashboard.')) return;
-    await s.schema('eurokids').from('payment_promise').update({ status: 'cancelled' }).eq('id', openPromise.id);
-    invalidate(); openPlan(uin);
+  // Recording a promise repaints only its own box. Re-opening the whole sheet
+  // used to wipe an instalment date or a fee that had been typed but not saved
+  // — the work simply vanished, with no warning that it was about to.
+  let promiseNow = openPromise;
+  const repaintPromise = () => {
+    el('promise-box').innerHTML = promiseBoxHtml(promiseNow, kid);
+    wirePromise();
   };
-  el('pr-save').onclick = async e => {
-    const btn = e.currentTarget;
-    const on = el('pr-date').value;
-    if (!on) return alert('Which day did they promise?');
-    btn.disabled = true; btn.textContent = 'Saving…';
-    const amount = Number(el('pr-amt').value) || null;
-    const note = (el('pr-note').value || '').trim() || null;
-    const spoke = (el('pr-who').value || '').trim() || null;
-    const me = (profile?.full_name || session?.user?.email || '').split('@')[0];
-    // an older open promise is superseded, not duplicated
-    await s.schema('eurokids').from('payment_promise').update({ status: 'cancelled' }).eq('uin', uin).eq('status', 'open');
-    const { error } = await s.schema('eurokids').from('payment_promise').insert({
-      uin, amount, promised_on: on, note, spoke_to: spoke, taken_by: me,
-      remind_parent: el('pr-remind').checked, created_by: session?.user?.id || null });
-    if (error) { btn.disabled = false; btn.textContent = 'Record this promise'; return alert('Could not save: ' + error.message); }
-    // the same words go into the log, so the call is on the record either way
-    await s.schema('eurokids').from('child_note').insert({ uin, author: me, created_by: session?.user?.id || null,
-      body: `Promised ${amount ? money(amount) : 'the balance'} by ${longDate(on)}${spoke ? ' · spoke to ' + spoke : ''}${note ? ' — ' + note : ''}` });
-    invalidate(); openPlan(uin);
+  function wirePromise(){
+    const prCancel = el('pr-cancel');
+    if (prCancel) prCancel.onclick = async () => {
+      if (!confirm('Clear this promise? It stops the reminder and takes it off the dashboard.')) return;
+      await s.schema('eurokids').from('payment_promise').update({ status: 'cancelled' }).eq('id', promiseNow.id);
+      promiseNow = null; invalidate('sched'); repaintPromise();
+    };
+    el('pr-save').onclick = async e => {
+      const btn = e.currentTarget;
+      const on = el('pr-date').value;
+      if (!on) return alert('Which day did they promise?');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      const amount = Number(el('pr-amt').value) || null;
+      const note = (el('pr-note').value || '').trim() || null;
+      const spoke = (el('pr-who').value || '').trim() || null;
+      const me = (profile?.full_name || session?.user?.email || '').split('@')[0];
+      // an older open promise is superseded, not duplicated
+      await s.schema('eurokids').from('payment_promise').update({ status: 'cancelled' }).eq('uin', uin).eq('status', 'open');
+      const { data: saved, error } = await s.schema('eurokids').from('payment_promise').insert({
+        uin, amount, promised_on: on, note, spoke_to: spoke, taken_by: me,
+        remind_parent: el('pr-remind').checked, created_by: session?.user?.id || null }).select().single();
+      if (error) { btn.disabled = false; btn.textContent = 'Record this promise'; return alert('Could not save: ' + error.message); }
+      // the same words go into the log, so the call is on the record either way
+      await s.schema('eurokids').from('child_note').insert({ uin, author: me, created_by: session?.user?.id || null,
+        body: `Promised ${amount ? money(amount) : 'the balance'} by ${longDate(on)}${spoke ? ' · spoke to ' + spoke : ''}${note ? ' — ' + note : ''}` });
+      promiseNow = saved;
+      invalidate('sched');           // the dashboard's counts, not this sheet
+      repaintPromise();
+      drawNotes();                   // the call appears in the log below
+    };
+  }
+  wirePromise();
+
+  // What "unsaved" means here: the fee, the concession and its reason, the
+  // instalments, the parents' addresses, the note that goes into letters.
+  // Everything else on this sheet saves itself on the spot.
+  const planFingerprint = () => JSON.stringify([
+    el('pf-total')?.value, el('pf-disc')?.value, el('pf-why')?.value,
+    el('pf-em1')?.value, el('pf-em2')?.value, el('pf-note')?.value,
+    [...document.querySelectorAll('.pf-amt')].map(x => x.value),
+    [...document.querySelectorAll('.pf-due')].map(x => x.value),
+  ]);
+  let planSaved = planFingerprint();
+  markSaved = () => { planSaved = planFingerprint(); };
+  _unsaved = () => {
+    const now = JSON.parse(planFingerprint()), was = JSON.parse(planSaved);
+    if (JSON.stringify(now) === JSON.stringify(was)) return null;
+    const names = ['the annual fee', 'the concession', 'the concession reason',
+                   'an email address', 'an email address', 'the note in letters',
+                   'an instalment amount', 'an instalment date'];
+    const changed = names.filter((_, i) => JSON.stringify(now[i]) !== JSON.stringify(was[i]));
+    return [...new Set(changed)].join(' and ') || 'something on this sheet';
   };
 
   drawNotes();
@@ -2850,7 +2908,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=21"></script>
+<script src="/brand/enquiries.js?v=22"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
