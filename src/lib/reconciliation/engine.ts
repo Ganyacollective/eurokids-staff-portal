@@ -215,14 +215,16 @@ export function reconcile(input: ReconcileInput): ReconcileOutput {
 
     const inMin = timeToMinutes(row.first_punch);
     const outMin = timeToMinutes(row.last_punch);
-    const status = (row.petpooja_status || "").trim();
-
+    // PetPooja is trusted for the clock and nothing else. Its status labels are
+    // guesses from a till system that has never seen our leave applications,
+    // holidays, vacations or free Saturdays. Two punches, one punch, or none —
+    // that is the whole of what it tells us.
     const isSaturday = dow === 6;
     const isSunday = dow === 0;
     const sched = isSaturday ? SATURDAY_REPORTING_MINUTES : emp.reporting_minutes;
 
-    // Forgot punch detection: only one of in/out, marked Absent
-    const forgotPunch = /absent/i.test(status) && ((inMin && !outMin) || (outMin && !inMin));
+    // One punch and not the other: she was here, the machine caught half of it.
+    const forgotPunch = (inMin != null) !== (outMin != null);
     if (forgotPunch) {
       anomalies.push({
         kind: "forgot_punch",
@@ -239,8 +241,8 @@ export function reconcile(input: ReconcileInput): ReconcileOutput {
       return;
     }
 
-    // Week off (Sundays mostly)
-    if (/week\s*off/i.test(status)) {
+    // Sunday is the week off, by the calendar rather than by a label.
+    if (isSunday && inMin == null && outMin == null) {
       reconciledDays.push({
         raw_row_index: idx, employee_id: emp.id, attendance_date: date, day_of_week: dow,
         scheduled_minutes: null, punch_in_minutes: null, punch_out_minutes: null,
@@ -250,8 +252,9 @@ export function reconcile(input: ReconcileInput): ReconcileOutput {
       return;
     }
 
-    // Absent
-    if (/absent/i.test(status)) {
+    // No punch in and no punch out: she was not here, and why is a question our
+    // own records answer.
+    if (inMin == null && outMin == null) {
       if (matchedLeave) {
         const dayStatus: DayStatus =
           matchedLeave.leave_type === "EL" ? "EarnedLeave" :
@@ -314,13 +317,14 @@ export function reconcile(input: ReconcileInput): ReconcileOutput {
         status: dayStatus,
       });
     } else {
-      // PetPooja gave us an unrecognized status with no punch info
+      // Unreachable: every remaining case has at least one punch, and both the
+      // no-punch and single-punch paths return above. Kept as a guard.
       reconciledDays.push({
         raw_row_index: idx, employee_id: emp.id, attendance_date: date, day_of_week: dow,
         scheduled_minutes: sched, punch_in_minutes: null, punch_out_minutes: null,
         late_minutes: null, is_late_strike: false,
-        status: status === "FD" || /full/i.test(status) ? "FullDay" : "LWP",
-        notes: `Unrecognized PetPooja status: "${status}"`,
+        status: "LWP",
+        notes: `No punch recorded`,
       });
     }
   });

@@ -880,7 +880,6 @@ function reconcile(rawRows, month){
     // visible in the report instead of being swallowed by the "Vacation" label.
     const inMinPre  = timeToMin(row.first_punch);
     const outMinPre = timeToMin(row.last_punch);
-    const ppStatusPre = (row.petpooja_status||"").trim();
     // PetPooja is trusted for two things and two things only: what time she
     // punched in, and what time she punched out. Its status labels — "Absent",
     // "Week Off", "FD", "HD", the blanks and the misspellings — are guesses made
@@ -926,7 +925,6 @@ function reconcile(rawRows, month){
     const matched = leavesFor(emp.id, date);
     const inMin = timeToMin(row.first_punch);
     const outMin = timeToMin(row.last_punch);
-    const status = (row.petpooja_status||"").trim();
     const stuHol = isStudentHoliday(date);
     const specialDay = isSpecialDay(date);
     const sched = (isSat || stuHol) ? SAT_REPORTING_MIN : emp.reporting_minutes;
@@ -997,48 +995,35 @@ function reconcile(rawRows, month){
       return;
     }
 
-    // PetPooja's "Week Off" label is honoured only when there's no actual punch data.
-    // If a teacher punched in on a day PetPooja marked as Week Off (common on Saturdays
-    // where the roster auto-marks the day as off but the teacher actually came),
-    // her attendance must be visible — show as Full Day, not Week Off.
-    if (/week\s*off/i.test(status)) {
-      if (inMin != null || outMin != null) {
-        // Fall through to the normal punch-processing block below — she came in.
-      } else {
-        reconciledDays.push({ employee_id:emp.id, date, dow, status:"WeekOff" });
-        ensure(emp).weekOffs++;
-        return;
-      }
-    }
-
-    if (/absent/i.test(status)) {
+    // Nobody punched in and nobody punched out. She was not here — and why she
+    // was not here is a question our own records answer, never PetPooja's.
+    if (inMin == null && outMin == null) {
       if (matched) {
         const isHalfLeave = Number(matched.total_days) === 0.5;
         const dayStatus = matched.leave_type === "EL" ? "EarnedLeave" : matched.leave_type === "CL" ? "CasualLeave" : "LWP";
         if (isHalfLeave && dayStatus !== "LWP") {
-          // Half-day leave but absent the WHOLE day: half covered by leave, other half unpaid.
-          reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, leave_id:matched.id, note: `Half-day ${matched.leave_type} — other half LWP (absent full day): ${matched.reason||""}` });
-          const s = ensure(emp);
-          if (dayStatus === "EarnedLeave") s.elDays += 0.5; else s.clDays += 0.5;
-          s.lwpDays += 0.5;
+          // Half a day was approved and she took the whole one: half covered, half unpaid.
+          reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, leave_id:matched.id, note: `Half-day ${matched.leave_type} — other half LWP (away all day): ${matched.reason||""}` });
+          const s2 = ensure(emp);
+          if (dayStatus === "EarnedLeave") s2.elDays += 0.5; else s2.clDays += 0.5;
+          s2.lwpDays += 0.5;
         } else {
           reconciledDays.push({ employee_id:emp.id, date, dow, status:dayStatus, leave_id:matched.id, note: matched.leave_type+": "+(matched.reason||"") });
-          const s = ensure(emp);
-          if (dayStatus === "EarnedLeave") s.elDays++;
-          else if (dayStatus === "CasualLeave") s.clDays++;
-          else s.lwpDays++;
+          const s2 = ensure(emp);
+          if (dayStatus === "EarnedLeave") s2.elDays++;
+          else if (dayStatus === "CasualLeave") s2.clDays++;
+          else s2.lwpDays++;
         }
       } else if (hol && !hol.is_mandatory) {
-        // Optional holiday, absent, no leave application — teacher chose to observe it.
-        // Treat as a paid Holiday and increment her optional-holiday tally so HR can
-        // see who's used how many across the year.
+        // Optional holiday, away, no leave application — she chose to observe it.
         reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday", note:`Optional holiday observed: ${hol.name}`, is_optional_holiday: true, holiday_name: hol.name });
-        const s = ensure(emp);
-        s.holidays++;
-        s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1;
+        const s2 = ensure(emp);
+        s2.holidays++;
+        s2.optionalHolidaysObserved = (s2.optionalHolidaysObserved || 0) + 1;
       } else {
-        reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"No leave application for this day" });
-        const s = ensure(emp); s.lwpDays++; if (isSat) s.satAbsences++;
+        // Saturdays fall through to the free-Saturday allowance in Pass 2.
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"No punch and no leave application for this day" });
+        const s2 = ensure(emp); s2.lwpDays++; if (isSat) s2.satAbsences++;
       }
       return;
     }
@@ -1077,36 +1062,6 @@ function reconcile(rawRows, month){
         const s = ensure(emp);
         if (dayStatus === "HalfLWP") { s.halfLwp++; s.fd += 0.5; s.lateDetails.push({date, in:inMin, late:lateMin, sched}); }
         else { s.fd++; if (isStrike) { s.lateStrikes++; s.lateDetails.push({date, in:inMin, late:lateMin, sched}); } }
-      }
-    } else if (/^FD$|^F\.?D\.?$|^Full\s*Day$|^Present$/i.test(status)) {
-      // PetPooja said FD but no parseable punch time — trust the label, no annotation noise
-      reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", out:outMin });
-      ensure(emp).fd++;
-    } else if (/^HD$|^H\.?D\.?$|^Half\s*Day$/i.test(status)) {
-      reconciledDays.push({ employee_id:emp.id, date, dow, status:"HalfDay" });
-      ensure(emp).fd += 0.5;
-    } else {
-      // No punch data AND no recognised attendance label. Before defaulting to LWP,
-      // check whether this date is a holiday for the teacher — PetPooja often exports
-      // an unrecognised status like "H", "Holiday", or blank on holiday dates.
-      if (hol && !hol.is_mandatory) {
-        // Optional holiday observed
-        reconciledDays.push({
-          employee_id:emp.id, date, dow, status:"Holiday",
-          note:`Optional holiday observed: ${hol.name}`,
-          is_optional_holiday: true, holiday_name: hol.name,
-        });
-        const s = ensure(emp);
-        s.holidays++;
-        s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1;
-      } else if (hol?.is_mandatory && !emp.works_through_holidays && !(hol.working_employee_ids||[]).includes(emp.id)) {
-        // Mandatory holiday that applies to this employee
-        reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday", note: hol.name });
-        ensure(emp).holidays++;
-      } else {
-        // Truly unknown — LWP
-        reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"Unknown PetPooja status: "+status });
-        ensure(emp).lwpDays++;
       }
     }
   });
