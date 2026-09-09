@@ -95,8 +95,9 @@ export async function POST(req: NextRequest) {
     if (profErr) return NextResponse.json({ error: "Profile: " + profErr.message }, { status: 500 });
 
     if (modules.length) {
-      const rows = modules.map(mod => ({ user_id: uid, module: mod, granted_by: gate.userId }));
-      const { error: grantErr } = await a.from("module_access").insert(rows);
+      const rows = [...new Set(modules)].map(mod => ({ user_id: uid, module: mod, granted_by: gate.userId }));
+      const { error: grantErr } = await a.from("module_access")
+        .upsert(rows, { onConflict: "user_id,module", ignoreDuplicates: true });
       if (grantErr) return NextResponse.json({ error: "Grants: " + grantErr.message }, { status: 500 });
     }
     return NextResponse.json({ ok: true, user_id: uid, email, modules });
@@ -116,11 +117,19 @@ export async function POST(req: NextRequest) {
     const uid = body.user_id || "";
     const modules = (body.modules || []).filter(mod => VALID_MODULES.has(mod));
     if (!uid) return NextResponse.json({ error: "user_id required" }, { status: 400 });
-    const { error: delErr } = await a.from("module_access").delete().eq("user_id", uid);
+    // Granting the same module twice — a double click, a checkbox counted
+    // twice, or a retry after a slow reply — used to collide with the
+    // (user_id, module) primary key and fail the whole save. Saying "make it
+    // exactly these" is idempotent: drop what is not wanted, add what is
+    // missing, and let a grant that already exists pass quietly.
+    const want = [...new Set(modules)];
+    const del = a.from("module_access").delete().eq("user_id", uid);
+    const { error: delErr } = want.length ? await del.not("module", "in", `(${want.join(",")})`) : await del;
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
-    if (modules.length) {
-      const rows = modules.map(mod => ({ user_id: uid, module: mod, granted_by: gate.userId }));
-      const { error: insErr } = await a.from("module_access").insert(rows);
+    if (want.length) {
+      const rows = want.map(mod => ({ user_id: uid, module: mod, granted_by: gate.userId }));
+      const { error: insErr } = await a.from("module_access")
+        .upsert(rows, { onConflict: "user_id,module", ignoreDuplicates: true });
       if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
     }
     return NextResponse.json({ ok: true, user_id: uid, modules });
