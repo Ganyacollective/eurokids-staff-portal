@@ -46,6 +46,9 @@ export type LeaveApplication = {
   leave_type: "CL" | "EL" | "LWP" | "Maternity" | "Bereavement" | "Other";
   start_date: string;
   end_date: string;
+  // 0.5 marks a half-day. A half-day approved for a morning is the difference
+  // between "came in at 11:34 with permission" and "199 minutes late".
+  total_days?: number | string | null;
   status: "Pending" | "Approved" | "Rejected" | "Cancelled";
 };
 
@@ -273,6 +276,26 @@ export function reconcile(input: ReconcileInput): ReconcileOutput {
 
     // Has punch in (and out, presumably)
     if (inMin != null) {
+      // An approved leave used to be consulted only when PetPooja said "Absent".
+      // So a teacher with a half-day approved, who then came in for the second
+      // half, was judged against her normal reporting time — marked hours late
+      // and docked half a day for taking the leave she had been granted.
+      if (matchedLeave && matchedLeave.leave_type !== "LWP") {
+        const half = Number(matchedLeave.total_days) === 0.5;
+        const leaveStatus: DayStatus = matchedLeave.leave_type === "EL" ? "EarnedLeave" : "CasualLeave";
+        reconciledDays.push({
+          raw_row_index: idx, employee_id: emp.id, attendance_date: date, day_of_week: dow,
+          scheduled_minutes: sched, punch_in_minutes: inMin, punch_out_minutes: outMin,
+          late_minutes: null, is_late_strike: false,
+          status: half ? leaveStatus : "FullDay",
+          matched_leave_id: half ? matchedLeave.id : undefined,
+          notes: half
+            ? `Half-day ${matchedLeave.leave_type} approved; present for the other half.`
+            : `${matchedLeave.leave_type} approved but present — leave not deducted.`,
+        });
+        return;
+      }
+
       const lateMin = inMin - sched;
       let dayStatus: DayStatus = "FullDay";
       let isStrike = false;
@@ -330,8 +353,16 @@ export function reconcile(input: ReconcileInput): ReconcileOutput {
         s.lwp_days++;
         if (d.day_of_week === 6) s.saturday_absences++;
         break;
-      case "CasualLeave": s.cl_days++; break;
-      case "EarnedLeave": s.el_days++; break;
+      // A leave day she also punched in on is a half-day taken and a half
+      // worked — half the leave spent, half the day paid as attendance.
+      case "CasualLeave":
+        if (d.punch_in_minutes != null) { s.cl_days += 0.5; s.full_days += 0.5; }
+        else s.cl_days++;
+        break;
+      case "EarnedLeave":
+        if (d.punch_in_minutes != null) { s.el_days += 0.5; s.full_days += 0.5; }
+        else s.el_days++;
+        break;
       case "WeekOff": s.week_offs++; break;
       case "Holiday": case "OptionalHoliday": s.holidays++; break;
       case "Vacation": s.vacation_days++; break;

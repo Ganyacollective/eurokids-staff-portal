@@ -881,7 +881,13 @@ function reconcile(rawRows, month){
     const inMinPre  = timeToMin(row.first_punch);
     const outMinPre = timeToMin(row.last_punch);
     const ppStatusPre = (row.petpooja_status||"").trim();
-    const hasPunchData = (inMinPre != null) || (outMinPre != null) || /present|^fd$|f\.?d\.?|^hd$|half\s*day|full\s*day/i.test(ppStatusPre);
+    // PetPooja is trusted for two things and two things only: what time she
+    // punched in, and what time she punched out. Its status labels — "Absent",
+    // "Week Off", "FD", "HD", the blanks and the misspellings — are guesses made
+    // by a till system that knows nothing about our leave applications, our
+    // holidays, our vacations or our free Saturdays. We know all of those, so
+    // its opinion is discarded and only the clock is kept.
+    const hasPunchData = (inMinPre != null) || (outMinPre != null);
 
     // Does this vacation apply to this employee?
     //   • Permanent opt-out: emp.works_through_vacations = true (daycare staff, didis on year-round duty)
@@ -925,7 +931,8 @@ function reconcile(rawRows, month){
     const specialDay = isSpecialDay(date);
     const sched = (isSat || stuHol) ? SAT_REPORTING_MIN : emp.reporting_minutes;
     const schedNote = stuHol ? `Student holiday "${stuHol.name||''}" — uniform 9:00 AM` : null;
-    const forgotPunch = /absent/i.test(status) && ((inMin && !outMin) || (outMin && !inMin));
+    // One punch and not the other: she was here, the machine only caught half of it.
+    const forgotPunch = (inMin != null) !== (outMin != null);
 
     // Special day with manual override — use the override status directly, regardless of PetPooja
     if (specialDay) {
@@ -958,7 +965,19 @@ function reconcile(rawRows, month){
     }
 
     if (forgotPunch) {
-      if (inMin != null) {
+      if (inMin != null && matched && matched.leave_type !== "LWP") {
+        // Approved leave, came in anyway, and forgot to punch out. Two separate
+        // lapses; neither makes her late against a morning she had off.
+        const isHalf = Number(matched.total_days) === 0.5;
+        const st = matched.leave_type === "EL" ? "EarnedLeave" : "CasualLeave";
+        anomalies.push({ id: uid(), kind:"forgot_punch", employee_id:emp.id, date, description:`${emp.display_name} on ${fmtDateShort(date)}: forgot to punch OUT (in at ${minToTime(inMin)}). ${matched.leave_type} was approved for this day, so no late strike applies.` });
+        reconciledDays.push({ employee_id:emp.id, date, dow, status: isHalf ? st : "FullDay", in:inMin, out:null,
+          leave_id: matched.id, scheduledMin: sched,
+          note: `${isHalf ? "Half-day " : ""}${matched.leave_type} approved; forgot to punch out.` });
+        const s = ensure(emp);
+        if (isHalf) { if (st === "EarnedLeave") s.elDays += 0.5; else s.clDays += 0.5; s.fd += 0.5; }
+        else s.fd++;
+      } else if (inMin != null) {
         // Forgot to punch OUT — but the IN time is reliable, so still compute late strike against it
         const lateMin = inMin - (isSat || stuHol ? SAT_REPORTING_MIN : emp.reporting_minutes);
         let dayStatus = "FullDay", isStrike = false;
@@ -1028,6 +1047,26 @@ function reconcile(rawRows, month){
       // Special day with skip_late_strikes flag — treat any punch-in as FullDay regardless of time
       if (specialDay && specialDay.skip_late_strikes) {
         reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMin, out:outMin, scheduledMin: sched, note: `${specialDay.name} (no late strikes apply)` });
+        ensure(emp).fd++;
+      } else if (matched && Number(matched.total_days) === 0.5 && matched.leave_type !== "LWP") {
+        // She had the morning off with permission, and came in for the rest of
+        // the day. Judging her punch-in against 8:15 made her 199 minutes late
+        // and cost her half a day's pay — punished for the leave she was
+        // granted. The approved half covers the absence; the half she worked is
+        // a full half. No lateness, no strike.
+        const half = matched.leave_type === "EL" ? "EarnedLeave" : "CasualLeave";
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:half, in:inMin, out:outMin,
+          leave_id: matched.id, scheduledMin: sched,
+          note: `Half-day ${matched.leave_type} approved${matched.reason ? " — " + matched.reason : ""}; came in at ${minToTime(inMin)} for the other half.` });
+        const s = ensure(emp);
+        if (half === "EarnedLeave") s.elDays += 0.5; else s.clDays += 0.5;
+        s.fd += 0.5;
+      } else if (matched && matched.leave_type !== "LWP") {
+        // A full day's leave was approved and she came in anyway. She is present
+        // and the leave is not spent — but she is not late against a day she was
+        // not required to attend.
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMin, out:outMin, scheduledMin: sched,
+          note: `${matched.leave_type} was approved for today but she came in — leave not deducted.` });
         ensure(emp).fd++;
       } else {
         const lateMin = inMin - sched;
