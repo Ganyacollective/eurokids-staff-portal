@@ -768,6 +768,7 @@ async function initApp(){
     // starting the other just added a round trip to every cold start.
     await Promise.all([loadState(), loadInbox()]);
     runMigrations();
+    refreshStaleMonths();
     renderAll();
   } catch (e) {
     alert('Failed to load: ' + e.message);
@@ -827,6 +828,18 @@ function dowName(d){ return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]; }
 // Reconciliation
 // ============================================================
 const LATE_GRACE_MIN = 10, HALF_LWP_THRESHOLD = 90, STRIKE_TO_HALF_DAY = 3, SAT_FREE_PER_MONTH = 2, SAT_REPORTING_MIN = 540;
+
+// Reconciliation output is SAVED, not recomputed on every render — a month's
+// verdict is a record, and re-deriving it silently under HR's feet would be
+// worse than stale. But that also means a fix to the rules changes nothing for
+// months already imported: Darshana's half-day was still docked days after the
+// bug was fixed, because August was decided before the fix existed.
+//
+// So the engine carries a version. Any saved month stamped with an older one is
+// quietly re-run at startup from the raw punches it already holds — no
+// re-upload, nobody having to know a "Re-run" button exists. Bump this whenever
+// the rules change.
+const ENGINE_VERSION = 3;
 
 function reconcile(rawRows, month){
   const holByDate = new Map(); state.holidays.forEach(h => holByDate.set(h.date, h));
@@ -1342,17 +1355,39 @@ async function runReconciliation(){
   // see. Keep the publish stamp, and make the overwrite an explicit choice.
   const prev = state.attendanceMonths[month];
   if (prev && prev.published_at && !confirm(`${month} is already published to teachers. Re-import and replace it?`)) return;
-  state.attendanceMonths[month] = { rawRows, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], importedAt: new Date().toISOString(),
+  state.attendanceMonths[month] = { rawRows, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], engineVersion: ENGINE_VERSION, importedAt: new Date().toISOString(),
     ...(prev && prev.published_at ? { published_at: prev.published_at, published_by: prev.published_by } : {}) };
   state.activeMonth = month;
   saveState();
   showResult(`✓ Imported ${rawRows.length} rows · ${result.summaries.length} per-employee summaries · ${result.anomalies.length} anomalies flagged`, "ok");
   renderAll();
 }
+// Every saved month decided by an older set of rules, re-decided against the
+// current ones. The raw punches are already stored, so nothing is re-uploaded
+// and nothing is lost; HR overrides and forgiven strikes are re-applied by
+// reconcile() exactly as they are on any other run.
+function refreshStaleMonths(){
+  const stale = Object.keys(state.attendanceMonths || {})
+    .filter(m => (state.attendanceMonths[m]?.rawRows || []).length
+              && (state.attendanceMonths[m].engineVersion || 0) < ENGINE_VERSION);
+  if (!stale.length) return;
+  for (const month of stale) {
+    const m = state.attendanceMonths[month];
+    try {
+      const result = reconcile(m.rawRows, month);
+      state.attendanceMonths[month] = { ...m, reconciledDays: result.reconciledDays,
+        anomalies: result.anomalies, summaries: result.summaries,
+        leave_credits: result.leave_credits || [], engineVersion: ENGINE_VERSION };
+    } catch (e) { console.error('[refreshStaleMonths]', month, e); }
+  }
+  console.info(`[refreshStaleMonths] re-reconciled ${stale.join(', ')} against engine v${ENGINE_VERSION}`);
+  saveState();
+}
+
 function rerunReconciliation(month){
   const m = state.attendanceMonths[month]; if (!m) return;
   const result = reconcile(m.rawRows, month);
-  state.attendanceMonths[month] = { ...m, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], importedAt: new Date().toISOString() };
+  state.attendanceMonths[month] = { ...m, reconciledDays: result.reconciledDays, anomalies: result.anomalies, summaries: result.summaries, leave_credits: result.leave_credits || [], engineVersion: ENGINE_VERSION, importedAt: new Date().toISOString() };
   saveState(); renderAll();
 }
 function nilOrStr(v){ if (v==null) return null; const s = String(v).trim(); if (!s || s==="-") return null; return s; }
