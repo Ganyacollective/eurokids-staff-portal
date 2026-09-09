@@ -70,9 +70,10 @@ export async function POST(req: NextRequest) {
   // A child admitted since the last harvest has no id yet. Rather than refuse
   // and make somebody go and press a button they should never have heard of,
   // rebuild the phone book on the spot and carry on.
+  let harvestFailed: string | null = null;
   if (rows.some((r) => !idFor.has(r.uin))) {
     try { await harvestAdmissionIds(admin, jar); idFor = await readIds(); }
-    catch { /* the per-child refusal below will say so plainly */ }
+    catch (e) { harvestFailed = (e as Error).message; }
   }
 
   const results: { uin: string; name: string; status: string; detail: string; amount: number }[] = [];
@@ -87,7 +88,15 @@ export async function POST(req: NextRequest) {
         .then(() => {}, () => {});
     };
 
-    if (!gid) { await push("refused", "EPMS has no admission record under this UIN."); continue; }
+    // Saying "EPMS has no record of this child" when the truth is "we could not
+    // read EPMS's roster" sends somebody hunting for a problem that is not
+    // there. Report which of the two actually happened.
+    if (!gid) {
+      await push("refused", harvestFailed
+        ? `Could not read EPMS's admission roster, so this child's id is unknown: ${harvestFailed}`
+        : "EPMS's admission roster does not list this UIN.");
+      continue;
+    }
 
     // EPMS refuses any amount above the balance it believes in, and its balance
     // ignores our concession. Asking for the smaller of the two is the only
