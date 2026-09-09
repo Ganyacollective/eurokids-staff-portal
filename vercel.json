@@ -12,10 +12,6 @@
     {
       "path": "/api/cron/promise-reminders",
       "schedule": "30 3 * * *"
-    },
-    {
-      "path": "/api/cron/harvest-admission-ids",
-      "schedule": "0 3 * * *"
     }
   ]
 }
