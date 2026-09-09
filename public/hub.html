@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=25">
-<link rel="prefetch" href="/brand/enquiries.js?v=25" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=27">
+<link rel="prefetch" href="/brand/enquiries.js?v=27" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2645,6 +2645,13 @@ async function openPlan(uin){
         : '<div class="rowx hint">Nothing has been sent to this family yet.</div>'}
     </div><div class="foot">The office is no longer copied on every message — this is the record.</div></div>
 
+    ${has('finance') && Number(kid?.true_due) > 1 ? `<div class="grp"><h3>Payment link</h3><div class="box">
+      <div class="row"><div class="l">Amount<span class="sub">EPMS will not accept more than the ${money(kid?.epms_due || 0)} it believes is due.</span></div>
+        <input class="in num" id="pl-amt" type="number" value="${Math.round(Math.min(Number(kid?.true_due || 0) || Number(kid?.epms_due || 0), Number(kid?.epms_due || 0) || Number(kid?.true_due || 0)))}"></div>
+      <div class="row"><button class="btn line sm" id="pl-check">Check without sending</button>
+        <button class="linkrow" id="pl-send" style="flex:1;text-align:right">Send the payment link</button></div>
+    </div><div class="foot" id="pl-msg">EuroKids sends it by SMS, WhatsApp and email, the same as pressing Generate Link in EPMS — including its EMI offer between ₹10,000 and ₹1,00,000. Only one link at a time; a second is refused until the first expires.</div></div>` : ''}
+
     <div class="grp"><h3>Payment standing</h3><div class="box">
       <div class="row"><div class="l">${payDot(kid?.pay_colour)} ${esc(COLOUR[kid?.pay_colour]?.d || '—')}
           <span class="sub">${esc(recordFacts(kid))}</span></div>
@@ -2958,6 +2965,26 @@ async function openPlan(uin){
   }
   wirePromise();
 
+  // One press instead of: open EPMS, find the child, copy the balance across.
+  // "Check" walks the whole path — login, session, admission id, EPMS's own
+  // view of whether a link may go out — and stops before anything is sent.
+  const plRun = async (btn, label, check) => {
+    const amount = Number(el('pl-amt').value) || 0;
+    if (amount <= 0) return alert('How much should the link be for?');
+    if (!check && !confirm(`Send ${kid.student_name}'s parents a payment link for ${money(amount)}?\n\nEuroKids sends it by SMS, WhatsApp and email. This reaches the family.`)) return;
+    btn.disabled = true; btn.textContent = check ? 'Checking…' : 'Asking EPMS…';
+    const r = await feesApi('/api/epms/payment-link', { uin, amount, check });
+    btn.disabled = false; btn.textContent = label;
+    const one = r.results?.[0];
+    const good = one && (one.status === 'sent' || one.status === 'ready');
+    el('pl-msg').innerHTML = r.ok && one
+      ? `<span style="color:var(--${good ? 'green' : 'red'})">${esc(one.detail)}</span>`
+      : `<span style="color:var(--red)">${esc(r.error || 'That did not work.')}</span>`;
+  };
+  const plSend = el('pl-send'), plCheck = el('pl-check');
+  if (plSend) plSend.onclick = () => plRun(plSend, 'Send the payment link', false);
+  if (plCheck) plCheck.onclick = () => plRun(plCheck, 'Check without sending', true);
+
   // The colour follows the payments on its own. Choosing one by hand is a
   // deliberate override, so it asks why and when to look again.
   let waPick = kid?.pay_colour || 'green';
@@ -3119,7 +3146,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=25"></script>
+<script src="/brand/enquiries.js?v=27"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
