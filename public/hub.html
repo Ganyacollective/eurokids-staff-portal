@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=22">
-<link rel="prefetch" href="/brand/enquiries.js?v=22" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=23">
+<link rel="prefetch" href="/brand/enquiries.js?v=23" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -140,6 +140,7 @@ const TABS = {
   kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
   discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => has('finance') },
   fees:       { label: 'Fee Grid',      icon: 'grid',   sect: 'Reference',     need: () => has('fees') || has('finance') },
+  templates:  { label: 'Letter templates', icon: 'mail', sect: 'Setup',       need: () => has('finance') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
 };
 const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Reference', 'Setup'];
@@ -494,6 +495,7 @@ function renderApp(){
   el('main').scrollTop = 0; window.scrollTo({ top: 0 });
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
+     templates: tabTemplates,
      enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_setup: tabEnqSetup }[tab] || tabOverview)();
 }
 
@@ -1059,7 +1061,23 @@ let _cmp = { filters:{ money:'all' }, attachments:[], recipients:[], facets:null
 // Ready-made letters. Each sets the audience, the look, the subject and the
 // body; merge fields fill in per family on the server. Pick one, glance,
 // send — nobody should have to compose "your fees are overdue" from scratch.
-const EMAIL_TEMPLATES = [
+//
+// These are only the fallback now. The real ones live in eurokids.email_template
+// and are edited under Setup → Letter templates, so a change to the wording
+// outlives the send it was made for.
+let EMAIL_TEMPLATES = [];
+const templates = () => cached('tpl', async () => {
+  const { data, error } = await getSb().schema('eurokids').from('email_template')
+    .select('*').eq('archived', false).order('sort').order('id');
+  if (error) throw error;
+  return (data && data.length) ? data : TEMPLATE_FALLBACK;
+});
+// Load once at boot so the compose screen never waits on it.
+async function loadTemplates(){
+  try { EMAIL_TEMPLATES = await templates(); }
+  catch (_) { EMAIL_TEMPLATES = TEMPLATE_FALLBACK; }
+}
+const TEMPLATE_FALLBACK = [
   { name: 'Fee instalment due soon', money: 'owing', theme: 'school', fees: false,
     subject: 'Fee instalment for {{child}} due on {{due_date}}',
     body: `Dear Parent,
@@ -1111,6 +1129,101 @@ We appreciate your promptness, and we look forward to a wonderful year with {{fi
 We look forward to seeing you there.` },
 ];
 
+/* ── letter templates: the office's wording, kept ──────────────────────
+   Every letter used to start from words fixed in the code, so an edit made
+   while sending — a new phone number, a firmer deadline — was thrown away the
+   moment it went out. These are rows now: change one here and every letter
+   after it opens with what you meant to say.                              */
+const TPL_MONEY = [['all','Everyone'],['owing','Anyone still owing'],['overdue','Overdue only'],['settled','Fully paid only']];
+const TPL_THEME = [['school','School blue'],['notice','Payment notice amber'],['calm','Calm green'],['celebration','Celebration']];
+const MERGE_FIELDS = ['{{child}}','{{first_name}}','{{class}}','{{amount_due}}','{{due_date}}','{{next_amount}}'];
+
+async function tabTemplates(){
+  const b = el('body');
+  b.innerHTML = head('Letter templates', 'The wording every email starts from.',
+    `<button class="btn" id="tpl-new">New template</button>`) + '<div class="loading">Loading…</div>';
+  el('tpl-new').onclick = () => openTemplate(null);
+  let rows; try { rows = await templates(); } catch (e) { return b.innerHTML = fail(e); }
+
+  b.innerHTML = head('Letter templates', 'The wording every email starts from.',
+      `<button class="btn" id="tpl-new">New template</button>`)
+    + `<div class="grp"><div class="box">
+        ${rows.map(t => `<button class="linkrow tpl-row" data-id="${t.id}" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;color:var(--label);text-align:left">
+            <span><strong>${esc(t.name)}</strong>
+              <div class="hint">${esc(t.subject)}</div>
+              <div class="hint" style="margin-top:2px">${esc(String(t.body).replace(/\s+/g,' ').slice(0,110))}…</div></span>
+            <span style="display:flex;gap:6px;align-items:center;flex:none">
+              <span class="chip c-mute">${esc((TPL_MONEY.find(m => m[0] === t.money) || ['','—'])[1])}</span>
+              ${t.fees ? '<span class="chip c-acc">statement</span>' : ''}
+              <span style="color:var(--label-3)">›</span></span></button>`).join('')}
+      </div><div class="foot">Editing a template changes what the next letter starts from. Letters already sent are untouched.</div></div>`;
+  el('tpl-new').onclick = () => openTemplate(null);
+  document.querySelectorAll('.tpl-row').forEach(r =>
+    r.onclick = () => openTemplate(rows.find(x => String(x.id) === r.dataset.id)));
+}
+
+function openTemplate(t){
+  const isNew = !t;
+  t = t || { name: '', subject: '', body: 'Dear Parent,\n\n', money: 'all', theme: 'school', fees: false, sort: 100 };
+  const body = openDrawer(isNew ? 'New template' : t.name, isNew ? '' : 'Letter template');
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      <div class="row"><div class="l">Name<span class="sub">What you pick from the Template list.</span></div>
+        <input class="in wide" id="tp-name" value="${esc(t.name)}" placeholder="e.g. Fees overdue — firm"></div>
+      <div class="row"><div class="l">Who it goes to<span class="sub">Sets the money filter when you choose it.</span></div>
+        <select class="in" id="tp-money">${TPL_MONEY.map(([v,l]) => `<option value="${v}" ${t.money===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="row"><div class="l">Look</div>
+        <select class="in" id="tp-theme">${TPL_THEME.map(([v,l]) => `<option value="${v}" ${t.theme===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <label class="row" style="cursor:pointer"><span class="l">Add the fee statement underneath
+          <span class="sub">Every payment received and what is left, per child.</span></span>
+        <input type="checkbox" class="sw" id="tp-fees" ${t.fees?'checked':''}></label>
+    </div></div>
+
+    <div class="grp"><h3>Subject</h3><div class="box">
+      <div class="rowx"><input class="in" id="tp-subject" value="${esc(t.subject)}" placeholder="Overdue fees for {{child}}" style="width:100%"></div>
+    </div></div>
+
+    <div class="grp"><h3>Message</h3><div class="box">
+      <div class="rowx"><textarea class="in" id="tp-body" rows="14" style="width:100%;font:inherit">${esc(t.body)}</textarea></div>
+    </div>
+    <div class="foot">Tap a field to insert it — each family sees their own.
+      <div class="pill-row" style="margin-top:8px">${MERGE_FIELDS.map(f => `<button class="pill tp-merge" data-f="${esc(f)}" style="cursor:pointer">${esc(f)}</button>`).join('')}</div></div></div>`;
+
+  el('drawer-foot').innerHTML = `
+    <div id="tp-msg"></div>
+    ${isNew ? '<span></span>' : '<button class="btn line" id="tp-del">Delete</button>'}
+    <button class="btn" id="tp-save">Save template</button>`;
+
+  // Insert a merge field where the cursor is, not at the end.
+  document.querySelectorAll('.tp-merge').forEach(p => p.onclick = () => {
+    const ta = el('tp-body'), i = ta.selectionStart ?? ta.value.length;
+    ta.value = ta.value.slice(0, i) + p.dataset.f + ta.value.slice(ta.selectionEnd ?? i);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = i + p.dataset.f.length;
+  });
+
+  el('tp-save').onclick = async () => {
+    const name = el('tp-name').value.trim(), subject = el('tp-subject').value.trim(), text = el('tp-body').value.trim();
+    if (!name || !subject || !text) { el('tp-msg').innerHTML = '<div class="err">A template needs a name, a subject and a message.</div>'; return; }
+    const row = { name, subject, body: text, money: el('tp-money').value, theme: el('tp-theme').value,
+                  fees: el('tp-fees').checked, updated_at: new Date().toISOString(),
+                  updated_by: (profile?.full_name || session?.user?.email || '').split('@')[0] };
+    const s = getSb().schema('eurokids').from('email_template');
+    const { error } = isNew ? await s.insert(row) : await s.update(row).eq('id', t.id);
+    if (error) { el('tp-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return; }
+    invalidate('tpl'); await loadTemplates();
+    closeDrawer(true); tabTemplates();
+  };
+
+  const del = el('tp-del');
+  if (del) del.onclick = async () => {
+    if (!confirm(`Remove “${t.name}”?\n\nLetters already sent are unaffected; it just stops appearing in the Template list.`)) return;
+    const { error } = await getSb().schema('eurokids').from('email_template').update({ archived: true }).eq('id', t.id);
+    if (error) { el('tp-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return; }
+    invalidate('tpl'); await loadTemplates();
+    closeDrawer(true); tabTemplates();
+  };
+}
+
 async function feesApi(path, body){
   const { data:{ session:s } } = await getSb().auth.getSession();
   if (!s) return { ok:false, error:'Your session has expired — please sign in again.' };
@@ -1141,6 +1254,7 @@ async function tabCompose(){
   // those and rebuild everything the user can see.
   _cmp = { filters:{ money:'all' }, attachments:[], recipients:[],
            facets:_cmp.facets || null, picked:[], roll:_cmp.roll || [] };
+  await loadTemplates();          // the office's own wording, not the code's
   const b = el('body');
   b.innerHTML = head('Send email to parents',
     'Choose a group, write once, and every family gets it with the school’s branding.');
@@ -1170,7 +1284,8 @@ async function tabCompose(){
   </div></div>
 
   <div class="grp"><h3>Message</h3><div class="box">
-    <div class="row"><div class="l">Template<span class="sub">Fills everything below; edit freely afterwards.</span></div>
+    <div class="row"><div class="l">Template<span class="sub">Fills everything below; edit freely afterwards.
+      ${has('finance') ? '<a href="#admissions/templates" style="margin-left:4px">Edit the wording →</a>' : ''}</span></div>
       <select id="cmp-tpl" class="in"><option value="">Write my own</option>${EMAIL_TEMPLATES.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('')}</select></div>
     <div class="row"><div class="l">Subject</div><input id="cmp-subject" class="in wide" placeholder="e.g. Janmashtami celebration on 6 September"></div>
     <div class="row"><div class="l">Look</div><select id="cmp-theme" class="in">
@@ -2908,7 +3023,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=22"></script>
+<script src="/brand/enquiries.js?v=23"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
