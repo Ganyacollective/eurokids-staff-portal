@@ -1767,8 +1767,7 @@ function kidRowHtml(r){
           const contacts = [r.parent_email1, r.parent_email2].filter(Boolean);
           const phones   = [r.mobile1, r.mobile2].filter(Boolean);
           return `<tr class="${tint}" style="cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">
-          <td><strong>${esc(r.student_name)}</strong>
-            ${payChip(r.pay_colour)}
+          <td><strong>${esc(r.student_name)}</strong>${payChip(r.pay_colour)}
             ${Number(r.our_discount) ? `<span class="chip c-mute" style="margin-left:6px">−${money(r.our_discount)}</span>`:''}
             ${Number(r.uncredited_cash) ? `<span class="chip c-warn" style="margin-left:4px">${money(r.uncredited_cash)} in hand</span>`:''}
             <br><span class="uin">${esc(r.uin)}</span></td>
@@ -2458,15 +2457,20 @@ function epmsSchemeLabel(k){
    event, so it can be defended — and it returns to ten the moment they pay. */
 // Four colours, in the order a family slides down them.
 const PAY_COLOURS = [
-  ['green',  'Green',  'Paying, or nothing outstanding',        '#34C759'],
-  ['yellow', 'Yellow', 'Behind, but it is coming',              '#FFCC00'],
-  ['orange', 'Orange', 'Somebody needs to call them',           '#FF9500'],
-  ['red',    'Red',    'Nothing is arriving',                   '#FF3B30'],
+  // Apple's own yellow (#FFCC00) all but vanishes on white, so the middle of
+  // the scale is an amber that can actually be seen at 8px.
+  ['green',  'Green',  'Paying, or nothing outstanding',        '#30D158'],
+  ['yellow', 'Yellow', 'Behind, but it is coming',              '#E8A200'],
+  ['orange', 'Orange', 'Somebody needs to call them',           '#FF7A00'],
+  ['red',    'Red',    'Nothing is arriving',                   '#FF2D20'],
 ];
 const COLOUR = Object.fromEntries(PAY_COLOURS.map(([k, l, d, c]) => [k, { l, d, c }]));
 const payDot = k => `<span title="${esc(COLOUR[k]?.d || '')}" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLOUR[k]?.c || '#C7C7CC'};vertical-align:middle"></span>`;
+// In a list, the word "yellow" beside a child's name is noise crowding out the
+// thing you came to read. A dot says the same in a tenth of the space, and the
+// hover tells you what it means.
 const payChip = k => k && k !== 'green'
-  ? `<span class="chip" style="background:${COLOUR[k].c}1F;color:${COLOUR[k].c};margin-left:6px">${COLOUR[k].l.toLowerCase()}</span>` : '';
+  ? `<span title="${esc(COLOUR[k].l + ' — ' + COLOUR[k].d)}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${COLOUR[k].c};margin-left:7px;vertical-align:2px;flex:none"></span>` : '';
 // Spell out where the points went, so nobody has to trust the number.
 function recordFacts(k){
   if (!k) return '';
