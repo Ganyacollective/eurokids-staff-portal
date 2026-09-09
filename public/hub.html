@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=23">
-<link rel="prefetch" href="/brand/enquiries.js?v=23" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=25">
+<link rel="prefetch" href="/brand/enquiries.js?v=25" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -82,7 +82,10 @@ const SCHED_COLS = 'uin,student_name,father_name,program_name,batch,admission_da
   + 'term1_due,term2_due,epms_invoiced,collected,epms_due,our_discount,uncredited_cash,paid_so_far,true_due,overpaid,'
   + 'instalments,scheduled_total,has_schedule,schedule_mismatch,next_amount,next_due_date,schedule_flag,days_overdue,'
   + 'overdue_amount,overdue_by,upcoming_amount,upcoming_date,epms_discount_kind,discount_reason,'
-  + 'list_fee,scheme_discount,fee_looks_wrong';
+  + 'list_fee,scheme_discount,fee_looks_wrong,'
+  + 'promises_made,promises_kept,promises_broken,letters_sent,pay_score,'
+  + 'pay_colour,pay_colour_auto,open_promise_on,'
+  + 'watch_level,watch_reason,watch_review_on,watch_set_by,watch_set_at';
 const schedule = () => cached('sched', async () => {
   const { data, error } = await getSb().schema('eurokids').from('v_schedule').select(SCHED_COLS).limit(2000);
   if (error) throw error; return data || [];
@@ -571,6 +574,10 @@ const VIEW_FIELDS = [
   { k:'list_fee',      l:'Full fee for the year',      t:'num' },
   { k:'fee_looks_wrong', l:'EPMS invoice looks wrong', t:'bool' },
   { k:'discount_reason', l:'Concession reason',        t:'text' },
+  { k:'pay_colour',    l:'Payment colour',             t:'enum' },
+  { k:'promises_broken', l:'Promises broken',          t:'num' },
+  { k:'watch_level',   l:'Colour set by hand',         t:'enum' },
+  { k:'letters_sent',  l:'Letters sent',               t:'num' },
   { k:'father_name',   l:'Father',                    t:'text' },
 ];
 const OPS = {
@@ -1761,6 +1768,7 @@ function kidRowHtml(r){
           const phones   = [r.mobile1, r.mobile2].filter(Boolean);
           return `<tr class="${tint}" style="cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">
           <td><strong>${esc(r.student_name)}</strong>
+            ${payChip(r.pay_colour)}
             ${Number(r.our_discount) ? `<span class="chip c-mute" style="margin-left:6px">−${money(r.our_discount)}</span>`:''}
             ${Number(r.uncredited_cash) ? `<span class="chip c-warn" style="margin-left:4px">${money(r.uncredited_cash)} in hand</span>`:''}
             <br><span class="uin">${esc(r.uin)}</span></td>
@@ -2444,6 +2452,33 @@ function epmsSchemeLabel(k){
   return /discount$/i.test(s) ? s.toLowerCase() : `${s.toLowerCase()} discount`;
 }
 
+/* ── the payment record ────────────────────────────────────────────────
+   Not an opinion of the family. Arithmetic on what they did: promises broken,
+   how late they are, how many letters it took. Every point lost points at an
+   event, so it can be defended — and it returns to ten the moment they pay. */
+// Four colours, in the order a family slides down them.
+const PAY_COLOURS = [
+  ['green',  'Green',  'Paying, or nothing outstanding',        '#34C759'],
+  ['yellow', 'Yellow', 'Behind, but it is coming',              '#FFCC00'],
+  ['orange', 'Orange', 'Somebody needs to call them',           '#FF9500'],
+  ['red',    'Red',    'Nothing is arriving',                   '#FF3B30'],
+];
+const COLOUR = Object.fromEntries(PAY_COLOURS.map(([k, l, d, c]) => [k, { l, d, c }]));
+const payDot = k => `<span title="${esc(COLOUR[k]?.d || '')}" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLOUR[k]?.c || '#C7C7CC'};vertical-align:middle"></span>`;
+const payChip = k => k && k !== 'green'
+  ? `<span class="chip" style="background:${COLOUR[k].c}1F;color:${COLOUR[k].c};margin-left:6px">${COLOUR[k].l.toLowerCase()}</span>` : '';
+// Spell out where the points went, so nobody has to trust the number.
+function recordFacts(k){
+  if (!k) return '';
+  const bits = [];
+  const made = Number(k.promises_made || 0), broke = Number(k.promises_broken || 0);
+  if (made) bits.push(`${made} promise${made === 1 ? '' : 's'} to pay, ${broke} broken`);
+  if (Number(k.days_overdue) > 0) bits.push(`${k.days_overdue} days past the due date`);
+  if (Number(k.letters_sent) > 0) bits.push(`${k.letters_sent} letter${Number(k.letters_sent) === 1 ? '' : 's'} sent`);
+  if (Number(k.true_due) <= 1) return 'Nothing outstanding.';
+  return bits.length ? bits.join(' · ') : 'Nothing on the record yet.';
+}
+
 // The promise section, on its own, so recording a promise can repaint just this
 // box. It used to re-open the whole sheet, which threw away any instalment date
 // or fee you had typed but not yet saved.
@@ -2609,6 +2644,26 @@ async function openPlan(uin){
         <div class="v ${m.status === 'sent' ? 'credit' : 'due'}">${m.status === 'sent' ? '✓' : 'failed'}</div></div>`).join('')
         : '<div class="rowx hint">Nothing has been sent to this family yet.</div>'}
     </div><div class="foot">The office is no longer copied on every message — this is the record.</div></div>
+
+    <div class="grp"><h3>Payment standing</h3><div class="box">
+      <div class="row"><div class="l">${payDot(kid?.pay_colour)} ${esc(COLOUR[kid?.pay_colour]?.d || '—')}
+          <span class="sub">${esc(recordFacts(kid))}</span></div>
+        <div class="v hint">${kid?.watch_level && kid.watch_level !== 'auto' ? 'set by hand' : 'worked out'}</div></div>
+      <div class="rowx"><div class="seg" id="wa-seg" style="width:100%">
+        ${PAY_COLOURS.map(([v, l]) => `<button data-v="${v}" class="${kid?.pay_colour === v ? 'on' : ''}"
+            style="${kid?.pay_colour === v ? `background:${COLOUR[v].c}1F;color:${COLOUR[v].c};font-weight:650` : ''}">${l}</button>`).join('')}
+      </div></div>
+      <div class="row" id="wa-extra" style="${kid?.watch_level && kid.watch_level !== 'auto' ? '' : 'display:none'}">
+        <div class="l">Look at again on<span class="sub">Nobody stays on a colour by being forgotten.</span></div>
+        <input class="in" id="wa-review" type="date" value="${esc(kid?.watch_review_on || new Date(Date.now()+14*864e5).toISOString().slice(0,10))}"></div>
+      <div class="rowx" id="wa-why" style="${kid?.watch_level && kid.watch_level !== 'auto' ? '' : 'display:none'}">
+        <textarea class="in" id="wa-reason" rows="2" placeholder="Why — e.g. two promises broken, ₹61,000 outstanding since June, ultimatum given." style="width:100%">${esc(kid?.watch_reason || '')}</textarea></div>
+      <div class="row" id="wa-actions" style="${kid?.watch_level && kid.watch_level !== 'auto' ? '' : 'display:none'}">
+        <button class="linkrow" id="wa-save" style="flex:1">Save this colour</button>
+        <button class="btn line sm" id="wa-auto">Back to automatic</button></div>
+    </div><div class="foot">${kid?.watch_level && kid.watch_level !== 'auto' && kid?.watch_set_by
+        ? `Set to ${esc(COLOUR[kid.watch_level]?.l || kid.watch_level)} by ${esc(kid.watch_set_by)} on ${longDate(String(kid.watch_set_at).slice(0,10))}. `
+        : `Left alone, this follows the payments on its own — ${esc(COLOUR[kid?.pay_colour_auto]?.l || 'green')} today. `}Written in the knowledge that it may one day be read aloud.</div></div>
 
     <div class="grp" id="promise-sec"><h3>Promise to pay</h3><div class="box" id="promise-box">
       ${promiseBoxHtml(openPromise, kid)}
@@ -2903,6 +2958,47 @@ async function openPlan(uin){
   }
   wirePromise();
 
+  // The colour follows the payments on its own. Choosing one by hand is a
+  // deliberate override, so it asks why and when to look again.
+  let waPick = kid?.pay_colour || 'green';
+  document.querySelectorAll('#wa-seg button').forEach(b => b.onclick = () => {
+    waPick = b.dataset.v;
+    document.querySelectorAll('#wa-seg button').forEach(x => {
+      const on = x.dataset.v === waPick;
+      x.classList.toggle('on', on);
+      x.style.cssText = on ? `background:${COLOUR[x.dataset.v].c}1F;color:${COLOUR[x.dataset.v].c};font-weight:650` : '';
+    });
+    ['wa-extra','wa-why','wa-actions'].forEach(id => el(id).style.display = '');
+    el('wa-reason').focus();
+  });
+  const waSaved = msg => {
+    const b = el('wa-save'); b.textContent = msg;
+    setTimeout(() => { b.textContent = 'Save this colour'; }, 1500);
+  };
+  el('wa-save').onclick = async () => {
+    const reason = (el('wa-reason').value || '').trim();
+    if (!reason) return alert('Say why. A colour on a family with no reason behind it is unfair to them and useless to whoever picks up the call.');
+    const me = (profile?.full_name || session?.user?.email || '').split('@')[0];
+    const s2 = getSb().schema('eurokids');
+    const { error } = await s2.from('child_watch').upsert({ uin, level: waPick, reason,
+      review_on: el('wa-review').value || null, set_by: me, set_at: new Date().toISOString() }, { onConflict: 'uin' });
+    if (error) return alert('Could not save: ' + error.message);
+    // The decision belongs in the call log too — it is part of the story.
+    await s2.from('child_note').insert({ uin, author: me, created_by: session?.user?.id || null,
+      body: `Marked ${COLOUR[waPick].l} — ${reason}` });
+    invalidate('sched'); drawNotes(); waSaved('Saved ✓');
+  };
+  el('wa-auto').onclick = async () => {
+    if (!confirm('Hand this family back to the automatic colour?')) return;
+    const me = (profile?.full_name || session?.user?.email || '').split('@')[0];
+    const s2 = getSb().schema('eurokids');
+    await s2.from('child_watch').delete().eq('uin', uin);
+    await s2.from('child_note').insert({ uin, author: me, created_by: session?.user?.id || null,
+      body: 'Colour handed back to automatic.' });
+    invalidate('sched'); drawNotes();
+    ['wa-extra','wa-why','wa-actions'].forEach(id => el(id).style.display = 'none');
+  };
+
   // What "unsaved" means here: the fee, the concession and its reason, the
   // instalments, the parents' addresses, the note that goes into letters.
   // Everything else on this sheet saves itself on the spot.
@@ -3023,7 +3119,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=23"></script>
+<script src="/brand/enquiries.js?v=25"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
