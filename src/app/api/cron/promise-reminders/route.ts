@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       footerNote: `Sent by ${SCHOOL_NAME} because a payment date was agreed with you on the phone.`,
     });
     if (!dry) {
-      const r = await sendMail({ to, cc: ["admin@eurokidsjmdenclave.org"],
+      const r = await sendMail({ to,
         subject: `Fee payment for ${p.student_name} — due today as discussed`, html,
         text: [`Dear ${p.father_name || "Parent"},`, "", `As discussed, the fee payment of ${money(amount)} for ${p.student_name} was to be made today, ${day(p.promised_on)}.`, `Call us on ${SCHOOL_PHONE} if anything has changed.`, plainFooter()].join("\n") });
       if (r.ok) await tbl.from("payment_promise").update({ reminded_at: new Date().toISOString() }).eq("id", p.id);

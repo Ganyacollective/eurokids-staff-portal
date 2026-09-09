@@ -180,7 +180,7 @@ export async function sendEnquiryWelcomeEmail(to: string[], e: EnquiryRow): Prom
     footerNote: `You are receiving this because you enquired at ${SCHOOL_NAME}. If that was not you, please ignore this email.`,
   });
   const text = [`Dear ${parent},`, "", `Thank you for your interest in ${SCHOOL_NAME}${e.child_name ? " for " + e.child_name : ""}. One of us will call you shortly to answer your questions and book a visit. Or call us on ${SCHOOL_PHONE}.`, plainFooter()].join("\n");
-  const r = await sendMail({ to, cc: ["admin@eurokidsjmdenclave.org"], subject: `Thank you for enquiring at ${SCHOOL_NAME}`, html, text });
+  const r = await sendMail({ to, subject: `Thank you for enquiring at ${SCHOOL_NAME}`, html, text });
   return r.ok ? "sent" : `failed:${r.status}`;
 }
 

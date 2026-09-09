@@ -156,13 +156,13 @@ export async function POST(req: NextRequest) {
   const failed: { name: string; error: string }[] = [];
 
   // Every message, already personalised, ready to post.
-  type Outgoing = { label: string; to: string[]; subject: string; html: string; text: string };
+  type Outgoing = { label: string; to: string[]; subject: string; html: string; text: string; uin?: string };
   const queue: Outgoing[] = [
     ...matched
       .filter((r) => addressesFor(r).length)
       .map((r) => {
         const { html, text } = build(r);
-        return { label: r.student_name, to: addressesFor(r), subject: merge(subject, r), html, text };
+        return { label: r.student_name, uin: r.uin, to: addressesFor(r), subject: merge(subject, r), html, text };
       }),
     ...extras.map((addr) => {
       const { html, text } = buildPlain();
@@ -170,15 +170,29 @@ export async function POST(req: NextRequest) {
     }),
   ];
 
-  const ccPart = body.ccOffice === false ? {} : { cc: [CC] };
   // An idempotency key means a retry after a dropped connection cannot send a
   // second copy — Resend remembers the key for 24 hours.
   const runId = body.sendId || randomUUID();
 
   const { sent: okNames, failed: badOnes } = await sendMany(
-    queue.map((m) => ({ ...m, cc: body.ccOffice === false ? undefined : [CC], attachments: attachments.length ? attachments : undefined })),
+    // The office is no longer copied on every message by default. 124 CCs
+    // buried the mail that needed reading; the record lives in the hub now.
+    queue.map((m) => ({ ...m, cc: body.ccOffice === true ? [CC] : undefined, attachments: attachments.length ? attachments : undefined })),
     { idempotencyKey: runId });
   sent.push(...okNames); failed.push(...badOnes);
+
+  // One row per family, so "what did we send the Kakanis, and when" is a
+  // question the child's own sheet can answer. This is what replaces copying
+  // the office on all 124 messages.
+  const badBy = new Map(failed.map((f) => [f.name, f.error]));
+  await admin.schema("eurokids").from("email_message").insert(
+    queue.map((m) => ({
+      uin: m.uin || null, student_name: m.uin ? m.label : null,
+      to_addrs: m.to, subject: m.subject, kind: "bulk", run_id: runId,
+      status: badBy.has(m.label) ? "failed" : "sent",
+      error: badBy.get(m.label) || null,
+    })),
+  ).then(() => {}, () => {});   // logging must never block a send
 
   // Keep a record of what went out, so nobody has to guess later.
   await admin.schema("eurokids").from("email_log").insert({

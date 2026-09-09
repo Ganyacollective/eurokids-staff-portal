@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=20">
-<link rel="prefetch" href="/brand/enquiries.js?v=20" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=21">
+<link rel="prefetch" href="/brand/enquiries.js?v=21" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2391,7 +2391,7 @@ async function openPlan(uin){
   // the money depends on did not arrive, the sheet says so and offers to retry
   // rather than presenting a half-loaded statement as fact.
   const q = p => p.then(r => r, e => ({ data: null, error: e }));
-  const [kidRes, planRes, itemRes, contactRes, ledgerRes, promiseRes] = await Promise.all([
+  const [kidRes, planRes, itemRes, contactRes, ledgerRes, promiseRes, mailRes] = await Promise.all([
     // Always re-read this child, even when the roster gave us a row to paint
     // instantly: that copy can be minutes old, and a fee that changed in the
     // meantime would otherwise sit on screen as though it were current.
@@ -2401,6 +2401,7 @@ async function openPlan(uin){
     q(s.schema('eurokids').from('child_contact').select('*').eq('uin', uin).maybeSingle()),
     q(s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date')),
     q(s.schema('eurokids').from('payment_promise').select('*').eq('uin', uin).order('promised_on', { ascending: false }).limit(20)),
+    q(s.schema('eurokids').from('email_message').select('sent_at,subject,to_addrs,status').eq('uin', uin).order('sent_at', { ascending: false }).limit(20)),
   ]);
   const lost = [kidRes, planRes, itemRes, ledgerRes].find(r => r && r.error);
   if (lost) {
@@ -2412,7 +2413,7 @@ async function openPlan(uin){
     return;
   }
   const plan = planRes.data, items = itemRes.data, contact = contactRes.data,
-        ledger = ledgerRes.data, promises = promiseRes.data;
+        ledger = ledgerRes.data, promises = promiseRes.data, mails = mailRes.data;
   const kid = kidRes.data || known;
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
   const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
@@ -2453,8 +2454,14 @@ async function openPlan(uin){
       <div class="row"><div class="l">Email 2</div><input class="in wide" id="pf-em2" type="email" value="${esc(contact?.parent_email2||'')}" placeholder="optional"></div>
       <div class="row"><div class="l">Note in letters</div><input class="in wide" id="pf-note" value="${esc(plan?.note||'')}" placeholder="e.g. Booking amount covers the welcome kit."></div>
     </div>
-    ${plan?.welcome_sent_at ? `<div class="foot">Welcome letter sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}. Every letter also goes to admin@eurokidsjmdenclave.org.</div>`
-                            : `<div class="foot">Every letter also goes to admin@eurokidsjmdenclave.org.</div>`}</div>
+    ${plan?.welcome_sent_at ? `<div class="foot">Welcome letter sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}.</div>` : ''}</div>
+
+    <div class="grp"><h3>Letters sent</h3><div class="box">
+      ${(mails || []).length ? mails.map(m => `<div class="row"><div class="l">${esc(m.subject)}
+          <span class="sub">${new Date(m.sent_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})} · ${esc((m.to_addrs||[]).join(', '))}</span></div>
+        <div class="v ${m.status === 'sent' ? 'credit' : 'due'}">${m.status === 'sent' ? '✓' : 'failed'}</div></div>`).join('')
+        : '<div class="rowx hint">Nothing has been sent to this family yet.</div>'}
+    </div><div class="foot">The office is no longer copied on every message — this is the record.</div></div>
 
     <div class="grp" id="promise-sec"><h3>Promise to pay</h3><div class="box">
       ${openPromise ? `<div class="row"><div class="l">${openPromise.promised_on < new Date().toISOString().slice(0,10) ? '<strong style="color:var(--red)">Promised and not paid</strong>' : '<strong>Promised</strong>'}
@@ -2843,7 +2850,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=20"></script>
+<script src="/brand/enquiries.js?v=21"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

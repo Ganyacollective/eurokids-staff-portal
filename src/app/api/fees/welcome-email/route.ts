@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
   const isTest = !!(body.testTo || "").trim();
   const r = await sendMail({
     to: isTest ? [body.testTo!.trim()] : to,
-    ...(isTest ? {} : { cc: [CC] }),
+    // no CC to the office — the hub's Sent log is the copy
     subject: isTest ? `[TEST — would go to ${to.join(", ")}] ${subject}` : subject,
     text, html,
   });

@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
 
   if (body.preview) return NextResponse.json({ ok: true, preview_html: html, to });
 
-  const res = await sendMail({ to, cc: [CC],
+  const res = await sendMail({ to,
     subject: `Payment received — ${money(r.amount_rupees)} for ${payerName} | ${SCHOOL_NAME}`, text, html });
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: 500 });
 

@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
           <p>We are at JMD Enclave, Undri. Please allow about 45 minutes — you will see the classrooms, the play area, and meet the teachers. If the time no longer suits, call us on <a href="tel:+912269622686" style="font-weight:700;text-decoration:none">${SCHOOL_PHONE}</a> and we will move it.</p>
           <p>Looking forward to meeting you.</p>`,
       });
-      const res = await sendMail({ to: emails, cc: ["admin@eurokidsjmdenclave.org"], subject: `Your visit to ${SCHOOL_NAME} — ${when}`, html,
+      const res = await sendMail({ to: emails, subject: `Your visit to ${SCHOOL_NAME} — ${when}`, html,
           text: [`Dear ${e.father_name || "Parent"},`, "", `Reminder: your visit to ${SCHOOL_NAME} is booked for ${when}. Call ${SCHOOL_PHONE} to reschedule.`, plainFooter()].join("\n") });
       r.email = res.ok ? "sent" : `failed:${res.status}`;
     }
