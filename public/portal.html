@@ -1051,6 +1051,7 @@ function reconcile(rawRows, month){
         // and the leave is not spent — but she is not late against a day she was
         // not required to attend.
         reconciledDays.push({ employee_id:emp.id, date, dow, status:"FullDay", in:inMin, out:outMin, scheduledMin: sched,
+          leave_not_deducted: true,
           note: `${matched.leave_type} was approved for today but she came in — leave not deducted.` });
         ensure(emp).fd++;
       } else {
@@ -1187,6 +1188,11 @@ function reconcile(rawRows, month){
       const recDay = empReconciled.find(d => d.date === dStr);
       if (recDay && (recDay.status === "FullDay" || recDay.status === "Late" || recDay.status === "HalfLWP" || recDay.status === "ForgotPunch")) {
         const e = empById(L.employee_id);
+
+        // Reconciliation already saw the leave and never spent it, so there is
+        // nothing to give back. Crediting here as well would hand her a day she
+        // still has.
+        if (recDay.leave_not_deducted) continue;
 
         // Half-day leaves are NOT credited back on presence — punching in is expected
         // (the teacher works their half). Only full-day leaves get the came-in credit.
