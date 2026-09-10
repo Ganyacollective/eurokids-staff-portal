@@ -179,6 +179,7 @@
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="anomalies">⚠️ Anomalies <span id="nav-anom" class="ml-auto text-xs bg-orange-100 text-orange-700 px-2 rounded-full hidden"></span></a>
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="salary">🧾 Salary Sheet</a>
       <a id="nav-payouts" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm hidden" data-panel="payouts">✅ Salary Handed Out <span id="nav-payout-count" class="ml-auto text-xs bg-gray-100 text-gray-600 px-2 rounded-full"></span></a>
+      <a id="nav-pay" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm hidden" data-panel="pay">🔒 Pay</a>
       <div class="pt-3 mt-3 border-t border-gray-200">
         <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="employees">👥 Employees</a>
         <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="holidays">📅 Holidays & Vacations</a>
@@ -326,6 +327,15 @@
         </div>
       </section>
 
+      <section id="panel-pay" class="panel">
+        <div class="mb-6">
+          <h1 class="text-2xl font-semibold">Pay</h1>
+          <p class="text-sm text-gray-500 mt-1">What each person earns, and every increment. Stored apart from everything else — the database refuses these rows to any account but yours.</p>
+        </div>
+        <div class="flex items-center gap-2 mb-4" id="pay-filters"></div>
+        <div id="pay-body"></div>
+      </section>
+
       <section id="panel-payouts" class="panel">
         <div class="flex items-end justify-between mb-6">
           <div>
@@ -421,30 +431,30 @@ const STORAGE_KEY = 'eurokids_staff_portal_v2';
 const AY = { start: '2026-04-06', end: '2027-03-19', label: '2026-27', cl_per_teacher: 7, el_per_teacher: 8, optional_hol_per_teacher: 5 };
 const DEFAULT_STATE = {
   employees: [
-    { id:'e1',  name_petpooja: "Manisha Zurange", display_name: "Manisha Zurange", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 12000, is_active: true },
-    { id:'e2',  name_petpooja: "Aarti Yadav", display_name: "Aarti Yadav", email: "", department: "Support Staff", designation: "Cook", reporting_minutes: 660, monthly_salary: 14000, is_active: true },
-    { id:'e3',  name_petpooja: "Gudiya Yadav", display_name: "Gudiya Yadav", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, monthly_salary: 12000, is_active: true },
-    { id:'e4',  name_petpooja: "Baby Maushi", display_name: "Baby Maushi", email: "", department: "Support Staff", designation: "Daycare Didi", reporting_minutes: 600, monthly_salary: 13000, is_active: true },
-    { id:'e5',  name_petpooja: "Pooja Shrirame", display_name: "Pooja Shrirame", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
-    { id:'e6',  name_petpooja: "Malti Patil", display_name: "Malti Patil", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
-    { id:'e7',  name_petpooja: "Laxmi Palante", display_name: "Laxmi Palante", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
-    { id:'e8',  name_petpooja: "Ranjhana Nandu Ghule", display_name: "Ranjhana Ghule", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, monthly_salary: 11000, is_active: true },
-    { id:'e9',  name_petpooja: "Aarti Biradar", display_name: "Aarti Biradar", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, monthly_salary: 12000, is_active: true },
-    { id:'e10', name_petpooja: "Kala Koli", display_name: "Kala Koli", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, monthly_salary: 12000, is_active: true },
-    { id:'e11', name_petpooja: "Theresa Pillay", display_name: "Theresa Pillay", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 570, monthly_salary: 13000, is_active: true },
-    { id:'e12', name_petpooja: "Anamika Singh", display_name: "Anamika Singh", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
-    { id:'e13', name_petpooja: "Deepti S", display_name: "Deepti S", email: "", department: "Admin", designation: "Coordinator", reporting_minutes: 480, monthly_salary: 28000, is_active: true },
-    { id:'e14', name_petpooja: "Sasmita Mishra", display_name: "Sasmita Mishra", email: "", department: "Teacher", designation: "Daycare Teacher", reporting_minutes: 660, monthly_salary: 18000, is_active: true },
-    { id:'e15', name_petpooja: "Diya Anuj Advani", display_name: "Diya Advani", email: "", department: "Teacher", designation: "Daycare Teacher", reporting_minutes: 630, monthly_salary: 20000, is_active: true },
-    { id:'e16', name_petpooja: "Sonia Nyayapathi", display_name: "Sonia Nyayapathi", email: "", department: "Teacher", designation: "Sr.Kg Teacher", reporting_minutes: 480, monthly_salary: 24000, is_active: true },
-    { id:'e17', name_petpooja: "Evan Lunkad", display_name: "Evan Lunkad", email: "", department: "Teacher", designation: "Jr.Kg Teacher", reporting_minutes: 480, monthly_salary: 23000, is_active: true },
-    { id:'e18', name_petpooja: "Firdousjaha Shaikh", display_name: "Firdous Shaikh", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
-    { id:'e19', name_petpooja: "Pallavi Wadmare", display_name: "Pallavi Wadmare", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
-    { id:'e20', name_petpooja: "Deepshiksha Tyagi", display_name: "Deepshiksha Tyagi", email: "", department: "Teacher", designation: "Playgroup Teacher", reporting_minutes: 540, monthly_salary: 21000, is_active: true },
-    { id:'e21', name_petpooja: "Manisha Apte", display_name: "Manisha Apte", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
-    { id:'e22', name_petpooja: "Sherebanu Patrawala", display_name: "Sherebanu Patrawala", email: "", department: "Teacher", designation: "Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
-    { id:'e23', name_petpooja: "Starr liu ", display_name: "Starr Liu", email: "", department: "Teacher", designation: "Playgroup Teacher", reporting_minutes: 540, monthly_salary: 21000, is_active: true },
-    { id:'e24', name_petpooja: "Anuja Mule", display_name: "Anuja Mule", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, monthly_salary: 22000, is_active: true },
+    { id:'e1',  name_petpooja: "Manisha Zurange", display_name: "Manisha Zurange", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, is_active: true },
+    { id:'e2',  name_petpooja: "Aarti Yadav", display_name: "Aarti Yadav", email: "", department: "Support Staff", designation: "Cook", reporting_minutes: 660, is_active: true },
+    { id:'e3',  name_petpooja: "Gudiya Yadav", display_name: "Gudiya Yadav", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, is_active: true },
+    { id:'e4',  name_petpooja: "Baby Maushi", display_name: "Baby Maushi", email: "", department: "Support Staff", designation: "Daycare Didi", reporting_minutes: 600, is_active: true },
+    { id:'e5',  name_petpooja: "Pooja Shrirame", display_name: "Pooja Shrirame", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, is_active: true },
+    { id:'e6',  name_petpooja: "Malti Patil", display_name: "Malti Patil", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, is_active: true },
+    { id:'e7',  name_petpooja: "Laxmi Palante", display_name: "Laxmi Palante", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, is_active: true },
+    { id:'e8',  name_petpooja: "Ranjhana Nandu Ghule", display_name: "Ranjhana Ghule", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, is_active: true },
+    { id:'e9',  name_petpooja: "Aarti Biradar", display_name: "Aarti Biradar", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, is_active: true },
+    { id:'e10', name_petpooja: "Kala Koli", display_name: "Kala Koli", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 540, is_active: true },
+    { id:'e11', name_petpooja: "Theresa Pillay", display_name: "Theresa Pillay", email: "", department: "Support Staff", designation: "Didi", reporting_minutes: 570, is_active: true },
+    { id:'e12', name_petpooja: "Anamika Singh", display_name: "Anamika Singh", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, is_active: true },
+    { id:'e13', name_petpooja: "Deepti S", display_name: "Deepti S", email: "", department: "Admin", designation: "Coordinator", reporting_minutes: 480, is_active: true },
+    { id:'e14', name_petpooja: "Sasmita Mishra", display_name: "Sasmita Mishra", email: "", department: "Teacher", designation: "Daycare Teacher", reporting_minutes: 660, is_active: true },
+    { id:'e15', name_petpooja: "Diya Anuj Advani", display_name: "Diya Advani", email: "", department: "Teacher", designation: "Daycare Teacher", reporting_minutes: 630, is_active: true },
+    { id:'e16', name_petpooja: "Sonia Nyayapathi", display_name: "Sonia Nyayapathi", email: "", department: "Teacher", designation: "Sr.Kg Teacher", reporting_minutes: 480, is_active: true },
+    { id:'e17', name_petpooja: "Evan Lunkad", display_name: "Evan Lunkad", email: "", department: "Teacher", designation: "Jr.Kg Teacher", reporting_minutes: 480, is_active: true },
+    { id:'e18', name_petpooja: "Firdousjaha Shaikh", display_name: "Firdous Shaikh", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, is_active: true },
+    { id:'e19', name_petpooja: "Pallavi Wadmare", display_name: "Pallavi Wadmare", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, is_active: true },
+    { id:'e20', name_petpooja: "Deepshiksha Tyagi", display_name: "Deepshiksha Tyagi", email: "", department: "Teacher", designation: "Playgroup Teacher", reporting_minutes: 540, is_active: true },
+    { id:'e21', name_petpooja: "Manisha Apte", display_name: "Manisha Apte", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, is_active: true },
+    { id:'e22', name_petpooja: "Sherebanu Patrawala", display_name: "Sherebanu Patrawala", email: "", department: "Teacher", designation: "Teacher", reporting_minutes: 495, is_active: true },
+    { id:'e23', name_petpooja: "Starr liu ", display_name: "Starr Liu", email: "", department: "Teacher", designation: "Playgroup Teacher", reporting_minutes: 540, is_active: true },
+    { id:'e24', name_petpooja: "Anuja Mule", display_name: "Anuja Mule", email: "", department: "Teacher", designation: "Nursery Teacher", reporting_minutes: 495, is_active: true },
   ],
   holidays: [
     { id:'h1', date: "2026-05-01", name: "Maharashtra Day", is_mandatory: true },
@@ -588,7 +598,26 @@ async function loadState(){
 function stripMonths(s){
   const core = { ...s };
   delete core.attendanceMonths;
+  // A salary must never find its way back into the blob HR can read, whatever
+  // an older cached page or a stray edit tries to put there.
+  if (Array.isArray(core.employees)) {
+    core.employees = core.employees.map(e => {
+      const { monthly_salary, per_day_rate, ...rest } = e;   // eslint-disable-line no-unused-vars
+      return rest;
+    });
+  }
   return core;
+}
+// The reconciliation embeds a copy of each employee in every summary, and that
+// copy is saved per month. Same rule: it leaves without the pay.
+function stripPay(months){
+  const out = {};
+  for (const [m, v] of Object.entries(months || {})) {
+    out[m] = { ...v, summaries: (v.summaries || []).map(su => su.employee
+      ? { ...su, employee: (({ monthly_salary, per_day_rate, ...rest }) => rest)(su.employee) }   // eslint-disable-line no-unused-vars
+      : su) };
+  }
+  return out;
 }
 
 function saveState(){
@@ -648,7 +677,8 @@ async function _flushSave(){
     if (!error && dirty.length) {
       // Serialise BEFORE the upload. A re-run that replaced a month object
       // mid-flight would otherwise be snapshotted as "already saved".
-      const payload = dirty.map(m => ({ month: m, data: live[m], updated_at: stamp }));
+      const safe = stripPay(live);
+      const payload = dirty.map(m => ({ month: m, data: safe[m], updated_at: stamp }));
       const snap = Object.fromEntries(dirty.map(m => [m, JSON.stringify(live[m])]));
       const res = await sb.from('attendance_month').upsert(payload);
       if (res.error) error = res.error;
@@ -1434,6 +1464,7 @@ const PANEL_RENDERERS = {
   anomalies: () => renderAnomalies(),
   salary:    () => renderSalary(),
   payouts:   () => { renderPayoutMonths(); renderPayouts(); },
+  pay:       () => renderPayEditor(),
   employees: () => renderEmployees(),
   holidays:  () => { renderHolidays(); renderVacations(); renderStudentHolidays(); renderSpecialDays(); },
 };
@@ -1680,7 +1711,7 @@ function renderEmployees(){
     <td class="text-gray-600">${minToTime(e.reporting_minutes)}</td>
     <td class="text-gray-600 text-xs">${e.phone || '<span class="text-gray-400 italic">—</span>'}</td>
     <td class="text-gray-600 text-xs">${e.email || '<span class="text-gray-400 italic">—</span>'}</td>
-    <td class="text-right">${inr(e.monthly_salary)}</td>
+    <td class="text-right">${canSeePay() ? inr(salaryOf(e.id)) : '<span class="text-gray-300">—</span>'}</td>
     <td><button onclick="openEmployeeForm('${e.id}')" class="btn-link">Edit</button> · ${e.is_active ? `<button onclick="archiveEmployee('${e.id}')" class="btn-danger">Archive</button>` : `<button onclick="restoreEmployee('${e.id}')" class="btn-link" style="color:#15803D">Restore</button>`}</td>
   </tr>`).join('');
 }
@@ -2274,8 +2305,8 @@ function renderReports(){
   const dayMap = new Map();
   m.reconciledDays.filter(d => d.employee_id === viewingEmployeeId).forEach(d => dayMap.set(d.date, d));
 
-  const cutAmount = Math.round((emp.monthly_salary/26) * summary.totalCutDays);
-  const netPayable = Math.round(emp.monthly_salary - cutAmount);
+  const cutAmount = Math.round(((salaryOf(emp.id) || 0)/26) * summary.totalCutDays);
+  const netPayable = Math.round((salaryOf(emp.id) || 0) - cutAmount);
 
   // Late details sorted
   const lateDetails = [...summary.lateDetails].sort((a,b)=>a.date.localeCompare(b.date));
@@ -2510,8 +2541,8 @@ function buildReportText(empId, month, opts={}){
   const m = state.attendanceMonths[month]; if (!m) return null;
   const s = m.summaries.find(x => x.employee.id === empId); if (!s) return null;
 
-  const cutAmount = Math.round((emp.monthly_salary/26) * s.totalCutDays);
-  const netPayable = Math.round(emp.monthly_salary - cutAmount);
+  const cutAmount = Math.round(((salaryOf(emp.id) || 0)/26) * s.totalCutDays);
+  const netPayable = Math.round((salaryOf(emp.id) || 0) - cutAmount);
   const monthLabel = new Date(month+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
 
   // Comparison vs previous month (if available)
@@ -2829,8 +2860,20 @@ function renderSalary(){
   const tbody = document.getElementById('salary-tbody');
   const m = state.attendanceMonths[state.activeMonth];
   if (!m) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-12">No active import. Run an attendance reconciliation first.</td></tr>`; return; }
+  // Days and cuts are HR's work; the money is not theirs to see. Rather than a
+  // table of zeroes that looks broken, the columns simply are not there.
+  if (!canSeePay()) {
+    tbody.innerHTML = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name)).map(s => `<tr>
+      <td class="font-medium">${s.employee.display_name}</td>
+      <td colspan="2" class="text-gray-300">—</td>
+      <td>${s.fd}</td>
+      <td>${s.totalCutDays}</td>
+      <td colspan="2" class="text-gray-400 text-sm">amounts are owner-only</td>
+    </tr>`).join('');
+    return;
+  }
   tbody.innerHTML = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name)).map(s => {
-    const sal = s.employee.monthly_salary || 0; const perDay = sal/26; const cutAmt = Math.round(perDay * s.totalCutDays); const net = Math.round(sal - cutAmt);
+    const sal = salaryOf(s.employee.id) || 0; const perDay = sal/26; const cutAmt = Math.round(perDay * s.totalCutDays); const net = Math.round(sal - cutAmt);
     return `<tr>
       <td class="font-medium">${s.employee.display_name}</td>
       <td>${inr(sal)}</td>
@@ -2841,6 +2884,137 @@ function renderSalary(){
       <td class="font-semibold text-green-700">${inr(net)}</td>
     </tr>`;
   }).join('');
+}
+
+
+// ============================================================
+// Pay — kept where the database can refuse it.
+// ============================================================
+// Salaries used to live inside portal_state.data.employees[], the single blob
+// the shared HR login fetches whole on every load. Hiding the column in the
+// interface would have been theatre: open the network tab, read the response,
+// and there is what everyone earns. So the figures live in their own table with
+// a row-level rule that names the owner, and a colleague with the developer
+// console open receives an empty array — the rows are never sent.
+//
+// Salary is therefore NOT part of `state`. It is fetched separately, held only
+// in memory, and never written back into anything HR can read.
+let _salary = new Map();      // employee_id -> current monthly salary
+let _salaryHistory = [];      // every raise, newest first — owner only
+const salaryOf = id => _salary.get(id);
+const canSeePay = () => _isPayoutOwner;
+
+async function loadSalaries(){
+  _salary = new Map(); _salaryHistory = [];
+  if (!_isPayoutOwner) return;               // saves a pointless round trip
+  try {
+    const sb = getSb();
+    const [cur, hist] = await Promise.all([
+      sb.from('v_salary_current').select('employee_id,monthly_salary,effective_from'),
+      sb.from('employee_salary').select('*').order('effective_from', { ascending: false }),
+    ]);
+    if (cur.error) throw cur.error;
+    _salary = new Map((cur.data || []).map(r => [r.employee_id, Number(r.monthly_salary)]));
+    _salaryHistory = hist.data || [];
+  } catch (e) { console.warn('[loadSalaries]', e.message); }
+}
+
+async function setSalary(empId, amount, effectiveFrom, note){
+  const { data: { user } } = await getSb().auth.getUser();
+  const { error } = await getSb().from('employee_salary').upsert({
+    employee_id: empId, monthly_salary: amount,
+    effective_from: effectiveFrom, note: note || null,
+    set_by: (user?.email || '').split('@')[0], set_at: new Date().toISOString(),
+  }, { onConflict: 'employee_id,effective_from' });
+  if (error) { alert('Could not save: ' + error.message); return false; }
+  await loadSalaries();
+  return true;
+}
+async function deleteSalaryRow(id){
+  if (!confirm('Remove this salary entry? The one before it takes over again.')) return;
+  const { error } = await getSb().from('employee_salary').delete().eq('id', id);
+  if (error) return alert('Could not remove: ' + error.message);
+  await loadSalaries(); renderPayEditor(); renderAll();
+}
+
+// ── The editor ────────────────────────────────────────────────────────────
+let _payFilter = 'all';
+function setPayFilter(f){ _payFilter = f; renderPayEditor(); }
+
+function renderPayEditor(){
+  const box = document.getElementById('pay-body'); if (!box) return;
+  if (!canSeePay()) { box.innerHTML = `<div class="text-sm text-gray-500 py-12 text-center">Pay is visible to the owner account only.</div>`; return; }
+
+  let staff = (state.employees || []).filter(e => e.is_active !== false);
+  if (_payFilter !== 'all') staff = staff.filter(e => e.department === _payFilter);
+  staff.sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
+
+  const missing = staff.filter(e => !salaryOf(e.id)).length;
+  const monthly = staff.reduce((t, e) => t + (salaryOf(e.id) || 0), 0);
+
+  document.getElementById('pay-filters').innerHTML =
+    PAYOUT_FILTERS.map(([v, l]) => `<button onclick="setPayFilter('${v}')"
+      class="px-3 py-1.5 rounded-full text-sm border ${_payFilter === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'}">${l}</button>`).join('');
+
+  box.innerHTML = `
+    <div class="mb-4 text-sm text-gray-600">
+      <strong class="text-gray-900">${inr(monthly)}</strong> a month across ${staff.length} people${missing ? ` · <span class="text-amber-600">${missing} with no salary recorded</span>` : ''}
+    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      ${staff.map(e => {
+        const cur = salaryOf(e.id);
+        const hist = _salaryHistory.filter(h => h.employee_id === e.id);
+        return `<div class="px-4 py-3 border-b border-gray-100 last:border-0">
+          <div class="flex items-center gap-3">
+            <span class="flex-1 min-w-0">
+              <span class="font-medium">${e.display_name}</span>
+              <span class="text-xs text-gray-400 ml-2">${e.designation || e.department || ''}</span>
+            </span>
+            <span class="tabular-nums ${cur ? 'font-semibold' : 'text-amber-600 text-sm'}">${cur ? inr(cur) : 'not set'}</span>
+            <button onclick="openSalaryForm('${e.id}')" class="btn-link text-sm flex-none">${cur ? 'Change' : 'Set'}</button>
+            ${hist.length > 1 ? `<button onclick="toggleSalaryHistory('${e.id}')" class="btn-link text-sm flex-none">History</button>` : '<span class="w-14 flex-none"></span>'}
+          </div>
+          <div id="pay-hist-${e.id}" class="hidden mt-2 ml-1 pl-3 border-l-2 border-gray-100 space-y-1">
+            ${hist.map(h => `<div class="text-xs text-gray-500 flex items-center gap-2">
+              <span class="tabular-nums text-gray-700">${inr(h.monthly_salary)}</span>
+              <span>from ${fmtDateShort(h.effective_from)}</span>
+              ${h.note ? `<span class="italic">· ${h.note}</span>` : ''}
+              ${h.set_by ? `<span>· ${h.set_by}</span>` : ''}
+              <button onclick="deleteSalaryRow(${h.id})" class="btn-link ml-auto">Remove</button>
+            </div>`).join('')}
+          </div>
+        </div>`;
+      }).join('') || `<div class="text-sm text-gray-500 py-12 text-center">Nobody matches this filter.</div>`}
+    </div>`;
+}
+function toggleSalaryHistory(id){ document.getElementById('pay-hist-' + id)?.classList.toggle('hidden'); }
+
+function openSalaryForm(empId){
+  const e = empById(empId); if (!e) return;
+  const cur = salaryOf(empId);
+  openModal(`Salary · ${e.display_name}`, `
+    <div class="space-y-4">
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Monthly salary (₹)</label>
+        <input id="sf-amt" type="number" class="input" value="${cur || ''}" placeholder="e.g. 22000" autofocus></div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">In effect from</label>
+        <input id="sf-from" type="date" class="input" value="${new Date().toISOString().slice(0,10)}">
+        <p class="text-xs text-gray-500 mt-1">An increment is a new entry, not an overwrite — earlier months keep the figure they were paid on.</p></div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Note</label>
+        <input id="sf-note" class="input" placeholder="e.g. annual increment, took on Sr.Kg"></div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+        <button onclick="saveSalaryForm('${empId}')" class="btn-primary">Save</button>
+      </div>
+    </div>`);
+}
+async function saveSalaryForm(empId){
+  const amt = Number(document.getElementById('sf-amt').value);
+  const from = document.getElementById('sf-from').value;
+  if (!(amt > 0)) return alert('What is the monthly salary?');
+  if (!from) return alert('From which date does this apply?');
+  if (await setSalary(empId, amt, from, document.getElementById('sf-note').value.trim())) {
+    closeModal(); renderPayEditor(); renderAll();
+  }
 }
 
 // ============================================================
@@ -2866,9 +3040,10 @@ async function initPayouts(){
     const { data: { user } } = await getSb().auth.getUser();
     _isPayoutOwner = PAYOUT_OWNERS.includes((user?.email || '').toLowerCase());
   } catch (_) { _isPayoutOwner = false; }
-  const nav = document.getElementById('nav-payouts');
-  if (nav) nav.classList.toggle('hidden', !_isPayoutOwner);
-  if (_isPayoutOwner) renderPayoutBadge();
+  document.getElementById('nav-payouts')?.classList.toggle('hidden', !_isPayoutOwner);
+  document.getElementById('nav-pay')?.classList.toggle('hidden', !_isPayoutOwner);
+  await loadSalaries();
+  if (_isPayoutOwner) { renderPayoutBadge(); renderAll(); }
 }
 
 // Teachers first, in the order a child moves through the school, then the
@@ -2937,7 +3112,7 @@ function renderPayouts(){
   const paid = paidMap(month);
   const summaries = state.attendanceMonths[month]?.summaries || [];
   const netFor = new Map(summaries.map(s => {
-    const sal = s.employee.monthly_salary || 0;
+    const sal = salaryOf(s.employee.id) || 0;
     return [s.employee.id, Math.round(sal - Math.round((sal / 26) * s.totalCutDays))];
   }));
 
@@ -2987,7 +3162,7 @@ function renderPayouts(){
 function exportSalaryCsv(){
   const m = state.attendanceMonths[state.activeMonth]; if (!m) return alert("No active import.");
   const headers = ["Name","Monthly Salary","Per Day","Full Days","Late Strikes","Strike Half Days","Half LWP","LWP Days","CL","EL","Total Cuts","Cut Amount","Net Payable"];
-  const rows = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name)).map(s => { const sal = s.employee.monthly_salary || 0; const perDay = sal/26; const cutAmt = Math.round(perDay*s.totalCutDays); const net = Math.round(sal-cutAmt); return [s.employee.display_name, sal, Math.round(perDay), s.fd, s.lateStrikes, s.strikeHalfDays, s.halfLwp, s.lwpDays, s.clDays, s.elDays, s.totalCutDays, cutAmt, net].join(','); });
+  const rows = [...m.summaries].sort((a,b)=>a.employee.display_name.localeCompare(b.employee.display_name)).map(s => { const sal = salaryOf(s.employee.id) || 0; const perDay = sal/26; const cutAmt = Math.round(perDay*s.totalCutDays); const net = Math.round(sal-cutAmt); return [s.employee.display_name, sal, Math.round(perDay), s.fd, s.lateStrikes, s.strikeHalfDays, s.halfLwp, s.lwpDays, s.clDays, s.elDays, s.totalCutDays, cutAmt, net].join(','); });
   const csv = [headers.join(','), ...rows].join('\n');
   const blob = new Blob([csv], { type:'text/csv' });
   const a = document.createElement('a');
@@ -3031,7 +3206,9 @@ function openEmployeeForm(id){
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Reporting (HH:MM)</label><input id="ef-rep" type="time" class="input" value="${e?String(Math.floor(e.reporting_minutes/60)).padStart(2,'0')+':'+String(e.reporting_minutes%60).padStart(2,'0'):'09:00'}" /></div>
-        <div><label class="text-xs font-medium text-gray-700 block mb-1">Monthly salary (₹)</label><input id="ef-sal" type="number" class="input" value="${e?.monthly_salary||0}" /></div>
+        ${canSeePay() ? `<div><label class="text-xs font-medium text-gray-700 block mb-1">Monthly salary (₹)</label>
+          <input id="ef-sal" type="number" class="input" value="${salaryOf(e?.id) || ''}" placeholder="set under Pay" />
+          <p class="text-xs text-gray-500 mt-1">Saved to the Pay book, not to the employee record.</p></div>` : ''}
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Joining date</label><input id="ef-join" type="date" class="input" value="${e?.joining_date||''}" /><div class="text-xs text-gray-500 mt-1">Days before this are ignored in attendance — no LWP for months before they existed.</div></div>
@@ -3135,7 +3312,9 @@ async function saveEmployee(id){
   const repStr = document.getElementById('ef-rep').value;
   const [hh, mm] = repStr.split(':').map(Number);
   const repMin = hh*60 + (mm||0);
-  const sal = parseFloat(document.getElementById('ef-sal').value) || 0;
+  // Read only if the owner is looking; it goes to the Pay book below, never
+  // into the employee record that HR fetches.
+  const sal = canSeePay() ? (parseFloat(document.getElementById('ef-sal')?.value) || 0) : 0;
   const personalEmail = document.getElementById('ef-email').value.trim();
   const phone = document.getElementById('ef-phone').value.replace(/\D/g, '');
   const active = document.getElementById('ef-active').checked;
@@ -3173,7 +3352,7 @@ async function saveEmployee(id){
     empId = id;
     Object.assign(empById(id), {
       display_name: display, name_petpooja: pp, department: dept, designation: desg,
-      reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
+      reporting_minutes: repMin, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
       works_through_holidays: wth,
       joining_date: joinDate,
@@ -3188,7 +3367,7 @@ async function saveEmployee(id){
     empId = uid();
     state.employees.push({
       id: empId, display_name: display, name_petpooja: pp, department: dept, designation: desg,
-      reporting_minutes: repMin, monthly_salary: sal, email: personalEmail, phone, is_active: active,
+      reporting_minutes: repMin, email: personalEmail, phone, is_active: active,
       works_through_vacations: wtv,
       works_through_holidays: wth,
       joining_date: joinDate,
@@ -3199,6 +3378,13 @@ async function saveEmployee(id){
       el_carry_forward: elCF,
       login_email: loginEmail || '',
     });
+  }
+
+  // 1b) The salary goes to the Pay book, which HR's account cannot read or write.
+  //     Only recorded when it has actually changed, so editing a phone number
+  //     does not manufacture a spurious "increment" dated today.
+  if (canSeePay() && sal > 0 && sal !== salaryOf(empId)) {
+    await setSalary(empId, sal, new Date().toISOString().slice(0, 10), 'Set from the employee record');
   }
 
   // 2) Provision/update the portal login if a login email AND a password were supplied
