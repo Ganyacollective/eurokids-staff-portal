@@ -3032,13 +3032,18 @@ async function saveSalaryForm(empId){
 // the panel refuses to draw for anyone but the owner accounts below. It is a
 // curtain, not a vault — but it is the office's own machine, and the point is
 // that nobody else ticks anyone off by accident.
-const PAYOUT_OWNERS = ['abhinav@ganya.in'];
+// Who may see pay is a grant, ticked in the hub under Users & Access, exactly
+// like Finance. Not an email written into this file — that answer belongs where
+// somebody would go looking for it. The database enforces it either way; this
+// only decides whether to draw the tab.
 let _isPayoutOwner = false;
 
 async function initPayouts(){
   try {
     const { data: { user } } = await getSb().auth.getUser();
-    _isPayoutOwner = PAYOUT_OWNERS.includes((user?.email || '').toLowerCase());
+    const { data } = await getSb().from('module_access')
+      .select('module').eq('user_id', user?.id || '').eq('module', 'salary');
+    _isPayoutOwner = !!(data && data.length);
   } catch (_) { _isPayoutOwner = false; }
   document.getElementById('nav-payouts')?.classList.toggle('hidden', !_isPayoutOwner);
   document.getElementById('nav-pay')?.classList.toggle('hidden', !_isPayoutOwner);

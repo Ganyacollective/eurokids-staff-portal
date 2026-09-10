@@ -310,9 +310,10 @@ function renderChooser(){
 }
 
 /* ── users & access (owner only) ─────────────────────── */
-const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','finance'];
+const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','finance','salary'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
-  payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission', finance:'Finance (money)' };
+  payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission', finance:'Finance (money)',
+  salary:'Salaries (staff pay)' };
 
 async function hubUsersApi(method, body){
   const { data: { session: s } } = await getSb().auth.getSession();
@@ -328,7 +329,9 @@ async function hubUsersApi(method, body){
 // dangerous one (Finance) explained in its own footnote.
 function modRows(prefix, selected){
   return ALL_MODULES.map(m => `
-    <label class="row" style="cursor:pointer"><span class="l">${MODULE_LABEL[m]}${m==='finance' ? '<span class="sub">Shows school-wide money. Coordinators normally need Admission + EPMS admin only.</span>' : ''}</span>
+    <label class="row" style="cursor:pointer"><span class="l">${MODULE_LABEL[m]}${
+      m==='finance' ? '<span class="sub">Shows school-wide money. Coordinators normally need Admission + EPMS admin only.</span>'
+      : m==='salary' ? '<span class="sub">What every member of staff earns, and their increments. Give this to almost nobody.</span>' : ''}</span>
       <input type="checkbox" class="sw ${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}></label>`).join('');
 }
 
@@ -347,7 +350,7 @@ async function renderUsers(){
         <tbody>${staffUsers.map(u => `
           <tr data-uid="${u.id}">
             <td><strong>${esc(u.full_name||'—')}</strong><br><span class="hint">${esc(u.email)}</span></td>
-            <td>${u.modules.length ? u.modules.map(m=>`<span class="chip ${m==='finance'?'c-crit':'c-mute'}">${MODULE_LABEL[m]||m}</span>`).join('') : '<span class="hint">no access yet</span>'}</td>
+            <td>${u.modules.length ? u.modules.map(m=>`<span class="chip ${(m==='finance'||m==='salary')?'c-crit':'c-mute'}">${MODULE_LABEL[m]||m}</span>`).join('') : '<span class="hint">no access yet</span>'}</td>
             <td class="hint">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : 'never'}</td>
             <td class="r"><div class="more" style="display:inline-block"><button class="btn line sm" onclick="event.stopPropagation();this.nextElementSibling.classList.toggle('open')" aria-label="Actions">•••</button>
               <div class="menu">
@@ -1927,15 +1930,48 @@ const lbDraftClear = () => {
   try { localStorage.removeItem('ek-liab-draft'); } catch (_) {}
 };
 
+
+/* ── money changing hands ──────────────────────────────────────────────
+   Cash collected at the desk travels: a parent hands it to Diya, Diya hands
+   it to Neeta, Neeta hands it to the owner, and one of them eventually banks
+   it. Until now the record said only "cash, received by Diya" for the whole
+   journey, so at no point could anyone answer "whose pocket is it in?".
+   Each movement is now its own entry, and nothing is edited afterwards — a
+   mistake is struck through and entered again, because a cash book that can
+   be quietly rewritten is not a cash book. */
+const PEOPLE = ['Abhinav', 'Neeta', 'Diya', 'Office cash box'];
+
+async function receiptPhotoUrl(path){
+  if (!path) return null;
+  const { data } = await getSb().storage.from('receipts').createSignedUrl(path, 300);
+  return data?.signedUrl || null;
+}
+async function openReceiptPhoto(path){
+  const url = await receiptPhotoUrl(path);
+  if (!url) return alert('That photograph could not be opened.');
+  window.open(url, '_blank', 'noopener');
+}
+
+// Who is holding this money now, worked out from the chain.
+function heldBy(rec, chain){
+  const mine = (chain || []).filter(c => c.receipt_id === rec.id).sort((a,b) => String(a.at).localeCompare(String(b.at)));
+  const banked = mine.find(c => c.kind === 'banked');
+  if (banked || rec.deposited_on) return null;
+  const last = mine.filter(c => c.kind !== 'banked').slice(-1)[0];
+  return last?.to_person || rec.received_by || null;
+}
+
 async function tabLiability(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   const s = getSb();
-  const [{ data: recs, error }, { data: kids }] = await Promise.all([
+  const [{ data: recs, error }, { data: kids }, { data: chain }] = await Promise.all([
     s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }).limit(2000),
     schedule().then(rows => ({ data: rows.slice().sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || '')) })),
+    s.schema('eurokids').from('receipt_custody').select('*').order('at'),
   ]);
   if (error) return el('body').innerHTML = fail(error);
   _liab.recs = recs || [];
+  _liab.chain = chain || [];
   _liab.kids = kids || [];
 
   // "Name — Class" keeps two children of the same name apart.
@@ -1948,8 +1984,9 @@ async function tabLiability(){
     return `<option value="${esc(label)}">`;
   }).join('');
 
-  const sum = f => _liab.recs.filter(f).reduce((a, r) => a + Number(r.amount_rupees), 0);
-  const heldForEuro = _liab.recs.filter(r => r.purpose === 'tuition')
+  const live = _liab.recs.filter(r => !r.voided_at);
+  const sum = f => live.filter(f).reduce((a, r) => a + Number(r.amount_rupees), 0);
+  const heldForEuro = live.filter(r => r.purpose === 'tuition')
     .reduce((a, r) => a + (Number(r.amount_rupees) - Number(r.remitted || 0)), 0);
   const notBanked = sum(r => r.mode === 'Cash' && !r.deposited_on);
   const otherMoney = sum(r => r.purpose !== 'tuition');
@@ -2011,8 +2048,16 @@ async function tabLiability(){
         <div class="row"><div class="l">Amount</div><input class="in num" id="lb-amt" type="number" min="1" placeholder="₹"></div>
         <div class="row"><div class="l">Mode</div><select class="in" id="lb-mode"><option>Cash</option><option>UPI</option><option>Cheque</option><option>Other</option></select></div>
         <div class="row"><div class="l">Received on</div><input class="in" id="lb-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="row"><div class="l">Received by</div><input class="in" id="lb-by" placeholder="who took it"></div>
+        <div class="row"><div class="l">Taken by<span class="sub">Whose hands it is in until it moves.</span></div><input class="in" id="lb-by" list="lb-people" placeholder="who took it" autocomplete="off"><datalist id="lb-people">${PEOPLE.map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
       </div></div>
+
+      <div class="grp" id="lb-cheque-wrap" style="display:none"><h3>The cheque</h3><div class="box">
+        <div class="row"><div class="l">Cheque number</div><input class="in" id="lb-chq-no" inputmode="numeric" placeholder="6 digits"></div>
+        <div class="row"><div class="l">Bank</div><input class="in wide" id="lb-chq-bank" placeholder="e.g. HDFC Bank"></div>
+        <div class="row"><div class="l">Dated</div><input class="in" id="lb-chq-date" type="date"></div>
+        <div class="row"><div class="l">Photograph<span class="sub">Take it before the cheque leaves the office.</span></div>
+          <input class="in" id="lb-chq-photo" type="file" accept="image/*,application/pdf" capture="environment"></div>
+      </div><div class="foot">Kept privately — only someone with Finance can open it, through a link that expires.</div></div>
 
       <div class="grp"><div class="box">
         <label class="row" id="lb-receipt-label" style="cursor:pointer"><span class="l">Email a receipt now<span class="sub" id="lb-receipt-hint"></span></span><input type="checkbox" class="sw" id="lb-receipt" checked></label>
@@ -2025,6 +2070,15 @@ async function tabLiability(){
 
   function wireRecord(){
   // ── who-is-paying toggle ────────────────────────────────────────────────
+  // The cheque questions are meaningless for cash, so they only appear when
+  // they mean something.
+  const toggleCheque = () => {
+    const w = el('lb-cheque-wrap'); if (!w) return;
+    w.style.display = /cheque/i.test(el('lb-mode').value) ? '' : 'none';
+  };
+  el('lb-mode').addEventListener('change', toggleCheque);
+  toggleCheque();
+
   const setWho = who => {
     _liab.who = who;
     el('lb-t-child').classList.toggle('on', who === 'child');
@@ -2109,24 +2163,33 @@ async function tabLiability(){
     el('lb-rows').innerHTML = rows.map(r => {
       const held = Number(r.amount_rupees) - Number(r.remitted || 0);
       const isFee = r.purpose === 'tuition';
-      return `<tr>
-        <td><strong>${esc(r.student_name || '—')}</strong>${r.uin ? '' : ' <span class="chip c-mute">not on roll</span>'}
+      const holder = r.voided_at ? null : heldBy(r, _liab.chain);
+      return `<tr style="${r.voided_at ? 'opacity:.45' : ''}">
+        <td><strong style="${r.voided_at ? 'text-decoration:line-through' : ''}">${esc(r.student_name || '—')}</strong>${r.uin ? '' : ' <span class="chip c-mute">not on roll</span>'}
+          ${r.void_reason ? `<br><span class="hint" style="font-size:10.5px">${esc(r.void_reason)}</span>` : ''}
           ${r.receipt_sent_at ? '<br><span class="hint" style="font-size:10.5px">receipt emailed</span>' : ''}</td>
         <td>${isFee ? '<span class="chip c-good">Fees</span>'
                     : `<span class="chip c-mute">${esc(r.purpose_note || 'Other')}</span>`}</td>
-        <td><span class="chip ${r.mode === 'Cash' ? 'c-warn' : 'c-mute'}">${esc(r.mode)}</span></td>
+        <td><span class="chip ${r.mode === 'Cash' ? 'c-warn' : 'c-mute'}">${esc(r.mode)}</span>
+          ${r.cheque_number ? `<div class="hint" style="font-size:10.5px">#${esc(r.cheque_number)}${r.cheque_bank ? ' · ' + esc(r.cheque_bank) : ''}</div>` : ''}
+          ${r.bounced_on ? `<div class="hint" style="font-size:10.5px;color:var(--crit)">bounced ${shortDate(r.bounced_on)}</div>`
+            : r.cleared_on ? `<div class="hint" style="font-size:10.5px;color:var(--good)">cleared ${shortDate(r.cleared_on)}</div>` : ''}
+          ${r.photo_path ? `<a class="hint" style="font-size:10.5px;cursor:pointer" onclick="openReceiptPhoto('${esc(r.photo_path)}')">photo</a>` : ''}</td>
         <td class="r num" style="font-weight:600">${money(r.amount_rupees)}</td>
         <td class="r num">${isFee ? (held > 0.01
              ? `<span style="color:var(--crit);font-weight:600">${money(held)}</span>`
              : '<span class="chip c-good">posted</span>') : '—'}</td>
         <td class="hint">${shortDate(r.received_on)}</td>
-        <td class="hint">${esc(r.received_by || '—')}</td>
+        <td class="hint">${holder ? `<strong style="color:var(--ink)">${esc(holder)}</strong>` : esc(r.received_by || '—')}
+          ${holder && holder !== r.received_by ? `<br><span style="font-size:10.5px">via ${esc(r.received_by || '—')}</span>` : ''}</td>
         <td><input class="in" type="date" value="${r.deposited_on || ''}" style="padding:3px 6px;font-size:12px;width:auto"
-              onchange="setDeposited(${r.id}, this.value, this)"></td>
+              onchange="setDeposited(${r.id}, this.value, this)" ${r.voided_at ? 'disabled' : ''}></td>
         <td style="white-space:nowrap">
+          ${r.voided_at ? `<span class="hint">voided${r.voided_by ? ' by ' + esc(r.voided_by) : ''}</span>` : `
+          ${holder ? `<a style="cursor:pointer" onclick="handOver(${r.id})">Hand over</a> · ` : ''}
           ${r.uin ? `<a style="cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
           ${r.uin ? `<a style="cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
-          <a style="color:var(--crit);cursor:pointer" onclick="delReceipt(${r.id})">Remove</a></td>
+          <a style="color:var(--crit);cursor:pointer" onclick="voidReceipt(${r.id})">Void</a>`}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
   };
@@ -2156,17 +2219,46 @@ async function tabLiability(){
     if (purpose === 'other' && !note) return say('Say what this payment is for.');
 
     btn.disabled = true; btn.textContent = 'Saving…';
+    const isCheque = /cheque/i.test(el('lb-mode').value);
+    const takenBy = (el('lb-by').value || '').trim() || null;
+
+    // The photograph goes up first. If it fails the receipt is not written at
+    // all, rather than leaving a cheque recorded with a picture that silently
+    // never arrived.
+    let photoPath = null;
+    const file = el('lb-chq-photo')?.files?.[0];
+    if (isCheque && file) {
+      btn.textContent = 'Uploading the photograph…';
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      photoPath = `cheques/${new Date().getFullYear()}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+      const up = await getSb().storage.from('receipts').upload(photoPath, file, { contentType: file.type });
+      if (up.error) { btn.disabled = false; btn.textContent = 'Record';
+        return say(`The photograph did not upload: ${esc(up.error.message)}. Nothing has been saved — try again.`); }
+    }
+
     const { data, error } = await getSb().schema('eurokids').from('receipt_offline').insert({
       uin, student_name: name, purpose, purpose_note: purpose === 'other' ? note : null,
       mode: el('lb-mode').value, amount_rupees: amt,
       received_on: el('lb-on').value || new Date().toISOString().slice(0,10),
-      received_by: el('lb-by').value || null,
+      received_by: takenBy,
       payer_email: email, payer_phone: phone,
+      cheque_number: isCheque ? (el('lb-chq-no').value || '').trim() || null : null,
+      cheque_bank:   isCheque ? (el('lb-chq-bank').value || '').trim() || null : null,
+      cheque_dated:  isCheque ? (el('lb-chq-date').value || null) : null,
+      photo_path: photoPath,
     }).select('id').maybeSingle();
     if (error) {
       btn.disabled = false; btn.textContent = 'Record';
       // Surface the real reason — a silent failure here loses real money records.
       return say(`Could not save: ${esc(error.message)}${error.hint ? ' — ' + esc(error.hint) : ''}`);
+    }
+
+    // The first link in the chain: it came from the parent into someone's hands.
+    if (data?.id) {
+      await getSb().schema('eurokids').from('receipt_custody').insert({
+        receipt_id: data.id, kind: 'collected', to_person: takenBy,
+        note: 'Taken from the payer', logged_by: who(),
+      }).then(() => {}, () => {});
     }
 
     lbDraftClear();
@@ -2235,6 +2327,66 @@ async function setDeposited(id, d, box){
   if (rec) rec.deposited_on = d || null;
   tabLiability();          // the "Cash not banked" total has just changed
 }
+// Cash moving from one pair of hands to the next. Not an edit of who received
+// it — that was true and stays true — but a new link in the chain.
+async function handOver(id){
+  const rec = _liab.recs.find(x => x.id === id); if (!rec) return;
+  const from = heldBy(rec, _liab.chain) || rec.received_by || '';
+  const body = openDrawer('Hand over', `${money(rec.amount_rupees)} ${String(rec.mode).toLowerCase()} · ${rec.student_name || 'unknown payer'}`);
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      <div class="row"><div class="l">Currently with</div><div class="v">${esc(from || 'nobody recorded')}</div></div>
+      <div class="row"><div class="l">Handed to</div>
+        <input class="in" id="ho-to" list="ho-people" placeholder="who has it now" autocomplete="off">
+        <datalist id="ho-people">${PEOPLE.filter(n => n !== from).map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+      <div class="row"><div class="l">When</div><input class="in" id="ho-at" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="rowx"><input class="in" id="ho-note" placeholder="Anything worth remembering" style="width:100%"></div>
+    </div><div class="foot">Or record that it reached the bank, which closes the chain.</div></div>`;
+  el('drawer-foot').innerHTML = `<div id="pf-msg"></div>
+    <button class="btn line" id="ho-bank">Banked instead</button><button class="btn" id="ho-save">Hand over</button>`;
+
+  const log = async (kind, to) => {
+    const at = el('ho-at').value ? new Date(el('ho-at').value + 'T12:00:00').toISOString() : new Date().toISOString();
+    const { error } = await getSb().schema('eurokids').from('receipt_custody').insert({
+      receipt_id: id, kind, from_person: from || null, to_person: to || null,
+      at, note: (el('ho-note').value || '').trim() || null, logged_by: who(),
+    });
+    if (error) { el('pf-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return false; }
+    return true;
+  };
+  el('ho-save').onclick = async () => {
+    const to = (el('ho-to').value || '').trim();
+    if (!to) return alert('Who has it now?');
+    if (await log('handover', to)) { closeDrawer(true); tabLiability(); }
+  };
+  el('ho-bank').onclick = async () => {
+    if (!confirm('Record that this money reached the bank?')) return;
+    if (await log('banked', 'Bank')) {
+      await getSb().schema('eurokids').from('receipt_offline')
+        .update({ deposited_on: el('ho-at').value || new Date().toISOString().slice(0,10) }).eq('id', id);
+      closeDrawer(true); tabLiability();
+    }
+  };
+}
+
+// A cash record that can be edited or deleted is not a cash record. A mistake
+// stays on the page, struck through, with the name of whoever struck it and
+// why — and counts towards nothing.
+async function voidReceipt(id){
+  const rec = _liab.recs.find(x => x.id === id); if (!rec) return;
+  if (Number(rec.remitted || 0) > 0.01) {
+    return alert(`${rec.student_name}'s receipt has already been part-posted to EuroKids (${money(rec.remitted)} of ${money(rec.amount_rupees)}).\n\nVoiding it here would leave the books out of step. Correct it in EPMS first.`);
+  }
+  const reason = prompt(`Void the ${money(rec.amount_rupees)} ${String(rec.mode).toLowerCase()} receipt for ${rec.student_name || 'this payer'}?\n\nIt stays on the record, struck through, and counts towards nothing. Why is it wrong?`);
+  if (reason === null) return;
+  if (!reason.trim()) return alert('Say why — a struck-through entry with no reason is worse than the mistake.');
+  const { error } = await getSb().schema('eurokids').from('receipt_offline').update({
+    voided_at: new Date().toISOString(), voided_by: who(), void_reason: reason.trim(),
+  }).eq('id', id);
+  if (error) return alert('Could not void it: ' + error.message);
+  invalidate('sched'); tabLiability();
+}
+
 async function delReceipt(id){
   const rec = _liab.recs.find(x => x.id === id);
   if (rec && Number(rec.remitted || 0) > 0.01) {

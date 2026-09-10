@@ -10,7 +10,7 @@ const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const OWNER_EMAILS = new Set(["abhinav@ganya.in"]);
 
 const VALID_MODULES = new Set([
-  "staff_portal", "epms_admin", "pulse", "payroll", "fees", "kits", "admission", "finance",
+  "staff_portal", "epms_admin", "pulse", "payroll", "fees", "kits", "admission", "finance", "salary",
 ]);
 
 async function requireOwner(req: NextRequest): Promise<{ ok: true; userId: string } | { ok: false; status: number; message: string }> {
