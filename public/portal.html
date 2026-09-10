@@ -178,6 +178,7 @@
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="attendance">📤 Attendance Import</a>
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="anomalies">⚠️ Anomalies <span id="nav-anom" class="ml-auto text-xs bg-orange-100 text-orange-700 px-2 rounded-full hidden"></span></a>
       <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="salary">🧾 Salary Sheet</a>
+      <a id="nav-payouts" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm hidden" data-panel="payouts">✅ Salary Handed Out <span id="nav-payout-count" class="ml-auto text-xs bg-gray-100 text-gray-600 px-2 rounded-full"></span></a>
       <div class="pt-3 mt-3 border-t border-gray-200">
         <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="employees">👥 Employees</a>
         <a class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm" data-panel="holidays">📅 Holidays & Vacations</a>
@@ -323,6 +324,22 @@
         <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden overflow-x-auto">
           <table><thead><tr><th>Name</th><th>Salary</th><th>Per day</th><th>FD</th><th>Cuts</th><th>Cut amount</th><th>Net payable</th></tr></thead><tbody id="salary-tbody"></tbody></table>
         </div>
+      </section>
+
+      <section id="panel-payouts" class="panel">
+        <div class="flex items-end justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-semibold">Salary Handed Out</h1>
+            <p class="text-sm text-gray-500 mt-1">Tick each person as you pay them. Yours alone — HR cannot see or change this.</p>
+          </div>
+          <div class="flex items-end gap-3">
+            <label class="text-sm">Month
+              <select id="payout-month" onchange="renderPayouts()" class="input ml-2"></select>
+            </label>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 mb-4" id="payout-filters"></div>
+        <div id="payout-body"></div>
       </section>
 
       <!-- EMPLOYEES -->
@@ -491,6 +508,8 @@ const DEFAULT_STATE = {
   day_overrides: [],  // HR's manual day-status overrides: {id, employee_id, date, status, note, decided_at}
   special_days: [],  // {id, date, name, skip_late_strikes, notes} — sports day, annual function, etc.
   special_day_overrides: [],  // {id, special_day_id, employee_id, status: 'Present'|'CasualLeave'|'EarnedLeave'|'LWP'|'Excused', note}
+  // Who has actually been handed their salary, per month: { 'YYYY-MM': { empId: 'YYYY-MM-DD' } }
+  salaryPaid: {},
   activeMonth: "2026-04",
 };
 // ============================================================
@@ -770,6 +789,7 @@ async function initApp(){
     runMigrations();
     refreshStaleMonths();
     renderAll();
+    initPayouts();
   } catch (e) {
     alert('Failed to load: ' + e.message);
     console.error(e);
@@ -1413,6 +1433,7 @@ const PANEL_RENDERERS = {
   attendance:() => renderImports(),
   anomalies: () => renderAnomalies(),
   salary:    () => renderSalary(),
+  payouts:   () => { renderPayoutMonths(); renderPayouts(); },
   employees: () => renderEmployees(),
   holidays:  () => { renderHolidays(); renderVacations(); renderStudentHolidays(); renderSpecialDays(); },
 };
@@ -2821,6 +2842,148 @@ function renderSalary(){
     </tr>`;
   }).join('');
 }
+
+// ============================================================
+// Salary Handed Out — a checklist, not a ledger.
+// ============================================================
+// Paying twenty-odd people over several days from several pockets, the thing
+// that goes wrong is not arithmetic, it is memory: who have I already given it
+// to. So this is a tick beside a name, month by month, and nothing more. It can
+// be un-ticked, because the answer to "did I pay her?" is sometimes no.
+//
+// The salary sheet next door works out what each person is owed. This only
+// records that it left your hands.
+//
+// Owner-only: the portal runs on one shared HR login, so the tab is hidden and
+// the panel refuses to draw for anyone but the owner accounts below. It is a
+// curtain, not a vault — but it is the office's own machine, and the point is
+// that nobody else ticks anyone off by accident.
+const PAYOUT_OWNERS = ['abhinav@ganya.in'];
+let _isPayoutOwner = false;
+
+async function initPayouts(){
+  try {
+    const { data: { user } } = await getSb().auth.getUser();
+    _isPayoutOwner = PAYOUT_OWNERS.includes((user?.email || '').toLowerCase());
+  } catch (_) { _isPayoutOwner = false; }
+  const nav = document.getElementById('nav-payouts');
+  if (nav) nav.classList.toggle('hidden', !_isPayoutOwner);
+  if (_isPayoutOwner) renderPayoutBadge();
+}
+
+// Teachers first, in the order a child moves through the school, then the
+// people who keep the place running. Derived from designation, which already
+// says "PG Teacher", "Nursery Teacher" and so on.
+const PAYOUT_GROUPS = [
+  ['Play Group',  e => /^pg\b|play\s*group/i.test(e.designation || '')],
+  ['Nursery',     e => /nursery/i.test(e.designation || '')],
+  ['Junior KG',   e => /jr\.?\s*kg|junior/i.test(e.designation || '')],
+  ['Senior KG',   e => /sr\.?\s*kg|senior/i.test(e.designation || '')],
+  ['Daycare',     e => /daycare/i.test(e.designation || '')],
+  ['Other teachers', e => e.department === 'Teacher'],
+  ['Admin',       e => e.department === 'Admin'],
+  ['Support staff', e => true],
+];
+let _payoutFilter = 'all';
+const PAYOUT_FILTERS = [['all','Everyone'],['Teacher','Teachers'],['Support Staff','Support staff'],['Admin','Admin']];
+
+const payoutMonthKeys = () => {
+  const months = new Set(Object.keys(state.attendanceMonths || {}));
+  months.add(new Date().toISOString().slice(0, 7));
+  Object.keys(state.salaryPaid || {}).forEach(m => months.add(m));
+  return [...months].sort().reverse();
+};
+function renderPayoutMonths(){
+  const sel = document.getElementById('payout-month'); if (!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = payoutMonthKeys().map(m => `<option value="${m}">${m}</option>`).join('');
+  sel.value = keep && payoutMonthKeys().includes(keep) ? keep
+            : (state.activeMonth && payoutMonthKeys().includes(state.activeMonth) ? state.activeMonth : payoutMonthKeys()[0]);
+}
+const payoutMonth = () => document.getElementById('payout-month')?.value || state.activeMonth || new Date().toISOString().slice(0,7);
+const paidMap = month => ((state.salaryPaid || {})[month] || {});
+
+function setPayoutFilter(f){ _payoutFilter = f; renderPayouts(); }
+
+function togglePaid(empId){
+  const month = payoutMonth();
+  state.salaryPaid = state.salaryPaid || {};
+  state.salaryPaid[month] = state.salaryPaid[month] || {};
+  if (state.salaryPaid[month][empId]) delete state.salaryPaid[month][empId];
+  else state.salaryPaid[month][empId] = new Date().toISOString().slice(0, 10);
+  saveState();
+  renderPayouts(); renderPayoutBadge();
+}
+function clearPayoutMonth(){
+  const month = payoutMonth();
+  if (!confirm(`Clear every tick for ${month}? The list starts again from nobody paid.`)) return;
+  if (state.salaryPaid) delete state.salaryPaid[month];
+  saveState(); renderPayouts(); renderPayoutBadge();
+}
+
+function renderPayoutBadge(){
+  const el = document.getElementById('nav-payout-count'); if (!el) return;
+  const month = state.activeMonth || new Date().toISOString().slice(0,7);
+  const staff = (state.employees || []).filter(e => e.is_active !== false);
+  const done = staff.filter(e => paidMap(month)[e.id]).length;
+  el.textContent = staff.length ? `${done}/${staff.length}` : '';
+}
+
+function renderPayouts(){
+  const box = document.getElementById('payout-body'); if (!box) return;
+  if (!_isPayoutOwner) { box.innerHTML = `<div class="text-sm text-gray-500 py-12 text-center">This list belongs to the owner account.</div>`; return; }
+
+  const month = payoutMonth();
+  const paid = paidMap(month);
+  const summaries = state.attendanceMonths[month]?.summaries || [];
+  const netFor = new Map(summaries.map(s => {
+    const sal = s.employee.monthly_salary || 0;
+    return [s.employee.id, Math.round(sal - Math.round((sal / 26) * s.totalCutDays))];
+  }));
+
+  let staff = (state.employees || []).filter(e => e.is_active !== false);
+  if (_payoutFilter !== 'all') staff = staff.filter(e => e.department === _payoutFilter);
+
+  document.getElementById('payout-filters').innerHTML =
+    PAYOUT_FILTERS.map(([v, l]) => `<button onclick="setPayoutFilter('${v}')"
+      class="px-3 py-1.5 rounded-full text-sm border ${_payoutFilter === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'}">${l}</button>`).join('')
+    + `<button onclick="clearPayoutMonth()" class="ml-auto btn-link text-sm">Clear this month</button>`;
+
+  // Each person lands in the first group that claims them, so nobody is listed twice.
+  const used = new Set();
+  const groups = PAYOUT_GROUPS.map(([name, test]) => {
+    const members = staff.filter(e => !used.has(e.id) && test(e)).sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
+    members.forEach(e => used.add(e.id));
+    return { name, members };
+  }).filter(g => g.members.length);
+
+  const doneAll = staff.filter(e => paid[e.id]).length;
+  box.innerHTML = `
+    <div class="mb-4 text-sm text-gray-600"><strong class="text-gray-900">${doneAll} of ${staff.length}</strong> paid for ${month}${doneAll === staff.length && staff.length ? ' · everybody is done' : ` · ${staff.length - doneAll} still to go`}</div>
+    ${groups.map(g => {
+      const gDone = g.members.filter(e => paid[e.id]).length;
+      return `<div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-4">
+        <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+          <span class="font-medium text-sm">${g.name}</span>
+          <span class="text-xs ${gDone === g.members.length ? 'text-green-600' : 'text-gray-500'}">${gDone}/${g.members.length} paid</span>
+        </div>
+        ${g.members.map(e => {
+          const on = !!paid[e.id];
+          const net = netFor.get(e.id);
+          return `<label class="flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" ${on ? 'checked' : ''} onchange="togglePaid('${e.id}')" class="w-5 h-5 accent-green-600 flex-none">
+            <span class="flex-1 min-w-0">
+              <span class="${on ? 'text-gray-400 line-through' : 'font-medium'}">${e.display_name}</span>
+              <span class="text-xs text-gray-400 ml-2">${e.designation || e.department || ''}</span>
+            </span>
+            ${net != null ? `<span class="text-sm ${on ? 'text-gray-400' : 'text-gray-700'} tabular-nums flex-none">${inr(net)}</span>` : '<span class="text-xs text-gray-300 flex-none">no import</span>'}
+            ${on ? `<span class="text-xs text-green-600 flex-none w-24 text-right">${fmtDateShort(paid[e.id])}</span>` : '<span class="w-24 flex-none"></span>'}
+          </label>`;
+        }).join('')}
+      </div>`;
+    }).join('') || `<div class="text-sm text-gray-500 py-12 text-center">Nobody matches this filter.</div>`}`;
+}
+
 function exportSalaryCsv(){
   const m = state.attendanceMonths[state.activeMonth]; if (!m) return alert("No active import.");
   const headers = ["Name","Monthly Salary","Per Day","Full Days","Late Strikes","Strike Half Days","Half LWP","LWP Days","CL","EL","Total Cuts","Cut Amount","Net Payable"];

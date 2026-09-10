@@ -5,7 +5,7 @@
    balances and receipts must never be stale, and Supabase calls carry auth
    headers that must not be replayed from a cache. */
 
-const VERSION = 'ek-v33';
+const VERSION = 'ek-v34';
 const SHELL = [
   '/', '/hub.html', '/staff', '/portal.html', '/teacher', '/teacher.html',
   '/brand/portal.css', '/brand/hub.css?v=27', '/brand/enquiries.js?v=27', '/brand/email-signature.png',
