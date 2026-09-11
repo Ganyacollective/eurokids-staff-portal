@@ -2663,8 +2663,12 @@ function statementHtml(c, ledger, items){
   const settled = owed <= 1;
   const d = x => x ? longDate(x) : '';
   const pays = (ledger || []).filter(l => l.counts_to_fees).sort((a,b) => String(a.on_date).localeCompare(String(b.on_date)));
-  const epmsKnown = pays.filter(l => l.source === 'epms').reduce((a,l) => a + Number(l.amount), 0);
-  const epmsUndated = Math.max(0, Number(c.collected || 0) - epmsKnown);
+  // Whatever the family has paid that no line above accounts for. Derived from
+  // paid_so_far rather than from EuroKids' collections, because a receipt we
+  // have already posted on to them would otherwise be counted twice — once as
+  // money handed to us, and again as money reaching them.
+  const shownSoFar = pays.reduce((a, l) => a + Number(l.amount || 0), 0);
+  const epmsUndated = Math.max(0, Number(c.paid_so_far || 0) - shownSoFar);
   const over = Number(c.overpaid || 0);
   const late = Number(c.overdue_amount || 0);
   const nextDue = settled ? '' :

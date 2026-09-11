@@ -120,6 +120,7 @@ export type StatementChild = {
   total_fee?: number | string | null; epms_invoiced?: number | string | null;
   our_discount?: number | string | null; agreed_fee?: number | string | null;
   collected?: number | string | null; uncredited_cash?: number | string | null;
+  paid_so_far?: number | string | null;
   true_due?: number | string | null; overpaid?: number | string | null;
   next_due_date?: string | null; next_amount?: number | string | null;
   overdue_amount?: number | string | null; overdue_by?: string | null;
@@ -178,8 +179,11 @@ export function statementHtml(c: StatementChild, ledger: LedgerLine[] = []) {
   const settled = owed <= 1;
   const pays = ledger.filter((l) => l.counts_to_fees)
     .sort((a, b) => String(a.on_date || "").localeCompare(String(b.on_date || "")));
-  const dated = pays.filter((l) => l.source === "epms").reduce((s, l) => s + Number(l.amount || 0), 0);
-  const undated = Math.max(0, Number(c.collected || 0) - dated);
+  // What they have paid that no line below accounts for. Taken from what we
+  // believe they have paid in total, not from EuroKids' own collections — a
+  // cheque we took and later posted on would otherwise appear twice.
+  const shown = pays.reduce((s, l) => s + Number(l.amount || 0), 0);
+  const undated = Math.max(0, Number(c.paid_so_far ?? c.collected ?? 0) - shown);
   // Two fixed columns: the amount never wraps, so "− ₹39,300" cannot split
   // across lines on a phone the way it did.
   const row = (k: string, v: string, cls = "") =>
