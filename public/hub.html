@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=43">
-<link rel="prefetch" href="/brand/enquiries.js?v=43" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=44">
+<link rel="prefetch" href="/brand/enquiries.js?v=44" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2691,6 +2691,28 @@ function promiseBoxHtml(p, kid){
       <button class="linkrow" id="pr-save">Record this promise</button>`;
 }
 
+// Which instalment a payment lands on. Oldest first, the way the office does
+// it on paper: Adam Nagarwala's father paid 47,000 against a 45,850 Term 1, so
+// Term 1 is cleared and 1,150 has already gone towards Term 2. Anything else
+// makes the balance and the instalment line contradict each other.
+function allocate(c, items){
+  let before = 0;
+  const paidAll = Number(c.paid_so_far || 0);
+  const list = (items || []).filter(i => Number(i.amount) > 0);
+  return list.map((i, idx) => {
+    const amt = Number(i.amount) || 0;
+    const paid = Math.min(amt, Math.max(0, paidAll - before));
+    before += amt;
+    const remaining = Math.round((amt - paid) * 100) / 100;
+    return { ...i, amt, paid, remaining,
+      // Two instalments are the EuroKids terms. More than two means the family
+      // arranged something of their own — usually a booking amount in January
+      // and the rest of Term 1 before school starts — so they are numbered.
+      label: i.label || (list.length === 2 ? ['Term 1', 'Term 2'][idx] : 'Payment ' + (idx + 1)),
+      state: remaining <= 1 ? 'paid' : paid > 1 ? 'part' : 'open' };
+  });
+}
+
 function statementHtml(c, ledger, items){
   const fee = Number(c.total_fee || c.epms_invoiced || 0);
   const disc = Number(c.our_discount || 0);
@@ -2754,7 +2776,27 @@ function statementHtml(c, ledger, items){
     ${otherPays.length ? `<div class="foot">Also received, and not part of the school fee:<br>${otherPays.map(l =>
         `${esc(l.description || 'Other collection')} — <strong>${money(l.amount)}</strong>${l.on_date ? ' on ' + d(l.on_date) : ''}${l.mode ? ' · ' + esc(l.mode) : ''}`).join('<br>')}</div>` : ''}
     ${held > 0 ? `<div class="foot warn">EuroKids still shows ${money(c.epms_due)} because ${money(held)} of this family's money has not been posted to them yet. The balance above is the honest one.</div>` : ''}
-    </div>`;
+    </div>
+    ${(() => {
+      // The instalments, and how far each one has been met. Without this the
+      // page could say "balance 32,950" in one place and "34,100 due on
+      // 5 September" in another, both true, together nonsense.
+      const sched = allocate(c, items);
+      if (!sched.length) return '';
+      const now = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+      return `<div class="grp"><h3>Payment schedule</h3><div class="box">
+        ${sched.map(r => {
+          const late = r.state !== 'paid' && r.due_date && r.due_date < now;
+          const sub = [r.due_date ? (r.state === 'paid' ? 'was due ' + d(r.due_date) : 'due ' + d(r.due_date)) : '',
+                       r.state === 'part' ? money(r.paid) + ' of this already paid' : '',
+                       late ? 'overdue' : ''].filter(Boolean).join(' · ');
+          return `<div class="row"><div class="l">${esc(r.label)}<span class="sub">${sub}</span></div>
+            <div class="v ${r.state === 'paid' ? 'credit' : late ? 'due' : ''}">${r.state === 'paid'
+              ? 'Cleared' : money(r.remaining)}</div></div>`;
+        }).join('')}
+      </div><div class="foot">Every payment is applied to the earliest instalment first, so an instalment
+        settled early carries the excess forward.</div></div>`;
+    })()}`;
 }
 
 async function openPlan(uin){
@@ -2834,8 +2876,11 @@ async function openPlan(uin){
     <div class="grp"><h3>Instalments</h3><div class="box">
       <div id="pf-items"></div>
       <button class="linkrow" id="pf-add">Add instalment</button>
-    </div><div id="pf-warn"></div>
-    <div class="foot">Fill the earlier ones; the last is worked out so they add up to the agreed fee.</div></div>
+      <button class="linkrow" id="pf-terms">Set from the EuroKids terms</button>
+    </div><div id="pf-warn"></div><div id="pf-terms-note"></div>
+    <div class="foot">Fill the earlier ones; the last is worked out so they add up to the agreed fee.
+      A family paying to their own rhythm — a booking amount now, the rest of Term 1 before school
+      starts — gets extra rows dated whenever they agreed to pay.</div></div>
 
     <div class="grp"><h3>Parents</h3><div class="box">
       <div class="row"><div class="l">Email 1</div><input class="in wide" id="pf-em1" type="email" value="${esc(contact?.parent_email1||'')}" placeholder="none on file"></div>
@@ -2895,11 +2940,22 @@ async function openPlan(uin){
       </div></div>
     <button class="btn" id="pf-save">Save plan</button>`;
 
-  let rows = it.map(x => ({ amount: x.amount ?? '', due_date: x.due_date ?? '' }));
+  let rows = it.map(x => ({ amount: x.amount ?? '', due_date: x.due_date ?? '', label: x.label || '' }));
+
+  // The academic year runs April to March, so a child admitted in January for
+  // the coming April belongs to the year that starts the previous April.
+  const admitted = String(kid?.admission_date || '').slice(0, 10);
+  const ayStart = (() => {
+    const dt = admitted ? new Date(admitted + 'T00:00:00Z') : new Date();
+    const y = dt.getUTCFullYear();
+    return dt.getUTCMonth() + 1 >= 4 ? y : y - 1;
+  })();
+  const TERM2_DUE = `${ayStart}-09-05`;   // the school's standing date
+  const TERM_CUT  = `${ayStart}-07-01`;   // anything before this is Term 1 money
 
   const drawItems = () => {
     el('pf-items').innerHTML = rows.map((r,i) => `
-      <div class="row"><div class="l">Payment ${i+1}</div>
+      <div class="row"><div class="l">${esc(r.label || 'Payment ' + (i+1))}</div>
         <div class="inst">
           <input class="in num pf-amt" data-i="${i}" type="number" value="${r.amount}" placeholder="Amount" aria-label="Amount" style="width:110px">
           <input class="in pf-due" data-i="${i}" type="date" value="${r.due_date}" aria-label="Due date">
@@ -2977,17 +3033,43 @@ async function openPlan(uin){
       const f = document.querySelector('.pf-amt[data-i="0"]'); if (f) f.value = final; } return; }
     const head = rows.slice(0,-1).reduce((a,r)=>a + (Number(r.amount)||0), 0);
     const last = Math.max(0, final - head);
-    setTimeout(warnMismatch, 0);
+    setTimeout(() => { warnMismatch(); termsNote(); }, 0);
     rows[rows.length-1].amount = last;
     const lastEl = document.querySelector(`.pf-amt[data-i="${rows.length-1}"]`);
     if (lastEl) lastEl.value = last;
   };
 
-  drawItems(); autoLast(); warnMismatch();
+  // EuroKids decides the fee and splits it into two terms. Term 1 falls due
+  // before the first day of school; Term 2 on 5 September. A concession of
+  // ours comes off Term 2 — the school never re-cuts Term 1 — so a 100 fee
+  // split 50/50 with a 10 concession is 50 and 40, not 45 and 45.
+  const T1 = Number(kid?.term1_invoiced || 0), T2 = Number(kid?.term2_invoiced || 0);
+  const termsNote = () => {
+    const box = el('pf-terms-note'); if (!box) return;
+    if (!(T1 > 0 && T2 > 0)) { box.innerHTML = ''; return; }
+    const disc = Number(el('pf-disc').value) || 0;
+    const want2 = Math.max(0, T2 - disc);
+    const got1 = rows.filter(r => r.due_date && r.due_date < TERM_CUT).reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const got2 = rows.filter(r => !r.due_date || r.due_date >= TERM_CUT).reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const ok = Math.abs(got1 - T1) <= 1 && Math.abs(got2 - want2) <= 1;
+    box.innerHTML = `<div class="foot${ok ? '' : ' warn'}">EuroKids splits this fee
+      <strong>${money(T1)}</strong> before school starts and <strong>${money(T2)}</strong> on 5 September${
+        disc > 0 ? `, and our ${money(disc)} concession comes off Term 2 — so <strong>${money(T1)}</strong> and <strong>${money(want2)}</strong>` : ''}.
+      Your rows come to ${money(got1)} and ${money(got2)}${ok ? ' ✓' : ' — they do not match, which is fine only if the family agreed something different.'}</div>`;
+  };
+
+  drawItems(); autoLast(); warnMismatch(); termsNote();
   el('pf-total').oninput = autoLast;
   el('pf-disc').oninput  = autoLast;
   el('pf-add').onclick = () => { if (rows.length >= 5) return alert('Five instalments is the maximum.');
     rows.push({ amount:'', due_date:'' }); drawItems(); autoLast(); };
+  el('pf-terms').onclick = () => {
+    if (!(T1 > 0 || T2 > 0)) return alert('EPMS has not invoiced the terms for this child yet, so there is nothing to copy.');
+    const disc = Number(el('pf-disc').value) || 0;
+    rows = [{ amount: T1, due_date: admitted || `${ayStart}-04-01`, label: 'Term 1' },
+            { amount: Math.max(0, T2 - disc), due_date: TERM2_DUE, label: 'Term 2' }];
+    drawItems(); autoLast();
+  };
 
   const savePlan = async () => {
     const total = Number(el('pf-total').value)||0, disc = Number(el('pf-disc').value)||0;
@@ -3008,7 +3090,8 @@ async function openPlan(uin){
 
     await s.schema('eurokids').from('payment_plan_item').delete().eq('uin', _planUin);
     const ins = await s.schema('eurokids').from('payment_plan_item')
-      .insert(clean.map((r,i) => ({ uin: _planUin, seq: i+1, amount: Number(r.amount), due_date: r.due_date })));
+      .insert(clean.map((r,i) => ({ uin: _planUin, seq: i+1, amount: Number(r.amount),
+        due_date: r.due_date, label: r.label || null })));
     if (ins.error) { el('pf-msg').innerHTML = `<div class="err">${esc(ins.error.message)}</div>`; return false; }
 
     // child_discount is finance-only, while the plan itself is not — so a
@@ -3330,7 +3413,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=43"></script>
+<script src="/brand/enquiries.js?v=44"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

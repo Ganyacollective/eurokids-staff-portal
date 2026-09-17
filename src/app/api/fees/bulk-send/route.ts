@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import {
   renderEmail, textToHtml, money, day, plainFooter,
-  SCHOOL_NAME, statementHtml, statementText, type ThemeKey, type LedgerLine,
+  SCHOOL_NAME, statementHtml, statementText, type ThemeKey, type LedgerLine, type PlanItem,
 } from "@/lib/brand-email";
 import { sendMail, sendMany, provider as mailProvider, dailyCap, mailReady } from "@/lib/mailer";
 import { applyFilters, addressesFor, summarise, isRealAddress, type Filters, type ScheduleRow } from "@/lib/recipients";
@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
 
   // Each family's dated payments, for the statement block.
   const ledgerBy = new Map<string, LedgerLine[]>();
+  const itemsBy = new Map<string, PlanItem[]>();
   if (body.includeFees && matched.length) {
     const admin0 = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: led } = await admin0.schema("eurokids").from("v_child_ledger")
@@ -99,6 +100,14 @@ export async function POST(req: NextRequest) {
       if (!ledgerBy.has(l.uin)) ledgerBy.set(l.uin, []);
       ledgerBy.get(l.uin)!.push(l);
     }
+    // …and the instalments, so the statement can show which terms are already
+    // cleared rather than only a single balance figure.
+    const { data: its } = await admin0.schema("eurokids").from("payment_plan_item")
+      .select("uin,seq,label,amount,due_date").in("uin", matched.map((r) => r.uin)).order("seq");
+    for (const i of (its || []) as (PlanItem & { uin: string })[]) {
+      if (!itemsBy.has(i.uin)) itemsBy.set(i.uin, []);
+      itemsBy.get(i.uin)!.push(i);
+    }
   }
 
   const attachments = (body.attachments || [])
@@ -106,14 +115,14 @@ export async function POST(req: NextRequest) {
     .map((a) => ({ filename: a.filename, content: a.content }));
 
   const build = (r: ScheduleRow) => {
-    const bodyHtml = textToHtml(merge(message, r)) + (body.includeFees ? statementHtml(r, ledgerBy.get(r.uin) || []) : "");
+    const bodyHtml = textToHtml(merge(message, r)) + (body.includeFees ? statementHtml(r, ledgerBy.get(r.uin) || [], itemsBy.get(r.uin) || []) : "");
     return {
       html: renderEmail({
         title: merge(body.title || subject, r),
         subtitle: `${r.student_name}${r.program_name ? " · " + r.program_name : ""}`,
         bodyHtml, theme: body.theme,
       }),
-      text: [merge(message, r), ...(body.includeFees ? ["", statementText(r, ledgerBy.get(r.uin) || [])] : []),
+      text: [merge(message, r), ...(body.includeFees ? ["", statementText(r, ledgerBy.get(r.uin) || [], itemsBy.get(r.uin) || [])] : []),
         plainFooter()].join("\n"),
     };
   };

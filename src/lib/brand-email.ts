@@ -171,7 +171,33 @@ function positionLines(c: StatementChild) {
   return out;
 }
 
-export function statementHtml(c: StatementChild, ledger: LedgerLine[] = []) {
+export type PlanItem = {
+  seq?: number | null; label?: string | null;
+  amount: number | string | null; due_date?: string | null;
+};
+
+// Payments land on instalments oldest first, the way the office does it on
+// paper. Without this a statement can say "balance 32,950" in one place and
+// "34,100 due on 5 September" in another — both true, together nonsense.
+export function allocate(c: StatementChild, items: PlanItem[] = []) {
+  const list = items.filter((i) => Number(i.amount) > 0)
+    .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+  let before = 0;
+  const paidAll = Number(c.paid_so_far ?? c.collected ?? 0);
+  return list.map((i, idx) => {
+    const amt = Number(i.amount) || 0;
+    const paid = Math.min(amt, Math.max(0, paidAll - before));
+    before += amt;
+    const remaining = Math.round((amt - paid) * 100) / 100;
+    return { ...i, amt, paid, remaining,
+      // Two instalments are the EuroKids terms. More than two means this
+      // family arranged something of their own.
+      label: i.label || (list.length === 2 ? ["Term 1", "Term 2"][idx] : `Payment ${idx + 1}`),
+      state: remaining <= 1 ? "paid" : paid > 1 ? "part" : "open" };
+  });
+}
+
+export function statementHtml(c: StatementChild, ledger: LedgerLine[] = [], items: PlanItem[] = []) {
   const fee = Number(c.total_fee || c.epms_invoiced || 0);
   const disc = Number(c.our_discount || 0);
   const owed = Number(c.true_due || 0);
@@ -231,11 +257,26 @@ export function statementHtml(c: StatementChild, ledger: LedgerLine[] = []) {
          <strong style="color:${INK}">Also received, and not part of the school fee</strong><br>
          ${otherPays.map((l) => `${esc(l.description || "Other collection")} — <strong>${moneyH(l.amount)}</strong>${l.on_date ? " on " + day(l.on_date) : ""}${l.mode ? " · " + esc(l.mode) : ""}`).join("<br>")}
        </td></tr>` : "";
-  return `<table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px;table-layout:auto">${lines}${totalRow}${alsoRow}${next}</table>
+  const sched = allocate(c, items);
+  const schedRow = sched.length
+    ? `<tr><td colspan="2" style="padding-top:16px">
+         <div style="color:${INK};font-weight:700;font-size:13px;padding-bottom:4px">Your payment schedule</div>
+         <table role="presentation" style="width:100%;border-collapse:collapse;font-size:13px">
+           ${sched.map((r) => `<tr>
+             <td style="padding:6px 0;color:${MUTE};border-bottom:1px solid #F3F4F6">${esc(r.label)}${
+               r.due_date ? `<span style="color:#9CA3AF"> · ${r.state === "paid" ? "was due" : "due"} ${day(r.due_date)}</span>` : ""}${
+               r.state === "part" ? sub(`${money(r.paid)} of this is already paid`) : ""}</td>
+             <td style="padding:6px 0 6px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid #F3F4F6;${
+               r.state === "paid" ? `color:${GREEN};font-weight:700` : ""}">${
+               r.state === "paid" ? "Cleared" : moneyH(r.remaining)}</td></tr>`).join("")}
+         </table>
+         <div style="color:#9CA3AF;font-size:12px;padding-top:6px">Every payment is applied to the earliest instalment first.</div>
+       </td></tr>` : "";
+  return `<table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px;table-layout:auto">${lines}${totalRow}${schedRow}${alsoRow}${next}</table>
     ${Number(c.uncredited_cash || 0) > 0 ? `<p style="font-size:13px;color:${MUTE}">Payments made at the school office can take a few days to appear on the online portal. The balance above already includes them.</p>` : ""}`;
 }
 
-export function statementText(c: StatementChild, ledger: LedgerLine[] = []) {
+export function statementText(c: StatementChild, ledger: LedgerLine[] = [], items: PlanItem[] = []) {
   const fee = Number(c.total_fee || c.epms_invoiced || 0), disc = Number(c.our_discount || 0);
   const owed = Number(c.true_due || 0), late = Number(c.overdue_amount || 0);
   const pays = ledger.filter((l) => l.counts_to_fees);
@@ -253,5 +294,10 @@ export function statementText(c: StatementChild, ledger: LedgerLine[] = []) {
     ...(owed > 1 && late > 1 ? [`Overdue:         ${money(late)}${c.overdue_by ? " (was due by " + day(c.overdue_by) + ")" : ""}`] : []),
     ...(owed > 1 && c.upcoming_date ? [`Next instalment: ${money(c.upcoming_amount)} due ${day(c.upcoming_date)}`]
       : owed > 1 && late <= 1 && c.next_due_date ? [`Next instalment due ${day(c.next_due_date)}`] : []),
+    ...(items.length ? ["", "Your payment schedule:",
+      ...allocate(c, items).map((r) =>
+        `  ${r.label}${r.due_date ? ` (${r.state === "paid" ? "was due" : "due"} ${day(r.due_date)})` : ""}: ${
+          r.state === "paid" ? "cleared" : money(r.remaining)
+        }${r.state === "part" ? ` — ${money(r.paid)} of it already paid` : ""}`)] : []),
   ].join("\n");
 }

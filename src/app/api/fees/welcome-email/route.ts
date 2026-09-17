@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     `<tr><td style="padding:6px 0;color:#4B5563">${k}</td><td style="padding:6px 0;text-align:right${strong ? ";font-weight:700" : ""}">${v}</td></tr>`;
 
   const summary = kind === "statement"
-    ? statementHtml(child, ledger)
+    ? statementHtml(child, ledger, items || [])
     : kind === "receipt"
     ? `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
          ${line("Annual fee", moneyH(Number(child.total_fee || finalFee)))}
