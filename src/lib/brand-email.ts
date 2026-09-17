@@ -179,6 +179,11 @@ export function statementHtml(c: StatementChild, ledger: LedgerLine[] = []) {
   const settled = owed <= 1;
   const pays = ledger.filter((l) => l.counts_to_fees)
     .sort((a, b) => String(a.on_date || "").localeCompare(String(b.on_date || "")));
+  // Day care, uniform, an event — handed over by the same parent, often the
+  // same day, and previously invisible on their statement. It stays out of the
+  // fee arithmetic but is acknowledged underneath it.
+  const otherPays = ledger.filter((l) => !l.counts_to_fees)
+    .sort((a, b) => String(a.on_date || "").localeCompare(String(b.on_date || "")));
   // What they have paid that no line below accounts for. Taken from what we
   // believe they have paid in total, not from EuroKids' own collections — a
   // cheque we took and later posted on would otherwise appear twice.
@@ -221,7 +226,12 @@ export function statementHtml(c: StatementChild, ledger: LedgerLine[] = []) {
   const pos = positionLines(c);
   const next = pos.length
     ? `<tr><td colspan="2" style="padding-top:10px;color:${MUTE};font-size:13px;line-height:1.5">${pos.join("<br>")}</td></tr>` : "";
-  return `<table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px;table-layout:auto">${lines}${totalRow}${next}</table>
+  const alsoRow = otherPays.length
+    ? `<tr><td colspan="2" style="padding-top:14px;color:${MUTE};font-size:13px;line-height:1.6">
+         <strong style="color:${INK}">Also received, and not part of the school fee</strong><br>
+         ${otherPays.map((l) => `${esc(l.description || "Other collection")} — <strong>${moneyH(l.amount)}</strong>${l.on_date ? " on " + day(l.on_date) : ""}${l.mode ? " · " + esc(l.mode) : ""}`).join("<br>")}
+       </td></tr>` : "";
+  return `<table role="presentation" style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px;table-layout:auto">${lines}${totalRow}${alsoRow}${next}</table>
     ${Number(c.uncredited_cash || 0) > 0 ? `<p style="font-size:13px;color:${MUTE}">Payments made at the school office can take a few days to appear on the online portal. The balance above already includes them.</p>` : ""}`;
 }
 

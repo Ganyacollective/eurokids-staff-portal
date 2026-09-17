@@ -88,15 +88,27 @@ Deno.serve(async (req) => {
   // ── who is asking? verify_jwt guarantees a valid user; we still need the
   //    RIGHT user. A teacher must not be able to trigger a sync or read the
   //    payment totals it returns.
+  // A nightly run has no user behind it. It presents a shared secret instead,
+  // and is logged as 'scheduled' so nobody reading the sync log mistakes an
+  // unattended pull for a colleague's. An unset SYNC_CRON_KEY means the
+  // machine path simply does not exist.
+  const cronKey = Deno.env.get('SYNC_CRON_KEY');
+  const machine = !!cronKey && req.headers.get('x-sync-key') === cronKey;
+
   const auth = req.headers.get('authorization') || '';
-  const asUser = createClient(url, anonKey, { global: { headers: { Authorization: auth } } });
-  const { data: who } = await asUser.auth.getUser();
-  if (!who?.user) return json({ ok: false, error: 'Not signed in.' }, 401);
-  const sbPublic = createClient(url, serviceKey);
-  const { data: mods } = await sbPublic.from('module_access').select('module')
-    .eq('user_id', who.user.id).in('module', ['epms_admin', 'finance']);
-  const ownerEmails = ['abhinav@ganya.in'];
-  const allowed = (mods && mods.length) || ownerEmails.includes((who.user.email || '').toLowerCase());
+  let actor = 'scheduled';
+  let allowed: unknown = machine;
+  if (!machine) {
+    const asUser = createClient(url, anonKey, { global: { headers: { Authorization: auth } } });
+    const { data: who } = await asUser.auth.getUser();
+    if (!who?.user) return json({ ok: false, error: 'Not signed in.' }, 401);
+    actor = who.user.email || who.user.id;
+    const sbPublic = createClient(url, serviceKey);
+    const { data: mods } = await sbPublic.from('module_access').select('module')
+      .eq('user_id', who.user.id).in('module', ['epms_admin', 'finance']);
+    const ownerEmails = ['abhinav@ganya.in'];
+    allowed = (mods && mods.length) || ownerEmails.includes((who.user.email || '').toLowerCase());
+  }
 
   const sb = createClient(url, serviceKey, { db: { schema: 'epms' } });
 
@@ -106,7 +118,7 @@ Deno.serve(async (req) => {
   const refuse = async (msg: string, status: number) => {
     const at = new Date().toISOString();
     await sb.from('sync_runs').insert({ report: 'payment_due', route: 'epms-pull',
-      triggered_by: who.user.email,
+      triggered_by: actor,
       finished_at: at, status: 'error', error: msg });
     return json({ ok: false, error: msg }, status);
   };
@@ -136,7 +148,7 @@ Deno.serve(async (req) => {
   // sync_runs_triggered_by_is_text), and a failed insert stops the run instead
   // of letting it succeed invisibly.
   const run = await sb.from('sync_runs').insert({ report: 'payment_due', route: 'epms-pull',
-      triggered_by: who.user.email })
+      triggered_by: actor })
     .select('id').single();
   const runId = run.data?.id;
   if (!runId) return json({ ok: false, error: 'Could not open a sync log entry: ' + (run.error?.message || 'unknown') }, 500);

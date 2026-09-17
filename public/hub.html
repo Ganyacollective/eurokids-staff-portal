@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=42">
-<link rel="prefetch" href="/brand/enquiries.js?v=42" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=43">
+<link rel="prefetch" href="/brand/enquiries.js?v=43" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1529,6 +1529,32 @@ function fail(e){
     <div style="margin-top:10px"><button class="btn sm" onclick="invalidate();renderApp()">Try again</button></div></div>`;
 }
 
+// The sync is the one moving part nobody watches. When it breaks, every
+// figure on this page silently stops moving too — and the page looks exactly
+// as healthy as it did the day before. So it says so, at the top, in words.
+async function renderSyncHealth(){
+  const box = el('sync-health'); if (!box) return;
+  try {
+    const { data } = await getSb().schema('epms').from('v_sync_health').select('*').maybeSingle();
+    if (!data || !data.last_at) { box.innerHTML = ''; return; }
+    const stale = data.hours_since_ok == null || data.hours_since_ok > 26;
+    const broke = data.last_status && data.last_status !== 'ok';
+    if (!broke && !stale) { box.innerHTML = ''; return; }
+    const when = t => t ? new Date(t).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : 'never';
+    const why  = esc(data.last_error || '');
+    const login = /credentials rejected|bounced to login/i.test(why);
+    box.innerHTML = `<div class="err" style="display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:18px;line-height:1.2">⚠️</span>
+        <div style="flex:1">
+          <strong>${broke ? 'The last sync from EPMS failed' : 'EPMS has not synced in a while'}</strong>
+          — these figures are from ${when(data.last_ok_at)}${data.hours_since_ok != null ? `, ${data.hours_since_ok} hours ago` : ''}.
+          ${login ? '<br>EPMS refused our login, which nearly always means the EPMS password was changed.' : ''}
+          ${why ? `<div class="hint" style="margin-top:6px;word-break:break-word">${why}</div>` : ''}
+          <div style="margin-top:8px"><button class="btn sm" onclick="el('sync') && el('sync').click()">Try syncing now</button></div>
+        </div></div>`;
+  } catch (_) { box.innerHTML = ''; }
+}
+
 /* ── overview: position for the owner, worklist for everyone else ── */
 async function tabOverview(){
   const s = getSb();
@@ -1543,7 +1569,8 @@ async function tabOverview(){
     el('body').innerHTML = head('Overview', 'Live from EPMS, corrected for status and discounts.',
         `<span class="hint" id="sync-info" style="margin-right:10px">Checking…</span>
          <button class="btn line sm" id="sync">Sync from EPMS</button>`)
-      + `<div class="stats">
+      + `<div id="sync-health"></div>
+      <div class="stats">
         <div class="stat acc"><div class="k">Active students</div><div class="v">${sum.students_active}</div>
           <div class="m">Quit and transferred-out children are excluded</div></div>
         <div class="stat crit"><div class="k">Total pending</div><div class="v">${money(sum.true_pending_total)}</div>
@@ -1594,6 +1621,7 @@ async function tabOverview(){
     renderScheduleFlags();
 
     wireSync(s, () => { if (tab === 'overview') tabOverview(); });
+    renderSyncHealth();
     return;
   }
 
@@ -1628,7 +1656,8 @@ async function tabOverview(){
   el('body').innerHTML = head("Today's list", new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' }),
       has('epms_admin') ? `<span class="hint" id="sync-info" style="margin-right:10px">Checking…</span>
          <button class="btn line sm" id="sync">Sync from EPMS</button>` : '')
-    + `<div class="stats">
+    + `<div id="sync-health"></div>
+      <div class="stats">
         <div class="stat"><div class="k">Children on the roll</div><div class="v">${roster.length}</div><div class="m">${paidUp.length} fully paid</div></div>
         <div class="stat crit"><div class="k">Fees overdue</div><div class="v">${overdue.length}</div><div class="m">famil${overdue.length === 1 ? 'y' : 'ies'} to chase</div></div>
         <div class="stat warn"><div class="k">Due within a month</div><div class="v">${dueSoon.length}</div><div class="m">worth a friendly call</div></div>
@@ -1656,6 +1685,7 @@ async function tabOverview(){
         || `<tr><td colspan="6"><div class="empty"><div class="ic">✅</div><h3>Nothing to chase</h3><div>Every family is up to date.</div></div></td></tr>`}
       </tbody></table></div></div>`;
   if (has('epms_admin')) wireSync(s, () => { if (tab === 'overview') tabOverview(); });
+  renderSyncHealth();
 }
 
 // When a colleague syncs, this tab is holding stale numbers. Coming back to
@@ -2670,6 +2700,12 @@ function statementHtml(c, ledger, items){
   const settled = owed <= 1;
   const d = x => x ? longDate(x) : '';
   const pays = (ledger || []).filter(l => l.counts_to_fees).sort((a,b) => String(a.on_date).localeCompare(String(b.on_date)));
+  // Money the family handed over that is not school fees — day care, uniform,
+  // an event. It must not touch the fee arithmetic, but leaving it off the page
+  // entirely is worse: Adam Nagarwala's father gave two cheques on one day and
+  // the statement acknowledged one of them. Shown, plainly outside the sum.
+  const otherPays = (ledger || []).filter(l => !l.counts_to_fees)
+    .sort((a,b) => String(a.on_date).localeCompare(String(b.on_date)));
   // Whatever the family has paid that no line above accounts for. Derived from
   // paid_so_far rather than from EuroKids' collections, because a receipt we
   // have already posted on to them would otherwise be counted twice — once as
@@ -2715,6 +2751,8 @@ function statementHtml(c, ledger, items){
           `${d(l.on_date)}${l.mode && l.source !== 'epms' ? ' · ' + esc(l.mode) : ''}${Number(l.still_held) > 0.01 ? ' · ' + money(l.still_held) + ' not yet posted' : ''}`)).join('')}
       <div class="row total"><div class="l">${settled ? 'Balance' : 'Balance due'}</div><div class="v ${settled ? 'credit' : 'due'}">${money(owed)}</div></div>
     </div>
+    ${otherPays.length ? `<div class="foot">Also received, and not part of the school fee:<br>${otherPays.map(l =>
+        `${esc(l.description || 'Other collection')} — <strong>${money(l.amount)}</strong>${l.on_date ? ' on ' + d(l.on_date) : ''}${l.mode ? ' · ' + esc(l.mode) : ''}`).join('<br>')}</div>` : ''}
     ${held > 0 ? `<div class="foot warn">EuroKids still shows ${money(c.epms_due)} because ${money(held)} of this family's money has not been posted to them yet. The balance above is the honest one.</div>` : ''}
     </div>`;
 }
@@ -3292,7 +3330,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=42"></script>
+<script src="/brand/enquiries.js?v=43"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
