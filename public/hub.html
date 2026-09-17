@@ -137,7 +137,7 @@ const TABS = {
   children:   { label: 'Children',      icon: 'people', sect: 'Fees',          need: () => has('finance') || has('admission') },
   views:      { label: 'Views',         icon: 'list',   sect: 'Fees',          need: () => has('finance') || has('admission') },
   plans:      { label: 'Fees & Plans',  icon: 'rupee',  sect: 'Fees',          need: () => has('finance') || has('admission') },
-  liability:  { label: 'Liabilities',   icon: 'tray',   sect: 'Fees',          need: () => has('finance') },
+  liability:  { label: 'Liabilities',   icon: 'tray',   sect: 'Fees',          need: () => has('finance') || has('receipts') },
   compose:    { label: 'Send Email',    icon: 'mail',   sect: 'Communication', need: () => has('finance') || has('admission') },
   reminders:  { label: 'Reminders',     icon: 'bell',   sect: 'Communication', need: () => has('finance') },
   kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
@@ -310,9 +310,10 @@ function renderChooser(){
 }
 
 /* ── users & access (owner only) ─────────────────────── */
-const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','finance','salary'];
+const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts','finance','salary'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
-  payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission', finance:'Finance (money)',
+  payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
+  receipts:'Receipts & cash', finance:'Finance (money)',
   salary:'Salaries (staff pay)' };
 
 async function hubUsersApi(method, body){
@@ -330,7 +331,8 @@ async function hubUsersApi(method, body){
 function modRows(prefix, selected){
   return ALL_MODULES.map(m => `
     <label class="row" style="cursor:pointer"><span class="l">${MODULE_LABEL[m]}${
-      m==='finance' ? '<span class="sub">Shows school-wide money. Coordinators normally need Admission + EPMS admin only.</span>'
+      m==='finance' ? '<span class="sub">The school\u2019s books \u2014 totals, discounts, the fee grid. Most people do not need this.</span>'
+      : m==='receipts' ? '<span class="sub">Record cash and cheques taken at the desk, and see what a family has paid. Without the school-wide totals.</span>'
       : m==='salary' ? '<span class="sub">What every member of staff earns, and their increments. Give this to almost nobody.</span>' : ''}</span>
       <input type="checkbox" class="sw ${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}></label>`).join('');
 }
