@@ -88,14 +88,18 @@ Deno.serve(async (req) => {
   // ── who is asking? verify_jwt guarantees a valid user; we still need the
   //    RIGHT user. A teacher must not be able to trigger a sync or read the
   //    payment totals it returns.
-  // A nightly run has no user behind it. It presents a shared secret instead,
-  // and is logged as 'scheduled' so nobody reading the sync log mistakes an
-  // unattended pull for a colleague's. An unset SYNC_CRON_KEY means the
-  // machine path simply does not exist.
-  const cronKey = Deno.env.get('SYNC_CRON_KEY');
-  const machine = !!cronKey && req.headers.get('x-sync-key') === cronKey;
-
+  // A nightly run has no user behind it, so it authenticates as the server it
+  // is: the service-role key, which only our own back end holds and which is
+  // already configured everywhere. No new shared secret to create, rotate or
+  // forget. SYNC_CRON_KEY stays supported for anything that would rather send
+  // a purpose-made key. Either way the run is logged as 'scheduled', so nobody
+  // reading the sync log mistakes an unattended pull for a colleague's.
   const auth = req.headers.get('authorization') || '';
+  const bearer = auth.replace(/^Bearer\s+/i, '').trim();
+  const cronKey = Deno.env.get('SYNC_CRON_KEY');
+  const machine = (!!serviceKey && bearer === serviceKey)
+    || (!!cronKey && req.headers.get('x-sync-key') === cronKey);
+
   let actor = 'scheduled';
   let allowed: unknown = machine;
   if (!machine) {

@@ -51,17 +51,20 @@ export async function GET(req: NextRequest) {
   const epms = admin.schema("epms");
 
   let ok = false, error = "", detail: Record<string, unknown> = {};
-  if (!SYNC_CRON_KEY) {
-    error = "SYNC_CRON_KEY is not set on the web server, so the scheduled sync cannot identify itself to the sync function.";
+  if (!SERVICE_ROLE) {
+    error = "SUPABASE_SERVICE_ROLE_KEY is not set on the web server, so the scheduled sync has nothing to identify itself with.";
   } else {
     try {
+      // The service-role key is the credential. epms-pull recognises it as its
+      // own back end and lets the run through without a user; SYNC_CRON_KEY is
+      // sent too when one has been configured, but nothing depends on it.
       const r = await fetch(`${SUPABASE_URL}/functions/v1/epms-pull`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${SERVICE_ROLE}`,
           apikey: SERVICE_ROLE,
-          "x-sync-key": SYNC_CRON_KEY,
+          ...(SYNC_CRON_KEY ? { "x-sync-key": SYNC_CRON_KEY } : {}),
         },
       });
       const body = await r.text();
