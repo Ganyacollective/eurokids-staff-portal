@@ -529,7 +529,7 @@ async function renderScheduleFlags(){
     <div class="pill-row" style="padding:0 4px 14px">
       ${missing.length ? `<span class="pill warn">${missing.length} with no schedule · ${rupees(missing)}</span>` : ''}
       ${overdue.length ? `<span class="pill" style="background:var(--crit-wash);color:var(--crit)">${overdue.length} past their due date · ${rupees(overdue)}</span>` : ''}
-      ${soon.length ? `<span class="pill">${soon.length} due within a fortnight · ${rupees(soon)}</span>` : ''}
+      ${soon.length ? `<span class="pill">${soon.length} due within a month · ${rupees(soon)}</span>` : ''}
       <button class="btn sm line" id="sf-mail">Email the overdue families →</button>
     </div>
     ${missing.length ? `<div class="tw" style="max-height:420px;overflow:auto"><table><thead><tr><th>Child</th><th>Class</th><th class="r">Owed</th><th></th></tr></thead><tbody>
@@ -749,12 +749,17 @@ async function tabViews(){
     ['Everyone',     []],
     ['Still owing',  [{ field:'true_due', op:'>', value:0 }]],
     ['Overdue',      [{ field:'schedule_flag', op:'=', value:'OVERDUE' }]],
-    ['Due soon',     [{ field:'schedule_flag', op:'=', value:'DUE SOON' }]],
+    ['Due within a month', [{ field:'schedule_flag', op:'=', value:'DUE SOON' }]],
+    // Nine children were in none of these lists: not overdue, not settled, just
+    // paying on time with their next instalment further out. Invisible unless
+    // you thought to open Everyone.
+    ['On track',     [{ field:'schedule_flag', op:'=', value:'ON TRACK' }]],
     ['Paid up',      [{ field:'schedule_flag', op:'=', value:'SETTLED' }]],
     ['Overpaid',     [{ field:'schedule_flag', op:'=', value:'OVERPAID' }]],
     ['No schedule',  [{ field:'has_schedule', op:'false', value:'' }]],
   ];
-  const QUICK_TINT = { Overdue:'var(--crit)', 'Due soon':'#D97706', 'Paid up':'#16A34A', Overpaid:'#D97706', 'No schedule':'#D97706' };
+  const QUICK_TINT = { Overdue:'var(--crit)', 'Due within a month':'#D97706', 'On track':'#0A84FF',
+                     'Paid up':'#16A34A', Overpaid:'#D97706', 'No schedule':'#D97706' };
   const SORTS = [['student_name','Name'],['program_name','Class'],['true_due','Truly due'],['term2_due','Term 2 due'],
                  ['next_due_date','Next due date'],['days_overdue','Days overdue'],['schedule_flag','Status'],['admission_date','Admitted on']];
   // Which built-in list is selected (when no saved view is), and what the
@@ -1626,7 +1631,7 @@ async function tabOverview(){
     + `<div class="stats">
         <div class="stat"><div class="k">Children on the roll</div><div class="v">${roster.length}</div><div class="m">${paidUp.length} fully paid</div></div>
         <div class="stat crit"><div class="k">Fees overdue</div><div class="v">${overdue.length}</div><div class="m">famil${overdue.length === 1 ? 'y' : 'ies'} to chase</div></div>
-        <div class="stat warn"><div class="k">Due within a fortnight</div><div class="v">${dueSoon.length}</div><div class="m">worth a friendly call</div></div>
+        <div class="stat warn"><div class="k">Due within a month</div><div class="v">${dueSoon.length}</div><div class="m">worth a friendly call</div></div>
         <div class="stat ${promisedBroken.length ? 'crit' : ''}"><div class="k">Promised to pay</div><div class="v">${promisedToday.length + promisedBroken.length}</div>
           <div class="m">${promisedBroken.length ? promisedBroken.length + ' dates have passed' : 'due today'}</div></div>
       </div>
