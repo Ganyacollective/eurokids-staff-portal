@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=41">
-<link rel="prefetch" href="/brand/enquiries.js?v=41" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=42">
+<link rel="prefetch" href="/brand/enquiries.js?v=42" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2782,8 +2782,9 @@ async function openPlan(uin){
         : epmsSchemeLabel(kid?.epms_discount_kind) ? `<div class="row"><div class="l">EuroKids scheme<span class="sub">Already inside the annual fee below. Do not enter it again as a concession.</span></div>
         <div class="v"><span class="chip c-acc">${esc(kid.epms_discount_kind)}</span></div></div>` : ''}
       <div class="row"><div class="l">Annual fee<span class="sub">EPMS invoiced <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></div>
-        <input class="in num" id="pf-total" type="number" value="${total}"></div>
-      <div class="row"><div class="l">Concession<span class="sub">Off our own margin. EPMS never sees it.</span></div><input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0"></div>
+        <input class="in num" id="pf-total" type="number" value="${total}" ${has('finance') ? '' : 'readonly tabindex="-1"'}></div>
+      <div class="row"><div class="l">Concession<span class="sub">${has('finance') ? 'Off our own margin. EPMS never sees it.' : 'Only someone with Finance can change a concession.'}</span></div>
+        <input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0" ${has('finance') ? '' : 'readonly tabindex="-1"'}></div>
       <div class="row" id="pf-why-row"><div class="l">What for<span class="sub">Shown to the parent on their statement.</span></div>
         <select class="in" id="pf-why"><option value="">— choose —</option>
           ${CONCESSION_REASONS.concat(plan?.discount_reason && !CONCESSION_REASONS.includes(plan.discount_reason) ? [plan.discount_reason] : [])
@@ -2972,18 +2973,23 @@ async function openPlan(uin){
       .insert(clean.map((r,i) => ({ uin: _planUin, seq: i+1, amount: Number(r.amount), due_date: r.due_date })));
     if (ins.error) { el('pf-msg').innerHTML = `<div class="err">${esc(ins.error.message)}</div>`; return false; }
 
-    // Always write, never skip: leaving the old row behind meant a discount
-    // could be reduced to zero on screen while the family kept it forever, so
-    // every reminder kept quoting a discount they no longer had.
-    const dres = disc > 0
-      ? await s.schema('eurokids').from('child_discount')
-          .upsert({ uin: _planUin, amount_rupees: disc, reason: 'Payment plan' }, { onConflict: 'uin' })
-      : await s.schema('eurokids').from('child_discount').delete().eq('uin', _planUin);
-    if (dres.error) {
-      // Silently swallowing this meant a coordinator without finance rights saw
-      // "Plan saved" while the discount was refused by the database.
-      el('pf-msg').innerHTML = `<div class="err">The plan saved, but the discount did not: ${esc(dres.error.message)}</div>`;
-      return false;
+    // child_discount is finance-only, while the plan itself is not — so a
+    // coordinator saving an instalment date used to write the plan, then be
+    // refused the discount mirror, and be told "the plan saved, but the
+    // discount did not". She had not touched the discount. Nothing to mirror
+    // if she cannot change it: skip the write rather than fail half way.
+    if (has('finance')) {
+      // Always write, never skip: leaving the old row behind meant a discount
+      // could be reduced to zero on screen while the family kept it forever, so
+      // every reminder kept quoting a discount they no longer had.
+      const dres = disc > 0
+        ? await s.schema('eurokids').from('child_discount')
+            .upsert({ uin: _planUin, amount_rupees: disc, reason: 'Payment plan' }, { onConflict: 'uin' })
+        : await s.schema('eurokids').from('child_discount').delete().eq('uin', _planUin);
+      if (dres.error) {
+        el('pf-msg').innerHTML = `<div class="err">The plan saved, but the discount did not: ${esc(dres.error.message)}</div>`;
+        return false;
+      }
     }
 
     await s.schema('eurokids').from('child_contact').upsert({
@@ -3286,7 +3292,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=41"></script>
+<script src="/brand/enquiries.js?v=42"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
