@@ -333,7 +333,17 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 
 /* ══ views: a list of lists ══ */
 .vwrap{display:grid;grid-template-columns:220px 1fr;gap:22px;align-items:start}
-.side{position:sticky;top:calc(var(--tbar) + 8px)}
+/* Sticky, and taller than the screen once a dozen saved views exist — so the
+   bottom of the list sat permanently below the fold with no way to reach it.
+   The page scrolls the table, not the sidebar, so the sidebar needs a height
+   of its own and its own scroll. */
+.side{position:sticky;top:calc(var(--tbar) + 8px);
+  max-height:calc(100dvh - var(--tbar) - 28px);overflow-y:auto;overscroll-behavior:contain;
+  padding-right:4px;scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.2) transparent}
+.side::-webkit-scrollbar{width:8px}
+.side::-webkit-scrollbar-thumb{background:rgba(0,0,0,.18);border-radius:99px;border:2px solid transparent;background-clip:content-box}
+.side::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.32);background-clip:content-box}
+.side::-webkit-scrollbar-track{background:transparent}
 .side-h{font-size:var(--fs-sub);font-weight:600;color:var(--label-2);margin:14px 0 4px 10px}
 .side-h:first-child{margin-top:0}
 .side-i{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;background:none;border:0;padding:5px 10px;min-height:30px;border-radius:7px;font-size:var(--fs-body);text-align:left;color:var(--label)}
