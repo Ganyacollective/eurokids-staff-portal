@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
         { source: "/enquire", destination: "/enquire.html" },
         // A signing link reads better without the extension.
         { source: "/sign", destination: "/sign.html" },
+        // Parent declarations — the street collection, the van, whatever comes next.
+        { source: "/declare", destination: "/declare.html" },
       ],
       afterFiles: [],
       fallback: [],
@@ -48,7 +50,7 @@ const nextConfig: NextConfig = {
     }, {
       // A signing link is a bearer token in a URL fragment. It should never be
       // cached by a proxy, and never handed to another origin as a referrer.
-      source: "/sign.html",
+      source: "/:page(sign.html|declare.html)",
       headers: [
         { key: "Referrer-Policy", value: "no-referrer" },
         { key: "Cache-Control", value: "no-store, max-age=0" },

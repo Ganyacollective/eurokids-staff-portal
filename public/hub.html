@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=51">
-<link rel="prefetch" href="/brand/enquiries.js?v=51" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=52">
+<link rel="prefetch" href="/brand/enquiries.js?v=52" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -139,6 +139,7 @@ const TABS = {
   plans:      { label: 'Fees & Plans',  icon: 'rupee',  sect: 'Fees',          need: () => has('finance') || has('admission') },
   liability:  { label: 'Liabilities',   icon: 'tray',   sect: 'Fees',          need: () => has('finance') || has('receipts') },
   compose:    { label: 'Send Email',    icon: 'mail',   sect: 'Communication', need: () => has('finance') || has('admission') },
+  docs:       { label: 'Forms for signature', icon: 'mail', sect: 'Communication', need: () => has('finance') || has('admission') },
   reminders:  { label: 'Reminders',     icon: 'bell',   sect: 'Communication', need: () => has('finance') },
   kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
   discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => has('finance') },
@@ -512,8 +513,173 @@ function renderApp(){
   el('main').scrollTop = 0; window.scrollTo({ top: 0 });
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
-     templates: tabTemplates, letters: tabLetters,
+     templates: tabTemplates, letters: tabLetters, docs: tabDocs,
      enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_setup: tabEnqSetup }[tab] || tabOverview)();
+}
+
+/* ── Forms for signature ──────────────────────────────────────────────────
+   The coordinator picks a form, fills a few details, and either emails it to
+   the parent or hands them the iPad. Same signing machinery as the
+   appointment letters; different gate, because nothing here carries a salary
+   and the coordinator must be able to do it herself. */
+let _docTpl = null, _docReqs = null;
+
+async function docsApi(path, opts = {}){
+  const { data: { session: sess } } = await getSb().auth.getSession();
+  const r = await fetch(`/api/docs${path}`, { ...opts,
+    headers: { 'Content-Type': 'application/json',
+               Authorization: `Bearer ${sess.access_token}`, ...(opts.headers || {}) } });
+  return opts.raw ? r : r.json().catch(() => ({ ok: false, error: 'The server did not answer.' }));
+}
+
+const DOC_STATE = {
+  sent:   { l: 'Sent',     c: 'var(--acc)' },
+  viewed: { l: 'Opened',   c: 'var(--warn)' },
+  signed: { l: 'Signed',   c: 'var(--good)' },
+  draft:  { l: 'Draft',    c: 'var(--label-3)' },
+  declined:{ l: 'Declined', c: 'var(--crit)' },
+  cancelled:{ l: 'Cancelled', c: 'var(--label-3)' },
+};
+
+async function tabDocs(){
+  el('body').innerHTML = head('Forms for signature',
+    'Declarations and consents parents sign — on their phone, or on the iPad at the desk.',
+    `<button class="btn line sm" id="dc-refresh">Refresh</button>`)
+    + `<div id="dc-body"><div class="loading">Loading…</div></div>`;
+  el('dc-refresh').onclick = () => { _docTpl = _docReqs = null; tabDocs(); };
+
+  if (!_docTpl || !_docReqs) {
+    const [t, l] = await Promise.all([docsApi('/templates'), docsApi('/list')]);
+    if (!t.ok) { el('dc-body').innerHTML = `<div class="err">${esc(t.error)}</div>`; return; }
+    _docTpl = t.templates; _docReqs = l.ok ? l.requests : [];
+  }
+  paintDocs();
+}
+
+function paintDocs(){
+  const waiting = _docReqs.filter(r => r.status !== 'signed');
+  const signed  = _docReqs.filter(r => r.status === 'signed');
+  const row = r => {
+    const st = DOC_STATE[r.status] || DOC_STATE.draft;
+    const tpl = _docTpl.find(t => t.slug === r.template_slug);
+    return `<button class="linkrow" data-req="${r.id}" data-token="${esc(r.token || '')}"
+        style="display:flex;justify-content:space-between;gap:12px;align-items:center;color:var(--label);width:100%">
+      <span style="min-width:0">
+        <strong>${esc(r.child_name || '—')}</strong>
+        <span class="hint"> ${esc(tpl?.name || r.template_slug)}</span>
+        <div class="hint" style="margin-top:2px">${esc(r.party_name || '')} · ${esc(st.l)}${
+          r.signed_at ? ' ' + longDate(String(r.signed_at).slice(0,10))
+          : r.sent_at ? ' ' + longDate(String(r.sent_at).slice(0,10)) : ''}${
+          r.channel === 'in_person' ? ' · at the desk' : ''}</div>
+      </span>
+      <span style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
+        <span style="width:8px;height:8px;border-radius:50%;background:${st.c};display:inline-block"></span>
+        <span style="color:var(--label-3)">›</span>
+      </span></button>`;
+  };
+
+  el('dc-body').innerHTML =
+      `<div class="grp"><h3>Send a form</h3><div class="box">
+        ${_docTpl.map(t => `<button class="linkrow" data-tpl="${t.id}"
+            style="display:flex;justify-content:space-between;gap:12px;align-items:center;color:var(--label);width:100%">
+          <span><strong>${esc(t.name)}</strong><div class="hint">${esc(t.title)}</div></span>
+          <span style="color:var(--label-3)">›</span></button>`).join('')
+        || '<div class="rowx hint">No forms have been set up yet.</div>'}
+      </div><div class="foot">Pick a form, fill in the child and the details, then email it to the parent or hand them the iPad.</div></div>`
+    + (waiting.length ? `<div class="grp"><h3>Waiting on a parent</h3><div class="box">${waiting.map(row).join('')}</div></div>` : '')
+    + (signed.length ? `<div class="grp"><h3>Signed</h3><div class="box">${signed.map(row).join('')}</div></div>` : '');
+
+  el('dc-body').querySelectorAll('[data-tpl]').forEach(b => b.onclick = () => openDocForm(+b.dataset.tpl));
+  el('dc-body').querySelectorAll('[data-req]').forEach(b => b.onclick = () => openDocReq(+b.dataset.req, b.dataset.token));
+}
+
+/* ── raise one ────────────────────────────────────────────────────────── */
+function openDocForm(tplId){
+  const t = _docTpl.find(x => x.id === tplId); if (!t) return;
+  const body = openDrawer(t.name, t.title);
+  body.innerHTML = `
+    <div class="grp"><h3>Who it is about</h3><div class="box">
+      <div class="row"><div class="l">Child's name</div>
+        <input class="in wide" id="dc-child" placeholder="As it should read on the form"></div>
+      <div class="row"><div class="l">UIN<span class="sub">Optional — links it to the child's record</span></div>
+        <input class="in wide" id="dc-uin" placeholder="EK/1769/…"></div>
+      <div class="row"><div class="l">Parent or guardian</div>
+        <input class="in wide" id="dc-party" placeholder="Full name"></div>
+      <div class="row"><div class="l">Their email<span class="sub">Needed to send it; not needed to sign at the desk</span></div>
+        <input class="in wide" id="dc-email" type="email" placeholder="parent@example.com"></div>
+      <div class="row"><div class="l">Their mobile<span class="sub">They confirm the last four digits when signing by link</span></div>
+        <input class="in wide" id="dc-phone" placeholder="98765 43210"></div>
+    </div></div>
+
+    <div class="grp"><h3>Details for this form</h3><div class="box">
+      ${(t.fields || []).map(f => `<div class="row"><div class="l">${esc(f.label)}${
+          f.required ? '' : '<span class="sub">Optional</span>'}</div>
+        <input class="in wide" data-f="${esc(f.key)}" placeholder="${esc(f.placeholder || '')}"></div>`).join('')
+        || '<div class="rowx hint">This form needs nothing beyond the names above.</div>'}
+    </div></div>
+
+    <div class="grp"><div class="box">
+      <button class="linkrow" id="dc-preview">See the form first</button>
+      <button class="linkrow" id="dc-email-send" style="color:var(--good);font-weight:600">Email it to the parent</button>
+      <button class="linkrow" id="dc-desk" style="font-weight:600">Sign here on the iPad</button>
+    </div><div class="foot">By email: they read it on their phone, get a code, and sign. At the desk: it opens in a new tab for them to read and sign in front of you, and your name goes on the certificate as the witness.</div></div>
+    <div id="dc-msg"></div>`;
+
+  const payload = (channel) => {
+    const values = {};
+    body.querySelectorAll('[data-f]').forEach(i => { values[i.dataset.f] = i.value.trim(); });
+    return { template_id: t.id, channel,
+      child_name: el('dc-child').value.trim(), child_uin: el('dc-uin').value.trim(),
+      party_name: el('dc-party').value.trim(), to_email: el('dc-email').value.trim(),
+      to_phone: el('dc-phone').value.trim(), values };
+  };
+
+  el('dc-preview').onclick = async () => {
+    const r = await docsApi('/preview', { raw: true, method: 'POST', body: JSON.stringify(payload('link')) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); return el('dc-msg').innerHTML = `<div class="err">${esc(j.error || 'Could not build it.')}</div>`; }
+    const url = URL.createObjectURL(await r.blob());
+    window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
+  const send = async (channel, btn) => {
+    btn.disabled = true; const was = btn.textContent; btn.textContent = 'Working…';
+    const r = await docsApi('/send', { method: 'POST', body: JSON.stringify(payload(channel)) });
+    btn.disabled = false; btn.textContent = was;
+    if (!r.ok) return el('dc-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`;
+    if (channel === 'in_person') { window.open(r.link, '_blank'); el('dc-msg').innerHTML = `<div class="ok">Open on the iPad and hand it over.</div>`; }
+    else el('dc-msg').innerHTML = `<div class="ok">Sent. They can sign it from their phone.</div>`;
+    _docReqs = null; tabDocs();
+  };
+  el('dc-email-send').onclick = e => send('link', e.target);
+  el('dc-desk').onclick = e => send('in_person', e.target);
+}
+
+/* ── one that has been raised ─────────────────────────────────────────── */
+function openDocReq(id, token){
+  const r = _docReqs.find(x => x.id === id); if (!r) return;
+  const t = _docTpl.find(x => x.slug === r.template_slug);
+  const st = DOC_STATE[r.status] || DOC_STATE.draft;
+  const body = openDrawer(r.child_name || 'Form', t?.name || r.template_slug);
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      <div class="row"><div class="l">Status</div><div class="v" style="color:${st.c}">${esc(st.l)}</div></div>
+      <div class="row"><div class="l">Parent</div><div class="v">${esc(r.party_name || '')}</div></div>
+      ${r.to_email ? `<div class="row"><div class="l">Sent to</div><div class="v hint">${esc(r.to_email)}</div></div>` : ''}
+      ${r.signer_name ? `<div class="row"><div class="l">Signed by</div><div class="v">${esc(r.signer_name)}</div></div>` : ''}
+      <div class="row"><div class="l">How</div><div class="v hint">${r.channel === 'in_person' ? 'At the desk' : 'Private link'}</div></div>
+    </div></div>
+    <div class="grp"><div class="box">
+      <a class="linkrow" href="/api/dsign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener"
+         style="display:block;color:var(--acc)">Open the document</a>
+      ${r.status !== 'signed' ? `<button class="linkrow" id="dc-copy">Copy the signing link</button>` : ''}
+    </div>${r.status !== 'signed' ? '<div class="foot">Paste the link into WhatsApp if the parent does not use email.</div>' : ''}</div>
+    <div id="dc-msg2"></div>`;
+  const c = el('dc-copy');
+  if (c) c.onclick = async () => {
+    const link = `${location.origin}/declare#${token}`;
+    try { await navigator.clipboard.writeText(link); el('dc-msg2').innerHTML = `<div class="ok">Link copied.</div>`; }
+    catch (_) { el('dc-msg2').innerHTML = `<div class="ok" style="word-break:break-all">${esc(link)}</div>`; }
+  };
 }
 
 /* ── Appointment letters ──────────────────────────────────────────────────
@@ -3609,7 +3775,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=51"></script>
+<script src="/brand/enquiries.js?v=52"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

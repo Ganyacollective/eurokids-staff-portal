@@ -38,6 +38,8 @@ export async function middleware(request: NextRequest) {
     // will. Sending her a link that bounces to /login would have made the
     // whole signing flow impossible on the first real letter.
     path.startsWith("/sign") ||
+    // A parent signing a declaration has no account here either.
+    path.startsWith("/declare") ||
     path.startsWith("/login") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/_next") ||
