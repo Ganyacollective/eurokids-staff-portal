@@ -20,22 +20,18 @@ const W = 595.28, H = 841.89;
 const L = 64, R = W - 64, TOP = H - 104, BOTTOM = 88;
 const WIDTH = R - L;
 
-const INK: RGB = rgb(0.10, 0.11, 0.13);
-const MUTE: RGB = rgb(0.42, 0.45, 0.50);
-const BLUE: RGB = rgb(0.13, 0.25, 0.60);   // the EuroKids blue in the logo
-const PINK: RGB = rgb(0.91, 0.24, 0.35);   // the block in the letterhead footer
-const WASH: RGB = rgb(0.97, 0.975, 0.98);
-const HAIR: RGB = rgb(0.89, 0.90, 0.92);
-
-export type LetterFacts = { k: string; v: string }[];
+// Black on white, and nothing else. The first draft had blue headings, a red
+// edge on a tinted panel and an italic blue quote; it read as a brochure. An
+// appointment letter should look like an appointment letter.
+const INK: RGB = rgb(0, 0, 0);
+const MUTE: RGB = rgb(0.30, 0.30, 0.30);   // small print only, never a heading
+const HAIR: RGB = rgb(0.72, 0.72, 0.72);   // a hairline rule, not a colour
 
 export type LetterData = {
   // who
   name: string;
   address?: string[];
   designation: string;
-  // the facts panel
-  facts: LetterFacts;
   // the words
   issuedOn: string;            // already formatted, e.g. "21 September 2026"
   page1Body: string;
@@ -155,32 +151,6 @@ export class Sheet {
     this.y -= gap; }
 }
 
-// ── the facts panel ──────────────────────────────────────────────────────
-// Five lines in a tinted box. If a teacher reads nothing else on the page,
-// she reads this, so it is the only thing on page one that is boxed.
-function factsPanel(s: Sheet, facts: LetterFacts) {
-  const rowH = 19, padY = 12;
-  const h = facts.length * rowH + padY * 2;
-  s.room(h + 16);
-  const top = s.y;
-  s.page.drawRectangle({ x: L, y: top - h, width: WIDTH, height: h, color: WASH,
-    borderColor: HAIR, borderWidth: 0.8 });
-  s.page.drawRectangle({ x: L, y: top - h, width: 3, height: h, color: PINK });
-  let y = top - padY - 10;
-  for (const f of facts) {
-    s.page.drawText(f.k, { x: L + 18, y, size: 9, font: s.reg, color: MUTE });
-    const runsV = runs(f.v);
-    let cx = L + 150;
-    for (const r of runsV) {
-      const fo = r.bold ? s.bold : s.bold;    // the values carry the weight here
-      s.page.drawText(r.text, { x: cx, y, size: 10.5, font: fo, color: INK });
-      cx += fo.widthOfTextAtSize(r.text, 10.5);
-    }
-    y -= rowH;
-  }
-  s.y = top - h - 14;
-}
-
 // ── rupees, written out the way an Indian letter writes them ─────────────
 const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
   "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -222,22 +192,19 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
   const s = await new Sheet().init();
 
   // ── page one: the letter ────────────────────────────────────────────
-  s.text(d.issuedOn, { size: 9.5, color: MUTE, gap: 14 });
-  s.text(`**${d.name}**`, { size: 11 });
-  for (const ln of d.address || []) s.text(ln, { size: 10, color: MUTE, lead: 14 });
-  s.y -= 12;
-  s.text(d.title || "Letter of Appointment", { size: 13, bold: true, color: BLUE, gap: 10 });
-  // The body is the editable template. {{FACTS}} is where the panel goes.
-  const [before, after] = d.page1Body.split("{{FACTS}}");
-  s.text(before || "", { gap: 4 });
-  if (after !== undefined) { factsPanel(s, d.facts); s.text(after, {}); }
+  s.text(d.issuedOn, { size: 10, gap: 12 });
+  s.text(d.name, { size: 10.5, lead: 14 });
+  for (const ln of d.address || []) s.text(ln, { size: 10.5, lead: 14 });
+  s.y -= 14;
+  s.text(`Sub: ${d.title || "Letter of Appointment"}`, { size: 10.5, bold: true, gap: 10 });
+  s.text(d.page1Body, {});
 
   // Regards + signature + name + role + the quote, measured together: this
   // block moves to the next page as a whole or not at all.
   const closing = 22 + (d.schoolSignaturePng ? 44 : 26) + 30 + (d.quote ? 58 : 0);
   s.y -= 9;
   s.room(closing);
-  s.text("Warm regards,", { size: 10.5, gap: 2 });
+  s.text("Yours sincerely,", { size: 10.5, gap: 2 });
   if (d.schoolSignaturePng) {
     try {
       const img = await s.doc.embedPng(dataUrlToBytes(d.schoolSignaturePng));
@@ -247,28 +214,28 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
       s.y -= h + 2;
     } catch { /* an unreadable signature image must not stop a letter */ }
   } else s.y -= 26;
-  s.text(`**${d.signedByName}**`, { size: 10.5, lead: 14 });
-  s.text(d.signedByRole, { size: 9.5, color: MUTE, lead: 13 });
+  s.text(d.signedByName, { size: 10.5, bold: true, lead: 14 });
+  s.text(d.signedByRole, { size: 10, lead: 13 });
 
   if (d.quote) {
     s.y -= 16;
     s.rule(10);
-    s.text(`"${d.quote}"`, { size: 10, italic: true, color: BLUE, lead: 15 });
+    s.text(`"${d.quote}"`, { size: 9.5, italic: true, lead: 14 });
     if (d.quoteBy) s.text(`— ${d.quoteBy}`, { size: 9, color: MUTE, lead: 12 });
   }
 
   // ── the detail, behind ──────────────────────────────────────────────
   s.newPage();
-  s.text("The details", { size: 15, bold: true, color: BLUE, gap: 2 });
+  s.text("The details", { size: 12.5, bold: true, gap: 2 });
   s.text("Everything below is part of your appointment. Read it once, keep it, and ask us about anything that is not clear.",
-    { size: 9.5, color: MUTE, gap: 14 });
+    { size: 10, gap: 14 });
 
   let n = 0;
   for (const t of d.terms || []) {
     n++;
     s.room(52);
-    s.text(`${n}.  ${t.heading}`, { size: 11.5, bold: true, color: INK, gap: 2 });
-    s.text(t.body, { size: 10, lead: 15, gap: 12 });
+    s.text(`${n}.  ${t.heading}`, { size: 11, bold: true, gap: 2 });
+    s.text(t.body, { size: 10.5, lead: 15.5, gap: 12 });
   }
 
   // ── the signature page ──────────────────────────────────────────────
@@ -278,11 +245,11 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
   s.room(d.signature ? 348 : 214);
   s.y -= 8;
   s.rule(16);
-  s.text("Acceptance", { size: 12, bold: true, color: BLUE, gap: 4 });
+  s.text("Acceptance", { size: 11, bold: true, gap: 4 });
 
   if (d.signature) {
     s.text("This letter was read and accepted electronically. The record of that acceptance is set out below.",
-      { size: 9.5, color: MUTE, gap: 12 });
+      { size: 10, gap: 12 });
     if (d.signature.png) {
       try {
         const img = await s.doc.embedPng(dataUrlToBytes(d.signature.png));
@@ -294,8 +261,8 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
     }
     s.page.drawLine({ start: { x: L, y: s.y }, end: { x: L + 200, y: s.y }, thickness: 0.8, color: HAIR });
     s.y -= 14;
-    s.text(`**${d.signature.name}**`, { size: 10.5, lead: 14 });
-    s.text(`Signed ${d.signature.at}`, { size: 9, color: MUTE, lead: 13, gap: 14 });
+    s.text(d.signature.name, { size: 10.5, bold: true, lead: 14 });
+    s.text(`Signed ${d.signature.at}`, { size: 9.5, lead: 13, gap: 14 });
 
     // The audit block. This — not the drawing above it — is what makes an
     // electronic signature worth anything if it is ever questioned.
@@ -311,8 +278,8 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
     const h = rows.length * 13 + 30;
     s.room(h + 10);
     const top = s.y;
-    s.page.drawRectangle({ x: L, y: top - h, width: WIDTH, height: h, color: WASH, borderColor: HAIR, borderWidth: 0.8 });
-    s.page.drawText("Record of electronic signature", { x: L + 12, y: top - 16, size: 8.5, font: s.bold, color: MUTE });
+    s.page.drawRectangle({ x: L, y: top - h, width: WIDTH, height: h, borderColor: HAIR, borderWidth: 0.7 });
+    s.page.drawText("Record of electronic signature", { x: L + 12, y: top - 16, size: 8.5, font: s.bold, color: INK });
     let y = top - 32;
     for (const [k, v] of rows) {
       s.page.drawText(k, { x: L + 12, y, size: 7.6, font: s.reg, color: MUTE });
@@ -325,12 +292,12 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
   } else {
     s.text("Please sign this letter online — it takes less than a minute on your phone. Open the link we emailed you, read the letter, enter the code we send to your mobile, and sign.",
       { size: 10, lead: 15, gap: 10 });
-    if (d.signUrl) s.text(d.signUrl, { size: 9, color: BLUE, lead: 13, gap: 16 });
+    if (d.signUrl) s.text(d.signUrl, { size: 9, lead: 13, gap: 16 });
     s.y -= 20;
     s.page.drawLine({ start: { x: L, y: s.y }, end: { x: L + 220, y: s.y }, thickness: 0.8, color: HAIR });
     s.y -= 14;
     s.text(d.name, { size: 10, lead: 13 });
-    s.text("Signature and date", { size: 8.5, color: MUTE, lead: 12 });
+    s.text("Signature and date", { size: 9, color: MUTE, lead: 12 });
   }
 
   // Page numbers, last, once the count is known.
@@ -338,7 +305,7 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
   pages.forEach((p, i) => {
     if (pages.length < 2) return;
     p.drawText(`Page ${i + 1} of ${pages.length}`,
-      { x: R - 62, y: BOTTOM - 14, size: 7.5, font: s.reg, color: MUTE });
+      { x: R - 62, y: BOTTOM - 14, size: 8, font: s.reg, color: MUTE });
   });
 
   return await s.doc.save();

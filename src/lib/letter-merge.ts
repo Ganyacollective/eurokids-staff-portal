@@ -6,7 +6,7 @@
 // merged into a template — which is why generating one should be a button,
 // not an afternoon.
 
-import { LetterData, LetterFacts, rupeesInWords, rs } from "./letter-pdf";
+import { LetterData, rupeesInWords, rs } from "./letter-pdf";
 
 // The roster as the staff portal stores it, in portal_state.data.employees.
 export type StaffRecord = {
@@ -90,8 +90,7 @@ const maskAccount = (a?: string | null) => {
 };
 
 export function fill(tpl: string, vars: Record<string, string>) {
-  return String(tpl || "").replace(/\{\{(\w+)\}\}/g, (m, k) =>
-    k === "FACTS" ? m : (vars[k] ?? ""));
+  return String(tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
 }
 
 export type MergeInput = {
@@ -132,17 +131,6 @@ export function mergeLetter(inp: MergeInput): LetterData {
     school: "EuroKids JMD Enclave",
   };
 
-  const facts: LetterFacts = [
-    { k: "Your role", v: vars.designation },
-    { k: "You start on", v: vars.start_date },
-    { k: "Working days", v: vars.working_days_short },
-    { k: "Your hours", v: e.reporting_minutes != null
-        ? `${vars.start_time}${e.punch_out_minutes != null ? " to " + vars.end_time : " onwards"}`
-        : "As agreed with the school" },
-    { k: "Monthly salary", v: vars.salary_figure },
-    { k: "You report to", v: vars.reports_to },
-  ];
-
   // Four lines at most, and the tail is joined rather than dropped: a letter
   // that loses "Pune 411060" off the bottom of the address is not a letter.
   const bits = String(e.address || "")
@@ -155,7 +143,6 @@ export function mergeLetter(inp: MergeInput): LetterData {
     name: e.display_name,
     address,
     designation: vars.designation,
-    facts,
     issuedOn: inp.issuedOn.toLocaleDateString("en-IN",
       { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }),
     title: inp.template.title || "Letter of Appointment",
