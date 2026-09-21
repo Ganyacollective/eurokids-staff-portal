@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=50">
-<link rel="prefetch" href="/brand/enquiries.js?v=50" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=51">
+<link rel="prefetch" href="/brand/enquiries.js?v=51" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -537,11 +537,11 @@ async function lettersApi(path, opts = {}){
 
 // Who signs. The Principal by default — an appointment letter comes from the
 // head of the school, not from its accounts.
+// The titles the agreement itself uses under "Authorised Signatory":
+// "Name: Neeta Saxena / Designation: Owner and Director".
 const LETTER_SIGNERS = [
-  { name: 'Neeta Saxena',  short: 'Principal',
-    role: 'Principal · EuroKids JMD Enclave (Veena Educational Services)' },
-  { name: 'Abhinav Saxena', short: 'Director',
-    role: 'Director · EuroKids JMD Enclave (Veena Educational Services)' },
+  { name: 'Neeta Saxena',   short: 'Owner and Director', role: 'Owner and Director' },
+  { name: 'Abhinav Saxena', short: 'Director',           role: 'Director' },
 ];
 
 const LETTER_STATE = {
@@ -3609,7 +3609,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=50"></script>
+<script src="/brand/enquiries.js?v=51"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
