@@ -36,7 +36,13 @@ function diagnose(err: string) {
   return "The pull reached EPMS but did not finish. The message below is what came back.";
 }
 
-// GET /api/cron/epms-sync — the unattended pull, twice a day.
+// GET /api/cron/epms-sync — the unattended pull, once each morning.
+//
+// Once, not twice: a Vercel Hobby account rejects any cron that runs more
+// than once a day, and it rejects it at deployment-creation time — so the
+// twice-daily schedule did not fail loudly, it simply stopped the whole
+// project from deploying for four days. The manual Sync button and the
+// staleness banner cover the rest of the day.
 // It exists for one reason beyond freshness: a sync nobody watches is a sync
 // nobody knows has stopped. Every failure leaves a row in epms.sync_runs (so
 // the Overview can show it) and, once, an email.
