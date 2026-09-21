@@ -79,15 +79,41 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const base = (l.snapshot as { data: LetterData })?.data;
   if (!base) return NextResponse.json({ ok: false, error: "This letter has no content." }, { status: 500 });
 
+  // The trail so far — sent, opened, code issued — plus this signature. Every
+  // one of these was already in letter_event; printing it is what turns a
+  // claim into a record somebody else can check.
+  const { data: events } = await a.from("letter_event")
+    .select("at, event, detail, ip").eq("letter_id", l.id).order("at");
+  const when = (t: string) => new Date(t).toLocaleString("en-IN", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    hour12: false, timeZone: "Asia/Kolkata" }).replace(",", " ·") + " IST";
+  const WORDS: Record<string, string> = {
+    sent: `Sent for signature to ${l.employee_name} (${l.to_email}) by the school`,
+    viewed: `Viewed by ${l.employee_name} (${l.to_email})`,
+    otp_sent: `One-time code emailed to ${l.to_email}`,
+    otp_wrong: "An incorrect code was entered",
+    phone_check_failed: "The mobile check did not match",
+  };
+  const history = (events || [])
+    .filter((e) => WORDS[e.event as string])
+    .map((e) => ({ at: when(e.at as string), what: WORDS[e.event as string], ip: (e.ip as string) || null }));
+  history.push({ at: when(at.toISOString()), what: `**Signed by ${name} (${l.to_email})**`, ip: ip || null });
+  history.push({ at: when(at.toISOString()), what: "The document has been completed.", ip: null });
+
   const signedData: LetterData = {
     ...base,
     signUrl: null,
     signature: {
       name, png, at: stamp,
       email: l.to_email, phone: l.to_phone ? "••••" + onFile.slice(-4) : null,
-      ip: ip || null, agent, reference,
+      ip: ip || null, agent, reference, history,
     },
   };
+  // The fingerprint printed on the certificate is the one taken when the
+  // letter was SENT — a document cannot contain the hash of itself, and this
+  // is the more useful number anyway: it proves the pages she signed are the
+  // pages we sent her, unchanged in between.
+  signedData.signature!.sha256 = (l.pdf_sha256 as string) || null;
   const pdf = await renderLetterPdf(signedData);
   const signedHash = await sha256(pdf);
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { renderEmail, esc as bEsc, HR_EMAIL } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 
@@ -64,19 +65,20 @@ export async function POST(req: NextRequest) {
     `Open the HR Inbox to approve or reject: ${portalUrl}`,
   ];
   const textBody = lines.join("\n");
-  const htmlBody = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#1F2937;max-width:520px">
-      <h2 style="color:#F58220;margin:0 0 8px">New leave request</h2>
-      <p style="margin:0 0 14px"><strong>${teacherName}</strong>${role ? ` <span style="color:#6B7280">(${role})</span>` : ""} just submitted a leave request.</p>
-      <table style="border-collapse:collapse;font-size:14px;width:100%;margin-bottom:18px">
-        <tr><td style="padding:6px 12px 6px 0;color:#6B7280">Type</td><td><strong>${lr.leave_type}</strong></td></tr>
-        <tr><td style="padding:6px 12px 6px 0;color:#6B7280">Dates</td><td>${dateText}</td></tr>
-        <tr><td style="padding:6px 12px 6px 0;color:#6B7280">Days</td><td>${days}</td></tr>
-        <tr><td style="padding:6px 12px 6px 0;color:#6B7280;vertical-align:top">Reason</td><td>${(lr.reason || "(not provided)").replace(/</g, "&lt;")}</td></tr>
+  const htmlBody = renderEmail({
+    contactEmail: HR_EMAIL, theme: "notice",
+    title: "New leave request",
+    subtitle: `${teacherName}${role ? " · " + role : ""}`,
+    bodyHtml: `<p><strong>${bEsc(teacherName)}</strong> has submitted a leave request.</p>
+      <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+        <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Type</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2"><strong>${bEsc(lr.leave_type)}</strong></td></tr>
+        <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Dates</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2">${bEsc(dateText)}</td></tr>
+        <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Days</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2">${days}</td></tr>
+        <tr><td style="padding:7px 0;color:#6B7280;vertical-align:top">Reason</td><td style="padding:7px 0;text-align:right">${bEsc(lr.reason || "(not provided)")}</td></tr>
       </table>
-      <a href="${portalUrl}" style="background:#F58220;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Open HR Inbox</a>
-    </div>
-  `;
+      <p style="margin:22px 0"><a href="${portalUrl}" style="background:#B45309;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:8px;display:inline-block">Open the HR inbox</a></p>`,
+  });
+
 
   const results: Record<string, string> = {};
 

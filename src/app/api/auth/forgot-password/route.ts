@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { renderEmail, esc as bEsc, HR_EMAIL } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 
@@ -109,19 +110,21 @@ export async function POST(req: NextRequest) {
     "— Eurokids JMD Enclave",
   ].join("\n");
 
-  const htmlBody = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1A202C;max-width:520px;line-height:1.5">
-      <h2 style="color:#21409A;margin:0 0 12px">Your portal password has been reset</h2>
-      <p>Hello ${displayName.split(" ")[0]},</p>
-      <p>You requested a password reset for the Eurokids JMD Enclave staff portal. Here's your new password:</p>
-      <div style="background:#F3F6FB;border:1px solid #DCE5F2;border-radius:10px;padding:14px;text-align:center;margin:14px 0">
-        <div style="font-size:11pt;color:#718096;text-transform:uppercase;letter-spacing:0.1em;font-weight:600">New password</div>
-        <div style="font-family:'SF Mono',Menlo,monospace;font-size:20pt;font-weight:700;color:#21409A;margin-top:6px;letter-spacing:0.05em">${newPassword}</div>
+  const htmlBody = renderEmail({
+    contactEmail: HR_EMAIL, theme: "school",
+    title: "Your portal password has been reset",
+    subtitle: displayName,
+    bodyHtml: `<p>Hello ${bEsc(displayName.split(" ")[0])},</p>
+      <p>You asked for a password reset for the staff portal. Here is your new password:</p>
+      <div style="background:#F3F6FB;border:1px solid #DCE5F2;border-radius:10px;padding:16px;text-align:center;margin:18px 0">
+        <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.1em;font-weight:700">New password</div>
+        <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:24px;font-weight:700;color:#21409A;margin-top:8px;letter-spacing:.05em">${bEsc(newPassword)}</div>
       </div>
-      <a href="${portalUrl}" style="background:#F58220;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Sign in to portal</a>
-      <p style="color:#718096;font-size:10pt;margin-top:18px">If you didn't request this, please tell the office immediately.</p>
-    </div>
-  `;
+      <p style="margin:22px 0"><a href="${portalUrl}" style="background:#21409A;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:8px;display:inline-block">Sign in to the portal</a></p>
+      <p>Please change it to something of your own once you are in.</p>`,
+    footerNote: "If you did not ask for this, tell the office immediately — someone else may have requested it.",
+  });
+
 
   const sent = { email: false, whatsapp: false };
   const errors: string[] = [];

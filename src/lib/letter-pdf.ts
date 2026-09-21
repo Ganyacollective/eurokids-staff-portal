@@ -61,6 +61,11 @@ export type LetterData = {
     ip?: string | null;
     agent?: string | null;
     reference?: string | null;
+    sha256?: string | null;
+    // Sent → viewed → code issued → signed, the way a signing service prints
+    // it. Every line of this is already recorded in letter_event; it was
+    // simply never shown to the person it protects.
+    history?: { at: string; what: string; ip?: string | null }[];
   } | null;
   signUrl?: string | null;
 };
@@ -310,8 +315,39 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
       s.page.drawText(v, { x: L + 210, y, size: 7.6, font: s.reg, color: INK });
       y -= 13;
     }
-    s.y = top - bh - 12;
-    s.text("Signed electronically under the Information Technology Act, 2000. The signatory was identified by a one-time code and the record above captured at the moment of signing.",
+    s.y = top - bh - 16;
+
+    // ── document history ────────────────────────────────────────────────
+    const hist = d.signature.history || [];
+    if (hist.length) {
+      s.text("Document history", { size: 10.5, bold: true, after: 4 });
+      for (const h of hist) {
+        s.room(26);
+        const yTop = s.y;
+        s.page.drawText(h.at, { x: L, y: yTop - 8, size: 7.6, font: s.reg, color: MUTE });
+        const lines = wrap(runs(h.what), 8, WIDTH - 130, s.reg, s.bold);
+        let yy = yTop - 8;
+        for (const ln of lines) {
+          let cx = L + 130;
+          for (const r of ln) {
+            const f = r.bold ? s.bold : s.reg;
+            s.page.drawText(r.text, { x: cx, y: yy, size: 8, font: f, color: INK });
+            cx += f.widthOfTextAtSize(r.text, 8);
+          }
+          yy -= 11;
+        }
+        if (h.ip) { s.page.drawText(`IP: ${h.ip}`, { x: L + 130, y: yy, size: 7.2, font: s.reg, color: MUTE }); yy -= 11; }
+        s.y = yy - 4;
+        s.page.drawLine({ start: { x: L, y: s.y + 4 }, end: { x: R, y: s.y + 4 }, thickness: 0.4, color: HAIR });
+      }
+      s.gap(8);
+    }
+
+    if (d.signature.sha256) {
+      s.text(`Fingerprint of the letter sent for signature (SHA-256): ${d.signature.sha256}`,
+        { size: 7, lead: 9, color: MUTE, after: 4 });
+    }
+    s.text("Signed electronically under the Information Technology Act, 2000. The signatory was identified by a one-time code sent to the email address on record and by the last four digits of the mobile number held by the school. This certificate and the history above were captured automatically at the moment of signing.",
       { size: 7.5, lead: 10, color: MUTE });
   } else {
     s.text("Accepted:", { after: 2 });

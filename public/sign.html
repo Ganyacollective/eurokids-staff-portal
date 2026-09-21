@@ -49,6 +49,18 @@
   .pad{height:170px;border:1.5px dashed #CBD5E1;border-radius:12px;background:#fff;touch-action:none;width:100%;display:block}
   .otp{letter-spacing:10px;font-size:26px;text-align:center;font-weight:700}
   embed,iframe{width:100%;height:62vh;border:1px solid var(--line);border-radius:12px;background:#fff}
+  /* The letter itself. Generous line height and a comfortable measure —
+     this is read once, carefully, on a phone, by someone slightly nervous. */
+  .doc{font-size:15.5px;line-height:1.65}
+  .doc p{margin:0 0 11px}
+  .doc .conf{font-weight:700;letter-spacing:.3px;margin-bottom:10px}
+  .doc .meta{color:#374151}
+  .doc h2{font-size:17px;margin:18px 0 10px}
+  .doc h3{font-size:15.5px;font-weight:700;margin:22px 0 8px}
+  .doc ul{margin:0 0 11px;padding-left:20px}
+  .doc li{margin:0 0 7px}
+  .doc hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+  .doc strong{font-weight:650}
   .step{display:none}.step.on{display:block}
   .foot{text-align:center;padding:18px 6px;font-size:12px;color:var(--mute);line-height:1.6}
   a{color:var(--blue)}
@@ -100,13 +112,50 @@ function cover(){
   document.getElementById('read').onclick = reader;
 }
 
-function reader(){
+// The letter, set at the width of the screen reading it.
+//
+// This used to embed the PDF. A PDF is A4 wide whatever the device is, so on
+// a phone you had to scroll left and right to finish a single line — and
+// nobody signs a document they could not read. Same words, laid out for a
+// hand. The PDF stays one tap away and is still the document that is signed.
+let _letter = null;
+async function reader(){
+  shell(`<div class="card"><p class="mute">Opening your letter…</p></div>`);
+  if (!_letter) {
+    const r = await api('/letter');
+    if (!r.ok) return shell(`<div class="card"><h2>We can't open this</h2>
+      <p class="mute">${esc(r.error || '')}</p>
+      <a class="btn line" style="text-decoration:none;text-align:center" href="/api/sign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener">Open the PDF instead</a></div>`);
+    _letter = r.letter;
+  }
+  const L = _letter;
+  const para = t => String(t || '').split(/\n/).map(x => x.trim()).filter(Boolean).map(x =>
+    /^[•\-\u2022]\s+/.test(x)
+      ? `<li>${bold(x.replace(/^[•\-\u2022]\s+/, ''))}</li>`
+      : `<p>${bold(x)}</p>`)
+    .join('')
+    // Wrap consecutive list items so the bullets indent as a list.
+    .replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, m => `<ul>${m}</ul>`)
+    .replace(/<\/ul>\s*<ul>/g, '');
+  const bold = t => esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
   shell(`
+    <div class="card doc">
+      <p class="conf">PRIVATE AND CONFIDENTIAL</p>
+      <p class="meta">Date: ${esc(L.issuedOn)}</p>
+      <p class="meta">${esc(L.name)}${(L.address||[]).map(a => '<br>' + esc(a)).join('')}</p>
+      <p class="meta">EUROKIDS JMD ENCLAVE<br>(Operated by Veena Educational Services)</p>
+      <h2 style="margin:18px 0 10px">Sub: ${esc(L.title || 'Letter of Appointment')}</h2>
+      <p>Dear ${esc(L.name)},</p>
+      ${para(L.page1Body)}
+      ${(L.terms||[]).map(t => `${t.heading ? `<h3>${esc(t.heading)}</h3>` : ''}${para(t.body)}`).join('')}
+      ${L.closing ? `<hr>${para(L.closing)}` : ''}
+      <p class="meta" style="margin-top:20px">Yours Truly<br>For EuroKids JMD Enclave<br>(Operated by Veena Educational Services)</p>
+      <p class="meta">Authorised Signatory<br><strong>${esc(L.signedByName)}</strong><br>${esc(L.signedByRole)}</p>
+    </div>
     <div class="card">
-      <h2>Your letter</h2>
-      <iframe src="/api/sign/${encodeURIComponent(token)}/pdf#view=FitH" title="Your appointment letter"></iframe>
-      <p class="tiny" style="margin-top:10px">Can't see it here? <a href="/api/sign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener">Open it in a new tab</a>.</p>
-      <button class="btn" id="go" style="margin-top:14px">I've read it — sign</button>
+      <button class="btn" id="go">I've read it — sign</button>
+      <a class="btn line" style="text-decoration:none;text-align:center;margin-top:10px" href="/api/sign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener">Open the PDF</a>
       <button class="btn line" id="back">Back</button>
     </div>`);
   document.getElementById('go').onclick = identify;

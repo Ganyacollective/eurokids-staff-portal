@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { renderEmail, esc as bEsc, plainFooter, HR_EMAIL, SCHOOL_NAME } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
@@ -102,7 +103,18 @@ export async function POST(req: NextRequest) {
             to: [HR_NOTIFY_EMAIL],
             subject: `${emp.display_name} applied for ${leave_type} (${total_days} day${total_days === 1 ? "" : "s"})`,
             text: `${emp.display_name} just applied for ${leave_type}.\n\nDates: ${dateText}\nDays: ${total_days}\nReason: ${reason}\nSubmitted anonymously (no sign-in)\n\nReview: ${portalUrl}/`,
-            html: `<div style="font-family:sans-serif"><h2 style="color:#21409A">New leave request</h2><p><strong>${emp.display_name}</strong>${emp.designation?` <span style="color:#666">(${emp.designation})</span>`:""}</p><p><strong>Type:</strong> ${leave_type}<br><strong>Dates:</strong> ${dateText}<br><strong>Days:</strong> ${total_days}<br><strong>Reason:</strong> ${escapeHtml(reason)}</p><p style="color:#888;font-size:11pt">Submitted without login.</p><a href="${portalUrl}/" style="background:#F58220;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Open HR portal</a></div>`,
+            html: renderEmail({ contactEmail: HR_EMAIL, theme: "notice",
+              title: "New leave request",
+              subtitle: `${emp.display_name}${emp.designation ? " · " + emp.designation : ""}`,
+              bodyHtml: `<p><strong>${bEsc(emp.display_name)}</strong> has applied for leave.</p>
+                <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+                  <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Type</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2"><strong>${bEsc(leave_type)}</strong></td></tr>
+                  <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Dates</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2">${bEsc(dateText)}</td></tr>
+                  <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Days</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2">${total_days}</td></tr>
+                  <tr><td style="padding:7px 0;color:#6B7280;vertical-align:top">Reason</td><td style="padding:7px 0;text-align:right">${bEsc(reason)}</td></tr>
+                </table>
+                <p style="margin:22px 0"><a href="${portalUrl}/" style="background:#B45309;color:#fff;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:8px;display:inline-block">Open the staff portal</a></p>`,
+              footerNote: "Submitted from the leave form without signing in." }),
           });
         results.hr_email = r.ok ? "sent" : `failed:${r.status}`;
       } catch (e) { results.hr_email = "err:" + (e as Error).message; }
@@ -121,7 +133,19 @@ export async function POST(req: NextRequest) {
             to: [emp.email!],
             subject: "We've received your leave application",
             text: `Hello ${emp.display_name?.split(" ")[0] || ""},\n\nThank you for applying. Here's what we received:\n\nType: ${leave_type}\nDates: ${dateText}\nDays: ${total_days}\nReason: ${reason}\n\nHR will review and let you know shortly. If you did not submit this, please tell the office immediately.\n\n— Eurokids JMD Enclave`,
-            html: `<div style="font-family:sans-serif;max-width:520px"><h2 style="color:#21409A">Thank you for applying</h2><p>Hello ${emp.display_name?.split(" ")[0]||""},</p><p>We've received your leave application. Here's a copy for your records:</p><table style="border-collapse:collapse;font-size:14px;margin:14px 0"><tr><td style="padding:6px 12px 6px 0;color:#718096">Type</td><td><strong>${leave_type}</strong></td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096">Dates</td><td>${dateText}</td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096">Days</td><td>${total_days}</td></tr><tr><td style="padding:6px 12px 6px 0;color:#718096;vertical-align:top">Reason</td><td>${escapeHtml(reason)}</td></tr></table><p>HR will review and let you know shortly. If you did not submit this application, please tell the office right away.</p><p style="color:#888;font-size:11pt">— Eurokids JMD Enclave</p></div>`,
+            html: renderEmail({ contactEmail: HR_EMAIL, theme: "calm",
+              title: "Thank you for applying",
+              subtitle: `${SCHOOL_NAME} · leave application`,
+              bodyHtml: `<p>Hello ${bEsc(emp.display_name?.split(" ")[0] || "")},</p>
+                <p>We have received your leave application. Here is a copy for your records:</p>
+                <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">
+                  <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Type</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2"><strong>${bEsc(leave_type)}</strong></td></tr>
+                  <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Dates</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2">${bEsc(dateText)}</td></tr>
+                  <tr><td style="padding:7px 0;color:#6B7280;border-bottom:1px solid #EEF0F2">Days</td><td style="padding:7px 0;text-align:right;border-bottom:1px solid #EEF0F2">${total_days}</td></tr>
+                  <tr><td style="padding:7px 0;color:#6B7280;vertical-align:top">Reason</td><td style="padding:7px 0;text-align:right">${bEsc(reason)}</td></tr>
+                </table>
+                <p>HR will review it and let you know shortly. If you did not submit this, please tell the office right away.</p>`,
+              footerNote: "You are receiving this because a leave application was submitted in your name." }),
           });
         if (r.ok) {
           results.teacher_confirm = "sent";
