@@ -21,10 +21,39 @@ const nextConfig: NextConfig = {
         { source: "/teacher", destination: "/teacher.html" },
         // The enquiry form: on the school iPad, embedded on the website, or linked.
         { source: "/enquire", destination: "/enquire.html" },
+        // A signing link reads better without the extension.
+        { source: "/sign", destination: "/sign.html" },
       ],
       afterFiles: [],
       fallback: [],
     };
+  },
+  // Headers every response carries. The site already redirects HTTP to HTTPS
+  // and sends HSTS for two years; these close the rest. They matter most on
+  // /sign.html, which shows someone their salary and takes their signature:
+  //   · nobody may frame the page, so it cannot be wrapped in a fake one;
+  //   · the browser may not second-guess a content type;
+  //   · a referrer never leaks the signing token to another site;
+  //   · camera, microphone and location are refused outright.
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
+      ],
+    }, {
+      // A signing link is a bearer token in a URL fragment. It should never be
+      // cached by a proxy, and never handed to another origin as a referrer.
+      source: "/sign.html",
+      headers: [
+        { key: "Referrer-Policy", value: "no-referrer" },
+        { key: "Cache-Control", value: "no-store, max-age=0" },
+      ],
+    }];
   },
   // Any direct visit to the abandoned Next.js routes is shepherded back to /,
   // which the rewrite above then resolves to the cloud portal.
