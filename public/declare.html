@@ -161,7 +161,7 @@ function signStep(sentTo){
     <div class="card">
       <h2>Sign</h2>
       <div id="msg">${inPerson
-        ? `<div class="ok">Signing at the school office${me.witnessed_by ? ', with ' + esc(String(me.witnessed_by).split('@')[0]) : ''}.</div>`
+        ? `<div class="ok">Signing at the school office.</div>`
         : `<div class="ok">Code sent to ${esc(sentTo || 'your email')}. It's good for ten minutes.</div>`}</div>
 
       ${inPerson ? '' : `<div style="margin-bottom:16px">
