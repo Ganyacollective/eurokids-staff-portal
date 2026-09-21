@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=49">
-<link rel="prefetch" href="/brand/enquiries.js?v=49" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=50">
+<link rel="prefetch" href="/brand/enquiries.js?v=50" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -144,13 +144,13 @@ const TABS = {
   discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => has('finance') },
   fees:       { label: 'Fee Grid',      icon: 'grid',   sect: 'Reference',     need: () => has('fees') || has('finance') },
   templates:  { label: 'Letter templates', icon: 'mail', sect: 'Setup',       need: () => has('finance') },
-  letters:    { label: 'Appointment letters', icon: 'mail', sect: 'Staff',    need: () => has('letters') },
+  letters:    { app: 'letters', label: 'Appointment letters', icon: 'mail', sect: 'Staff', need: () => has('letters') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
 };
 const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reference', 'Setup'];
-const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries' };
+const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
-const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'] };
+const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'], letters: ['letters'] };
 const tabsFor = a => Object.keys(TABS).filter(t => (TABS[t].app || 'admissions') === (a || 'admissions') && TABS[t].need());
 
 /* ── boot ─────────────────────────────────────────────── */
@@ -278,6 +278,11 @@ function renderChooser(){
     { key:'enquiries', name:'Enquiries & Admissions',
       desc:'Every call, walk-in and website enquiry; visits, follow-ups, conversions.', ok:canAdmissions, href:null },
   ];
+  // Its own card. It was tucked inside Fees & Children under a 'Staff'
+  // heading, where nobody looking for it would ever go — the hand reaches
+  // for Staff Portal, which is a different application altogether.
+  if (has('letters')) doors.push({ key:'letters', name:'Appointment Letters',
+    desc:'Write, send and track staff appointment letters; signed on their phone.', ok:true, href:null });
   if (isOwner()) doors.push({ key:'users', name:'Users & Access',
     desc:'Accounts for coordinators and HR; what each may open.', ok:true, href:null });
   writeUrl(false);
@@ -303,8 +308,10 @@ function renderChooser(){
     b.onclick = () => {
       const d = doors.find(x => x.key === b.dataset.key);
       if (d.href) { location.href = d.href; return; }
-      app = d.key === 'enquiries' ? 'enquiries' : 'admissions';
-      tab = d.key === 'users' ? 'users' : (tabsFor(app).find(t => t !== 'users') || 'overview');
+      app = d.key === 'enquiries' ? 'enquiries' : d.key === 'letters' ? 'letters' : 'admissions';
+      tab = d.key === 'users' ? 'users'
+          : d.key === 'letters' ? 'letters'
+          : (tabsFor(app).find(t => t !== 'users') || 'overview');
       paint(); scrollTo({ top: 0 });
     };
   });
@@ -3602,7 +3609,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=49"></script>
+<script src="/brand/enquiries.js?v=50"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
