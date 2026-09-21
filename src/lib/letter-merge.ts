@@ -170,7 +170,7 @@ export function missingFor(e: StaffRecord, salary: number): string[] {
   if (!(salary > 0)) gaps.push("a salary in the pay book");
   if (!e.address) gaps.push("a home address");
   if (!e.email) gaps.push("an email address to send it to");
-  if (!e.phone) gaps.push("a mobile number for the signing code");
+  if (!e.phone) gaps.push("a mobile number to check at signing");
   if (e.reporting_minutes == null) gaps.push("a reporting time");
   return gaps;
 }

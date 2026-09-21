@@ -268,8 +268,8 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
     // electronic signature worth anything if it is ever questioned.
     const rows: [string, string][] = [
       ["Signed by", d.signature.name],
-      ["Verified by one-time code sent to", d.signature.phone || d.signature.email || "—"],
-      ["Email on record", d.signature.email || "—"],
+      ["One-time code emailed to", d.signature.email || "—"],
+      ["Mobile on record, confirmed by signatory", d.signature.phone || "not held"],
       ["Timestamp", d.signature.at],
       ["IP address", d.signature.ip || "—"],
       ["Device", (d.signature.agent || "—").slice(0, 78)],
@@ -290,7 +290,7 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
     s.text("Signed electronically under the Information Technology Act, 2000. The signatory was identified by a one-time code and the record above captured at the moment of signing.",
       { size: 7.5, color: MUTE, lead: 10 });
   } else {
-    s.text("Please sign this letter online — it takes less than a minute on your phone. Open the link we emailed you, read the letter, enter the code we send to your mobile, and sign.",
+    s.text("Please sign this letter online — it takes less than a minute on your phone. Open the link we emailed you, read the letter, enter the code we email you, and sign.",
       { size: 10, lead: 15, gap: 10 });
     if (d.signUrl) s.text(d.signUrl, { size: 9, lead: 13, gap: 16 });
     s.y -= 20;
