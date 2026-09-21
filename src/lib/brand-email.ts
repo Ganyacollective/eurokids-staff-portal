@@ -9,6 +9,9 @@ export const SCHOOL_NAME = "EuroKids JMD Enclave";
 export const SCHOOL_PHONE = "022 696 22 686";
 export const SCHOOL_PHONE_TEL = "+912269622686";
 export const SCHOOL_EMAIL = "admin@eurokidsjmdenclave.org";
+// Staff mail — appointment letters, leave, payroll — is answered by HR, not
+// by the shared office inbox.
+export const HR_EMAIL = "hr@eurokidsjmdenclave.org";
 export const INSTAGRAM = "https://www.instagram.com/eurokidsjmdenclave/";
 
 // Rupee as an HTML entity, never a raw glyph. A literal ₹ turns into "â‚¹"
@@ -55,7 +58,12 @@ export function renderEmail(opts: {
   bodyHtml: string;
   theme?: ThemeKey;
   footerNote?: string;
+  // Which address the footer invites a reply to. Defaults to the office;
+  // anything carrying a salary passes HR_EMAIL so a teacher's reply does not
+  // land in a mailbox the whole office reads.
+  contactEmail?: string;
 }) {
+  const contact = opts.contactEmail || SCHOOL_EMAIL;
   const t = THEMES[opts.theme || "school"] || THEMES.school;
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -80,7 +88,7 @@ export function renderEmail(opts: {
   <tr><td style="padding:14px 0 0;font-size:14px;color:#4B5563;line-height:1.7">
         Call us: <a href="tel:${SCHOOL_PHONE_TEL}" style="color:${t.accent};font-weight:700;text-decoration:none;white-space:nowrap">${SCHOOL_PHONE}</a>
         &nbsp;&middot;&nbsp;
-        <a href="mailto:${SCHOOL_EMAIL}" style="color:${t.accent};text-decoration:none">${SCHOOL_EMAIL}</a>
+        <a href="mailto:${contact}" style="color:${t.accent};text-decoration:none">${contact}</a>
         &nbsp;&middot;&nbsp;
         <a href="${INSTAGRAM}" style="color:${t.accent};text-decoration:none">@eurokidsjmdenclave</a>
   </td></tr>
@@ -92,9 +100,9 @@ export function renderEmail(opts: {
 </body></html>`;
 }
 
-export function plainFooter() {
+export function plainFooter(contactEmail = SCHOOL_EMAIL) {
   return ["", "--", `Team ${SCHOOL_NAME}`, `Call us:   ${SCHOOL_PHONE}`,
-    `Email:     ${SCHOOL_EMAIL}`, `Instagram: ${INSTAGRAM}`].join("\n");
+    `Email:     ${contactEmail}`, `Instagram: ${INSTAGRAM}`].join("\n");
 }
 
 // Turn the plain text someone typed in the compose box into safe paragraphs.

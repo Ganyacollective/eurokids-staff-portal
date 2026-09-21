@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { admin, sha256, clientIp, logEvent } from "@/lib/letters-auth";
 import { renderLetterPdf, LetterData } from "@/lib/letter-pdf";
-import { renderEmail, esc, SCHOOL_NAME, plainFooter } from "@/lib/brand-email";
+import { renderEmail, esc, SCHOOL_NAME, plainFooter , HR_EMAIL } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
 
+// Both copies go out from hr@, never admin@. A signed appointment letter has
+// a salary on it, and admin@ is a shared office mailbox.
 const ALERT_TO = (process.env.LETTERS_ALERT_EMAIL || "abhinav@ganya.in")
   .split(",").map((x) => x.trim()).filter(Boolean);
 
@@ -110,16 +112,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     { name, reference, sha256: signedHash, storage: up.error ? "upload failed" : path }, req);
 
   // ── the copies ────────────────────────────────────────────────────────
-  if (mailReady()) {
+  if (mailReady("hr")) {
     const first = name.split(/\s+/)[0];
     const attachment = {
       filename: `Appointment Letter - ${l.employee_name} (signed).pdf`,
       content: Buffer.from(pdf).toString("base64"),
     };
     await sendMail({
+      from: "hr",
       to: [l.to_email],
       subject: `Signed — your appointment letter · ${SCHOOL_NAME}`,
-      html: renderEmail({
+      html: renderEmail({ contactEmail: HR_EMAIL,
         title: "Thank you — that's done", subtitle: `${esc(l.employee_name)} · ${reference}`, theme: "calm",
         bodyHtml: `<p>Dear ${esc(first)},</p>
           <p>Your appointment letter is signed and attached. Please keep it somewhere safe — it is your copy of what we agreed.</p>
@@ -127,21 +130,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
         footerNote: `Signed electronically on ${esc(stamp)} · reference ${reference}`,
       }),
       text: [`Dear ${first},`, "", "Your appointment letter is signed and attached. Please keep it safe.",
-        `Signed ${stamp} · reference ${reference}`, plainFooter()].join("\n"),
+        `Signed ${stamp} · reference ${reference}`, plainFooter(HR_EMAIL)].join("\n"),
       attachments: [attachment],
     });
 
     await sendMail({
+      from: "hr",
       to: ALERT_TO,
       subject: `${l.employee_name} signed her appointment letter`,
-      html: renderEmail({
+      html: renderEmail({ contactEmail: HR_EMAIL,
         title: "Appointment letter signed", subtitle: `${esc(l.employee_name)} · ${reference}`, theme: "calm",
         bodyHtml: `<p><strong>${esc(l.employee_name)}</strong> signed at ${esc(stamp)}.</p>
           <p style="font-size:13px;color:#6B7280">Signed as “${esc(name)}” · ${esc(l.to_email || "")} · ${esc(ip || "no IP")}<br>
              Document hash ${esc(signedHash.slice(0, 32))}…</p>`,
         footerNote: "The signed copy is attached and stored against her record.",
       }),
-      text: [`${l.employee_name} signed at ${stamp}.`, `Reference ${reference}`, plainFooter()].join("\n"),
+      text: [`${l.employee_name} signed at ${stamp}.`, `Reference ${reference}`, plainFooter(HR_EMAIL)].join("\n"),
       attachments: [attachment],
     });
   }

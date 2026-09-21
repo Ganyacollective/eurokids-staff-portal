@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { requireLetters, admin, findStaff, salaryOf, currentTemplate, newToken, sha256, logEvent } from "@/lib/letters-auth";
 import { mergeLetter, LetterTemplate, StaffRecord, missingFor, longDate } from "@/lib/letter-merge";
 import { renderLetterPdf } from "@/lib/letter-pdf";
-import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, plainFooter, SITE } from "@/lib/brand-email";
+import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, plainFooter, SITE , HR_EMAIL } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
 
+// Everything here goes out from hr@, never admin@. An appointment letter
+// carries a salary, and admin@ is a shared office mailbox — routing staff pay
+// through it would hand the whole office a copy of what everyone earns.
+//
 // POST /api/letters/send — write the letter, freeze it, and email the link.
 //
 // "Freeze" is the important word. The snapshot stores every merged value, so
@@ -68,12 +72,12 @@ export async function POST(req: Request) {
   // ── the email ─────────────────────────────────────────────────────────
   const link = `${SITE}/sign.html#${token}`;
   const first = (merged.display_name || "").split(/\s+/)[0];
-  if (!mailReady()) {
+  if (!mailReady("hr")) {
     return NextResponse.json({ ok: true, id: row.id, link, mailed: false,
       note: "Saved, but no mail provider is configured — send the link yourself." });
   }
 
-  const html = renderEmail({
+  const html = renderEmail({ contactEmail: HR_EMAIL,
     title: "Your appointment letter",
     subtitle: `${merged.display_name} · ${merged.designation || "EuroKids JMD Enclave"}`,
     theme: "calm",
@@ -89,13 +93,14 @@ export async function POST(req: Request) {
   });
 
   const r = await sendMail({
+    from: "hr",
     to: [to],
     subject: `Your appointment letter — ${SCHOOL_NAME}`,
     html,
     text: [`Dear ${first},`, "",
       `Welcome to ${SCHOOL_NAME}. Your appointment letter is attached.`,
       "Please open this link to read and sign it:", link, "",
-      `Anything unclear, call us on ${SCHOOL_PHONE}.`, plainFooter()].join("\n"),
+      `Anything unclear, call us on ${SCHOOL_PHONE}.`, plainFooter(HR_EMAIL)].join("\n"),
     attachments: [{
       filename: `Appointment Letter - ${merged.display_name}.pdf`,
       content: Buffer.from(pdf).toString("base64"),

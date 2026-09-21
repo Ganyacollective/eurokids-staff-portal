@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { admin, sha256, logEvent } from "@/lib/letters-auth";
-import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, plainFooter } from "@/lib/brand-email";
+import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, plainFooter , HR_EMAIL } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
 
 // POST /api/sign/[token]/otp — send the one-time code.
@@ -38,13 +38,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     otp_attempts: 0,
   }).eq("id", l.id);
 
-  if (!mailReady()) return NextResponse.json({ ok: false, error: "Email is not configured on the server." }, { status: 500 });
+  if (!mailReady("hr")) return NextResponse.json({ ok: false, error: "Email is not configured on the server." }, { status: 500 });
 
   const first = String(l.employee_name || "").split(/\s+/)[0];
   const r = await sendMail({
+    from: "hr",
     to: [l.to_email],
     subject: `${code} is your code to sign your appointment letter`,
-    html: renderEmail({
+    html: renderEmail({ contactEmail: HR_EMAIL,
       title: "Your signing code", subtitle: SCHOOL_NAME, theme: "calm",
       bodyHtml: `<p>Dear ${esc(first)},</p>
         <p>Here is the code to sign your appointment letter. It is good for ten minutes.</p>
@@ -53,7 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       footerNote: "This code lets you sign one document. Never share it with anyone, including school staff.",
     }),
     text: [`Dear ${first},`, "", `Your code to sign your appointment letter is ${code}. It is good for ten minutes.`,
-      "If you did not ask for this, ignore this email — nothing has been signed.", plainFooter()].join("\n"),
+      "If you did not ask for this, ignore this email — nothing has been signed.", plainFooter(HR_EMAIL)].join("\n"),
   });
 
   await logEvent(a, l.id, r.ok ? "otp_sent" : "otp_send_failed", { to: hint(l.to_email) }, req);
