@@ -35,6 +35,7 @@ export type LetterTemplate = {
   title: string;
   page1_body: string;
   terms: { heading: string; body: string }[];
+  closing?: string | null;
   quote?: string | null;
   quote_by?: string | null;
 };
@@ -96,7 +97,9 @@ export function fill(tpl: string, vars: Record<string, string>) {
 // The school's own people, in one place rather than scattered through the
 // template. Overridable per letter from the editor.
 export const PRINCIPAL = "Neeta Saxena";
-export const SIGNATORY = { name: PRINCIPAL, role: "Principal · EuroKids JMD Enclave (Veena Educational Services)" };
+// As the agreement itself signs off: "Name: Neeta Saxena / Designation:
+// Owner and Director".
+export const SIGNATORY = { name: PRINCIPAL, role: "Owner and Director" };
 
 export type MergeInput = {
   employee: StaffRecord;
@@ -113,6 +116,8 @@ export type MergeInput = {
 
 export function mergeLetter(inp: MergeInput): LetterData {
   const e = inp.employee;
+  const issued = inp.issuedOn.toLocaleDateString("en-IN",
+    { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
   const sched = scheduleOf(e);
   const start = inp.startsOn || e.joining_date || null;
   const bank = maskAccount(e.bank_account);
@@ -134,6 +139,7 @@ export function mergeLetter(inp: MergeInput): LetterData {
     bank_name: e.bank_name || "",
     reports_to: e.reports_to || `the Principal, ${PRINCIPAL}`,
     school: "EuroKids JMD Enclave",
+    issue_date: issued,
   };
 
   // Four lines at most, and the tail is joined rather than dropped: a letter
@@ -148,15 +154,13 @@ export function mergeLetter(inp: MergeInput): LetterData {
     name: e.display_name,
     address,
     designation: vars.designation,
-    issuedOn: inp.issuedOn.toLocaleDateString("en-IN",
-      { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }),
+    issuedOn: issued,
     title: inp.template.title || "Letter of Appointment",
     page1Body: fill(inp.template.page1_body, vars),
     terms: (inp.template.terms || []).map((t) => ({
       heading: t.heading, body: fill(t.body, vars),
     })),
-    quote: inp.template.quote,
-    quoteBy: inp.template.quote_by,
+    closing: inp.template.closing ? fill(inp.template.closing, vars) : null,
     signedByName: inp.signedByName || SIGNATORY.name,
     signedByRole: inp.signedByRole || SIGNATORY.role,
     schoolSignaturePng: inp.schoolSignaturePng,

@@ -1,66 +1,74 @@
-// The appointment letter, laid onto the school's own letterhead.
+// The appointment letter, rebuilt to match the school's own Pages document.
 //
-// The shape was chosen deliberately: page one is a short, warm letter with a
-// box of the five facts that matter, and everything legal comes after it. The
-// previous version opened with "hereinafter referred to as the Teacher, which
-// expression shall, unless repugnant to the context" — page one, paragraph
-// one. Nobody read past it, which is the opposite of what a contract is for.
+// The first version was my own design — a short warm letter with the terms
+// behind it. Abhinav's answer was direct: the existing agreement is better
+// made, use that. So this renders the real thing: PRIVATE AND CONFIDENTIAL,
+// the recital, numbered clauses, SPECIAL CONDITIONS with its § X / § Y / § Z
+// sections, and a closing page that ends "I accept the above terms &
+// conditions".
 //
-// pdf-lib rather than a headless browser: it runs in a serverless function in
-// a few hundred milliseconds, with no Chromium to install and nothing to time
-// out. The cost is that we lay out the text ourselves, below.
+// Measured from EC_EK.pdf rather than guessed: A4, 14pt body, 56.7pt side
+// margins, text from y≈57 to y≈764, all on the JMD Enclave letterhead.
+//
+// pdf-lib rather than a headless browser: a few hundred milliseconds in a
+// serverless function, no Chromium to install and nothing to time out. The
+// cost is that we lay the text out ourselves, below.
 
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFPage, rgb, RGB } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import fs from "node:fs";
 import path from "node:path";
 
-// A4 in points, and the safe area inside the letterhead artwork: the logo
-// occupies the top ~93pt and the address strip the bottom ~70pt.
+// A4 and the original's own measurements.
 const W = 595.28, H = 841.89;
-const L = 64, R = W - 64, TOP = H - 104, BOTTOM = 88;
+const L = 56.7, R = W - 56.7;
+const TOP = H - 104;          // clear of the logo
+const BOTTOM = 88;            // clear of the address strip
 const WIDTH = R - L;
 
-// Black on white, and nothing else. The first draft had blue headings, a red
-// edge on a tinted panel and an italic blue quote; it read as a brochure. An
-// appointment letter should look like an appointment letter.
+const SIZE = 14;              // the body size in the original
+const LEAD = SIZE * 1.42;
+
+// Black on white. Nothing else — this is a contract.
 const INK: RGB = rgb(0, 0, 0);
-const MUTE: RGB = rgb(0.30, 0.30, 0.30);   // small print only, never a heading
-const HAIR: RGB = rgb(0.72, 0.72, 0.72);   // a hairline rule, not a colour
+const MUTE: RGB = rgb(0.32, 0.32, 0.32);
+const HAIR: RGB = rgb(0.72, 0.72, 0.72);
+
+const asset = (...p: string[]) => path.join(process.cwd(), "public", "brand", ...p);
 
 export type LetterData = {
   // who
   name: string;
   address?: string[];
   designation: string;
-  // the words
-  issuedOn: string;            // already formatted, e.g. "21 September 2026"
-  page1Body: string;
-  terms: { heading: string; body: string }[];
-  quote?: string | null;
-  quoteBy?: string | null;
+  // the words — all of it editable in letter_template
+  issuedOn: string;
+  page1Body: string;                              // preamble, recital, WHEREAS
+  terms: { heading: string; body: string }[];     // the numbered agreement
+  closing?: string | null;                        // "We believe our teachers…"
   title?: string;
   // the school's side
   signedByName: string;
   signedByRole: string;
-  schoolSignaturePng?: string | null;   // data URL
-  // the teacher's side, once she has signed
+  schoolSignaturePng?: string | null;
+  // the employee's side, once she has signed
   signature?: {
     name: string;
-    png?: string | null;                // data URL of what she drew
-    at: string;                         // formatted timestamp
+    png?: string | null;
+    at: string;
     email?: string | null;
     phone?: string | null;
     ip?: string | null;
     agent?: string | null;
     reference?: string | null;
   } | null;
-  signUrl?: string | null;              // printed when it is not yet signed
+  signUrl?: string | null;
 };
 
 // ── the little text engine ───────────────────────────────────────────────
-// Just enough markup to write a letter in a textarea: **bold** inline, blank
-// lines between paragraphs. Anything cleverer would be a trap for whoever
-// edits the template next.
+// Enough markup to write a contract in a textarea: **bold** inline, blank
+// lines between paragraphs, and a leading "• " for a bullet. Anything
+// cleverer would be a trap for whoever edits the template next.
 type Run = { text: string; bold: boolean };
 
 function runs(line: string): Run[] {
@@ -79,13 +87,13 @@ function wrap(rs: Run[], size: number, maxW: number, reg: PDFFont, bold: PDFFont
   let line: Run[] = [], w = 0;
   for (const r of rs) {
     const f = r.bold ? bold : reg;
-    // Keep the spaces: splitting on /(\s+)/ means a run that ends mid-sentence
-    // rejoins the next one without swallowing the gap between words.
+    // Keep the spaces: splitting on /(\s+)/ means a run ending mid-sentence
+    // rejoins the next without swallowing the gap between words.
     for (const word of r.text.split(/(\s+)/)) {
       if (!word) continue;
       const ww = f.widthOfTextAtSize(word, size);
       if (w + ww > maxW && /\S/.test(word) && line.length) { lines.push(line); line = []; w = 0; }
-      if (!/\S/.test(word) && !line.length) continue;   // no leading space on a new line
+      if (!/\S/.test(word) && !line.length) continue;
       line.push({ text: word, bold: r.bold }); w += ww;
     }
   }
@@ -102,13 +110,14 @@ export class Sheet {
 
   async init() {
     this.doc = await PDFDocument.create();
-    this.reg = await this.doc.embedFont(StandardFonts.Helvetica);
-    this.bold = await this.doc.embedFont(StandardFonts.HelveticaBold);
-    this.ital = await this.doc.embedFont(StandardFonts.HelveticaOblique);
-    // The letterhead is the page: logo, address strip, the pink block. Drawing
-    // it as a full-bleed background means the letter looks the same as one
-    // printed on the school's own paper.
-    const p = path.join(process.cwd(), "public", "brand", "letterhead.png");
+    this.doc.registerFontkit(fontkit);
+    // Tahoma in the original; DejaVu Sans Condensed here, because Tahoma is a
+    // Microsoft font that may not be redistributed. See fonts/LICENCE.txt.
+    const font = (f: string) => this.doc.embedFont(fs.readFileSync(asset("fonts", f)), { subset: true });
+    this.reg = await font("body.ttf");
+    this.bold = await font("body-bold.ttf");
+    this.ital = await font("body-italic.ttf");
+    const p = asset("letterhead.png");
     if (fs.existsSync(p)) this.bg = await this.doc.embedPng(fs.readFileSync(p));
     this.newPage();
     return this;
@@ -122,36 +131,51 @@ export class Sheet {
   }
 
   room(h: number) { if (this.y - h < BOTTOM) this.newPage(); }
+  gap(h: number) { this.y -= h; }
 
-  text(s: string, opts: { size?: number; color?: RGB; bold?: boolean; italic?: boolean;
-                          lead?: number; gap?: number; indent?: number; width?: number } = {}) {
-    const size = opts.size ?? 10.5;
-    const lead = opts.lead ?? size * 1.55;
-    const x = L + (opts.indent ?? 0);
-    const maxW = (opts.width ?? WIDTH) - (opts.indent ?? 0);
-    const reg = opts.italic ? this.ital : (opts.bold ? this.bold : this.reg);
-    for (const para of String(s).split(/\n/)) {
-      if (!para.trim()) { this.y -= lead * 0.45; continue; }
-      for (const ln of wrap(runs(para), size, maxW, reg, this.bold)) {
+  text(s: string, o: { size?: number; color?: RGB; bold?: boolean; italic?: boolean;
+                       lead?: number; after?: number; indent?: number; hang?: number } = {}) {
+    const size = o.size ?? SIZE;
+    const lead = o.lead ?? (size === SIZE ? LEAD : size * 1.42);
+    const reg = o.italic ? this.ital : (o.bold ? this.bold : this.reg);
+    for (const raw of String(s).split(/\n/)) {
+      const para = raw.trimEnd();
+      if (!para.trim()) { this.y -= lead * 0.55; continue; }
+
+      // "• " starts a bullet: the marker sits in the margin and the wrapped
+      // lines hang under the text, not under the dot.
+      const isBullet = /^[•\-•]\s+/.test(para);
+      const body = isBullet ? para.replace(/^[•\-•]\s+/, "") : para;
+      const indent = (o.indent ?? 0) + (isBullet ? 16 : 0);
+      const hang = isBullet ? 0 : (o.hang ?? 0);
+
+      const lines = wrap(runs(body), size, WIDTH - indent, reg, this.bold);
+      lines.forEach((ln, i) => {
         this.room(lead);
-        let cx = x;
+        let cx = L + indent + (i > 0 ? hang : 0);
+        if (isBullet && i === 0) {
+          this.page.drawText("•", { x: L + indent - 14, y: this.y - size, size, font: reg, color: o.color ?? INK });
+        }
         for (const r of ln) {
           const f = r.bold ? this.bold : reg;
-          this.page.drawText(r.text, { x: cx, y: this.y - size, size, font: f, color: opts.color ?? INK });
+          this.page.drawText(r.text, { x: cx, y: this.y - size, size, font: f, color: o.color ?? INK });
           cx += f.widthOfTextAtSize(r.text, size);
         }
         this.y -= lead;
-      }
+      });
+      this.y -= lead * 0.18;
     }
-    this.y -= opts.gap ?? 0;
+    this.y -= o.after ?? 0;
   }
 
-  rule(gap = 10) { this.room(gap + 2);
+  rule(after = 10) {
+    this.room(after + 2);
     this.page.drawLine({ start: { x: L, y: this.y }, end: { x: R, y: this.y }, thickness: 0.6, color: HAIR });
-    this.y -= gap; }
+    this.y -= after;
+  }
 }
 
-// ── rupees, written out the way an Indian letter writes them ─────────────
+// ── rupees, written the way an Indian letter writes them ─────────────────
 const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
   "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
 const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
@@ -182,131 +206,130 @@ export function rupeesInWords(amount: number): string {
   return `Rupees ${parts.join(" ")} only`;
 }
 
-// Helvetica has no rupee glyph, and a missing glyph in a PDF is a blank box
-// on a legal document. "Rs." is what these letters have always said anyway.
+// The original writes "INR 26,000". Now that a real font is embedded the
+// rupee glyph would work, but the house style is INR and it stays.
 export const rs = (n: number | string) =>
-  "Rs. " + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 }) + "/-";
+  "INR " + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
 // ── the document ─────────────────────────────────────────────────────────
 export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
   const s = await new Sheet().init();
 
-  // ── page one: the letter ────────────────────────────────────────────
-  s.text(d.issuedOn, { size: 10, gap: 12 });
-  s.text(d.name, { size: 10.5, lead: 14 });
-  for (const ln of d.address || []) s.text(ln, { size: 10.5, lead: 14 });
-  s.y -= 14;
-  s.text(`Sub: ${d.title || "Letter of Appointment"}`, { size: 10.5, bold: true, gap: 10 });
-  s.text(d.page1Body, {});
+  // ── page one: the head of the letter ──────────────────────────────────
+  s.text("PRIVATE AND CONFIDENTIAL", { bold: true });
+  s.text(`Date: ${d.issuedOn}`, { after: 10 });
+  s.text(d.name);
+  for (const ln of d.address || []) s.text(ln);
+  s.gap(8);
+  s.text("EUROKIDS JMD ENCLAVE");
+  s.text("(Operated by Veena Educational Services)", { after: 10 });
+  s.text(`Sub: ${d.title || "Letter of Appointment"}`, { bold: true, after: 8 });
+  s.text(`Dear ${d.name},`, { after: 6 });
+  s.text(d.page1Body);
 
-  // Regards + signature + name + role + the quote, measured together: this
-  // block moves to the next page as a whole or not at all.
-  const closing = 22 + (d.schoolSignaturePng ? 44 : 26) + 30 + (d.quote ? 58 : 0);
-  s.y -= 9;
-  s.room(closing);
-  s.text("Yours sincerely,", { size: 10.5, gap: 2 });
+  // ── the agreement ─────────────────────────────────────────────────────
+  for (const t of d.terms || []) {
+    const h = (t.heading || "").trim();
+    if (!h && !t.body?.trim()) continue;
+    // A heading and its first two lines travel together; a clause number
+    // stranded at the foot of a page looks like a printing fault.
+    s.room(LEAD * 3.4);
+    s.gap(6);
+    if (h) s.text(h, { bold: true, after: 2 });
+    if (t.body) s.text(t.body);
+  }
+
+  // ── the closing page ──────────────────────────────────────────────────
+  // Always its own page: the acceptance block is what gets printed, signed
+  // and filed, and it should never share a sheet with clause 11.4.
+  s.newPage();
+  if (d.closing) s.text(d.closing, { after: 14 });
+
+  s.text("Yours Truly");
+  s.text("For EuroKids JMD Enclave");
+  s.text("(Operated by Veena Educational Services)", { after: 18 });
+  s.text("Authorised Signatory", { after: 4 });
+
   if (d.schoolSignaturePng) {
     try {
       const img = await s.doc.embedPng(dataUrlToBytes(d.schoolSignaturePng));
-      const w = 120, h = (img.height / img.width) * w;
-      s.room(h + 6);
+      const w = 150, h = (img.height / img.width) * w;
+      s.room(h + 8);
       s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
-      s.y -= h + 2;
+      s.y -= h + 4;
     } catch { /* an unreadable signature image must not stop a letter */ }
-  } else s.y -= 26;
-  s.text(d.signedByName, { size: 10.5, bold: true, lead: 14 });
-  s.text(d.signedByRole, { size: 10, lead: 13 });
+  } else s.gap(34);
 
-  if (d.quote) {
-    s.y -= 16;
-    s.rule(10);
-    s.text(`"${d.quote}"`, { size: 9.5, italic: true, lead: 14 });
-    if (d.quoteBy) s.text(`— ${d.quoteBy}`, { size: 9, color: MUTE, lead: 12 });
-  }
+  s.text(`Name: ${d.signedByName}`);
+  s.text(`Designation: ${d.signedByRole}`, { after: 22 });
 
-  // ── the detail, behind ──────────────────────────────────────────────
-  s.newPage();
-  s.text("The details", { size: 12.5, bold: true, gap: 2 });
-  s.text("Everything below is part of your appointment. Read it once, keep it, and ask us about anything that is not clear.",
-    { size: 10, gap: 14 });
-
-  let n = 0;
-  for (const t of d.terms || []) {
-    n++;
-    s.room(52);
-    s.text(`${n}.  ${t.heading}`, { size: 11, bold: true, gap: 2 });
-    s.text(t.body, { size: 10.5, lead: 15.5, gap: 12 });
-  }
-
-  // ── the signature page ──────────────────────────────────────────────
-  // Reserved as one block. A signature panel that breaks leaves a single
-  // orphan line of legal boilerplate on a page of its own, which looks like
-  // a fault in the document at exactly the moment it should look careful.
-  s.room(d.signature ? 348 : 214);
-  s.y -= 8;
-  s.rule(16);
-  s.text("Acceptance", { size: 11, bold: true, gap: 4 });
+  s.text("I have read and understood the contents of this letter. The said terms and conditions have been agreed & accepted by me and I am signing herewith in token of having accepted the letter and the terms and conditions mentioned therein.",
+    { after: 18 });
+  s.text("I accept the above terms & conditions", { after: 14 });
 
   if (d.signature) {
-    s.text("This letter was read and accepted electronically. The record of that acceptance is set out below.",
-      { size: 10, gap: 12 });
     if (d.signature.png) {
       try {
         const img = await s.doc.embedPng(dataUrlToBytes(d.signature.png));
-        const w = 170, h = Math.min(60, (img.height / img.width) * w);
-        s.room(h + 10);
+        const w = 160, h = Math.min(58, (img.height / img.width) * w);
+        s.room(h + 8);
         s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
-        s.y -= h + 4;
+        s.y -= h + 2;
       } catch { /* keep the typed name even if the drawing will not embed */ }
     }
     s.page.drawLine({ start: { x: L, y: s.y }, end: { x: L + 200, y: s.y }, thickness: 0.8, color: HAIR });
-    s.y -= 14;
-    s.text(d.signature.name, { size: 10.5, bold: true, lead: 14 });
-    s.text(`Signed ${d.signature.at}`, { size: 9.5, lead: 13, gap: 14 });
+    s.gap(16);
+    s.text(`Accepted: ${d.signature.name}`, { size: 12 });
+    s.text(`Date: ${d.signature.at}`, { size: 12, after: 16 });
 
-    // The audit block. This — not the drawing above it — is what makes an
-    // electronic signature worth anything if it is ever questioned.
+    // The audit block gets its own sheet, titled, the way a signing service
+    // appends a certificate of completion. It was overflowing the acceptance
+    // page and landing on a bare sheet, which read as a fault rather than a
+    // deliberate appendix.
+    s.newPage();
+    s.text("Certificate of electronic signature", { size: 13, bold: true, after: 4 });
+    s.text(`This certificate forms part of the Letter of Appointment issued to ${d.name} and dated ${d.issuedOn}.`,
+      { size: 10, lead: 14, after: 14 });
+
     const rows: [string, string][] = [
       ["Signed by", d.signature.name],
       ["One-time code emailed to", d.signature.email || "—"],
       ["Mobile on record, confirmed by signatory", d.signature.phone || "not held"],
       ["Timestamp", d.signature.at],
       ["IP address", d.signature.ip || "—"],
-      ["Device", (d.signature.agent || "—").slice(0, 78)],
+      ["Device", (d.signature.agent || "—").slice(0, 70)],
       ["Document reference", d.signature.reference || "—"],
     ];
-    const h = rows.length * 13 + 30;
-    s.room(h + 10);
+    const bh = rows.length * 13 + 30;
     const top = s.y;
-    s.page.drawRectangle({ x: L, y: top - h, width: WIDTH, height: h, borderColor: HAIR, borderWidth: 0.7 });
-    s.page.drawText("Record of electronic signature", { x: L + 12, y: top - 16, size: 8.5, font: s.bold, color: INK });
-    let y = top - 32;
+    s.page.drawRectangle({ x: L, y: top - bh, width: WIDTH, height: bh, borderColor: HAIR, borderWidth: 0.7 });
+    s.page.drawText("Record of electronic signature", { x: L + 12, y: top - 17, size: 9, font: s.bold, color: INK });
+    let y = top - 33;
     for (const [k, v] of rows) {
       s.page.drawText(k, { x: L + 12, y, size: 7.6, font: s.reg, color: MUTE });
-      s.page.drawText(v, { x: L + 190, y, size: 7.6, font: s.reg, color: INK });
+      s.page.drawText(v, { x: L + 210, y, size: 7.6, font: s.reg, color: INK });
       y -= 13;
     }
-    s.y = top - h - 10;
+    s.y = top - bh - 12;
     s.text("Signed electronically under the Information Technology Act, 2000. The signatory was identified by a one-time code and the record above captured at the moment of signing.",
-      { size: 7.5, color: MUTE, lead: 10 });
+      { size: 7.5, lead: 10, color: MUTE });
   } else {
-    s.text("Please sign this letter online — it takes less than a minute on your phone. Open the link we emailed you, read the letter, enter the code we email you, and sign.",
-      { size: 10, lead: 15, gap: 10 });
-    if (d.signUrl) s.text(d.signUrl, { size: 9, lead: 13, gap: 16 });
-    s.y -= 20;
-    s.page.drawLine({ start: { x: L, y: s.y }, end: { x: L + 220, y: s.y }, thickness: 0.8, color: HAIR });
-    s.y -= 14;
-    s.text(d.name, { size: 10, lead: 13 });
-    s.text("Signature and date", { size: 9, color: MUTE, lead: 12 });
+    s.text("Accepted:", { after: 2 });
+    s.text("Date:", { after: 20 });
+    if (d.signUrl) {
+      s.rule(12);
+      s.text("You can sign this letter online instead — it takes less than a minute on your phone. Open the link we emailed you, read the letter, enter the code we email you, and sign.",
+        { size: 10, lead: 14 });
+      s.text(d.signUrl, { size: 9.5, lead: 13, color: MUTE });
+    }
   }
 
-  // Page numbers, last, once the count is known.
+  // Page numbers last, once the count is known.
   const pages = s.doc.getPages();
-  pages.forEach((p, i) => {
-    if (pages.length < 2) return;
-    p.drawText(`Page ${i + 1} of ${pages.length}`,
-      { x: R - 62, y: BOTTOM - 14, size: 8, font: s.reg, color: MUTE });
-  });
+  if (pages.length > 1) {
+    pages.forEach((p, i) => p.drawText(`Page ${i + 1} of ${pages.length}`,
+      { x: R - 64, y: BOTTOM - 14, size: 8, font: s.reg, color: MUTE }));
+  }
 
   return await s.doc.save();
 }

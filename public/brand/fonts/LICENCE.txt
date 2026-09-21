@@ -1,0 +1,12 @@
+The letter is set in Tahoma in the school's own Pages original. Tahoma ships
+with Windows and Office and may not be redistributed, so it cannot live in
+this repository or on the server that builds the PDFs.
+
+These files are DejaVu Sans Condensed — the conventional free stand-in for
+Tahoma and Verdana on Linux, and close to Tahoma in width and colour at the
+14pt the letter is set at. Bitstream Vera / DejaVu licence: free to use,
+embed and redistribute.
+
+  body.ttf         DejaVuSansCondensed.ttf
+  body-bold.ttf    DejaVuSansCondensed-Bold.ttf
+  body-italic.ttf  DejaVuSansCondensed-Oblique.ttf
