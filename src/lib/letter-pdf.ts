@@ -8,7 +8,8 @@
 // conditions".
 //
 // Measured from EC_EK.pdf rather than guessed: A4, 14pt body, 56.7pt side
-// margins, text from y≈57 to y≈764, all on the JMD Enclave letterhead.
+// margins, text running from y≈738 (clear of the logo) down to y=88 (clear of
+// the address strip), all on the JMD Enclave letterhead.
 //
 // pdf-lib rather than a headless browser: a few hundred milliseconds in a
 // serverless function, no Chromium to install and nothing to time out. The

@@ -23,7 +23,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
     return `${u.slice(0, 2)}${"•".repeat(Math.max(2, u.length - 2))}@${d}`;
   };
   return NextResponse.json({
-    ok: true, status: r.status, channel: r.channel, witnessed_by: r.witnessed_by,
+    // witnessed_by is deliberately not returned: it is a staff email address,
+    // the signing page has no use for it, and this response goes to whoever
+    // holds the link.
+    ok: true, status: r.status, channel: r.channel,
     title: (r.doc as { title?: string })?.title || "Declaration",
     child_name: r.child_name, party_name: r.party_name,
     email_hint: mask(r.to_email), phone_hint: mask(r.to_phone),
