@@ -34,6 +34,10 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/hub") ||
     path.startsWith("/teacher") ||
     path.startsWith("/enquire") ||       // the public enquiry form
+    // A teacher signing her appointment letter has no account here and never
+    // will. Sending her a link that bounces to /login would have made the
+    // whole signing flow impossible on the first real letter.
+    path.startsWith("/sign") ||
     path.startsWith("/login") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/_next") ||
