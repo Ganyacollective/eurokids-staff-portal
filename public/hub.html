@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=48">
-<link rel="prefetch" href="/brand/enquiries.js?v=48" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=49">
+<link rel="prefetch" href="/brand/enquiries.js?v=49" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -528,6 +528,15 @@ async function lettersApi(path, opts = {}){
   return r.json().catch(() => ({ ok: false, error: 'The server did not answer.' }));
 }
 
+// Who signs. The Principal by default — an appointment letter comes from the
+// head of the school, not from its accounts.
+const LETTER_SIGNERS = [
+  { name: 'Neeta Saxena',  short: 'Principal',
+    role: 'Principal · EuroKids JMD Enclave (Veena Educational Services)' },
+  { name: 'Abhinav Saxena', short: 'Director',
+    role: 'Director · EuroKids JMD Enclave (Veena Educational Services)' },
+];
+
 const LETTER_STATE = {
   draft:    { l: 'Not sent',  c: 'var(--label-3)' },
   sent:     { l: 'Sent',      c: 'var(--acc)' },
@@ -626,6 +635,10 @@ function openLetter(empId){
         <input class="in wide" id="al-email" type="email" value="${esc(s.email || '')}" placeholder="her email address"></div>
       <div class="row"><div class="l">Signing code check<span class="sub">She confirms the last four digits of this number</span></div>
         <div class="v hint">${s.phone ? '••••' + esc(String(s.phone).slice(-4)) : 'no number on file'}</div></div>
+      <div class="row"><div class="l">Signed by<span class="sub">Whose name and title appear at the foot of the letter</span></div>
+        <select class="in" id="al-signer">
+          ${LETTER_SIGNERS.map((x, i) => `<option value="${i}">${esc(x.name)} — ${esc(x.short)}</option>`).join('')}
+        </select></div>
     </div><div class="foot">Address and bank details come from her employee record and appear on the letter as they are held there.</div></div>
 
     <div class="grp"><div class="box">
@@ -665,10 +678,12 @@ function openLetter(empId){
   };
 
   function payload(s){
+    const who = LETTER_SIGNERS[Number(el('al-signer').value) || 0];
     return {
       employee_id: s.id,
       salary: Number(el('al-sal').value) || 0,
       starts_on: el('al-start').value || null,
+      signed_by_name: who.name, signed_by_role: who.role,
       overrides: { email: el('al-email').value.trim() },
     };
   }
@@ -3587,7 +3602,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=48"></script>
+<script src="/brand/enquiries.js?v=49"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

@@ -3222,7 +3222,7 @@ function openEmployeeForm(id){
           </select>
           <p class="text-xs text-gray-500 mt-1">This is the line that appears in their appointment letter.</p></div>
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Reports to</label>
-          <input id="ef-reports" class="input" value="${e?.reports_to||''}" placeholder="e.g. the Centre Head" /></div>
+          <input id="ef-reports" class="input" value="${e?.reports_to||''}" placeholder="Neeta Saxena, Principal" /></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Reporting (HH:MM)</label><input id="ef-rep" type="time" class="input" value="${e?String(Math.floor(e.reporting_minutes/60)).padStart(2,'0')+':'+String(e.reporting_minutes%60).padStart(2,'0'):'09:00'}" /></div>

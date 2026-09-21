@@ -93,6 +93,11 @@ export function fill(tpl: string, vars: Record<string, string>) {
   return String(tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? "");
 }
 
+// The school's own people, in one place rather than scattered through the
+// template. Overridable per letter from the editor.
+export const PRINCIPAL = "Neeta Saxena";
+export const SIGNATORY = { name: PRINCIPAL, role: "Principal · EuroKids JMD Enclave (Veena Educational Services)" };
+
 export type MergeInput = {
   employee: StaffRecord;
   template: LetterTemplate;
@@ -127,7 +132,7 @@ export function mergeLetter(inp: MergeInput): LetterData {
     // Reads as " (…) " only when we actually hold the details.
     bank_tail: bank ? ` — ${e.bank_name ? e.bank_name + ", " : ""}${bank}` : "",
     bank_name: e.bank_name || "",
-    reports_to: e.reports_to || "the Centre Head",
+    reports_to: e.reports_to || `the Principal, ${PRINCIPAL}`,
     school: "EuroKids JMD Enclave",
   };
 
@@ -152,8 +157,8 @@ export function mergeLetter(inp: MergeInput): LetterData {
     })),
     quote: inp.template.quote,
     quoteBy: inp.template.quote_by,
-    signedByName: inp.signedByName || "Abhinav Saxena",
-    signedByRole: inp.signedByRole || "Director · EuroKids JMD Enclave (Veena Educational Services)",
+    signedByName: inp.signedByName || SIGNATORY.name,
+    signedByRole: inp.signedByRole || SIGNATORY.role,
     schoolSignaturePng: inp.schoolSignaturePng,
     signature: inp.signature,
     signUrl: inp.signUrl,
