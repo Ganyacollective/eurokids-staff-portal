@@ -36,6 +36,21 @@ const HAIR: RGB = rgb(0.72, 0.72, 0.72);
 
 const asset = (...p: string[]) => path.join(process.cwd(), "public", "brand", ...p);
 
+// Neeta's signature, if it has been placed in the repo. Every document that
+// goes out over her name uses it automatically — there is no per-letter
+// switch to forget. Drop a transparent PNG at public/brand/signature.png and
+// it appears; take it away and the documents fall back to a blank space
+// above her printed name, which is still a valid letter.
+let _sigCache: string | null | undefined;
+export function schoolSignature(): string | null {
+  if (_sigCache !== undefined) return _sigCache;
+  const p = asset("signature.png");
+  _sigCache = fs.existsSync(p)
+    ? "data:image/png;base64," + fs.readFileSync(p).toString("base64")
+    : null;
+  return _sigCache;
+}
+
 export type LetterData = {
   // who
   name: string;

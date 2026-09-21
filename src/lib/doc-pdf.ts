@@ -6,7 +6,7 @@
 // Shares the page engine in letter-pdf.ts: A4, 14pt, 56.7pt margins, the JMD
 // Enclave artwork behind every page.
 
-import { Sheet, type LetterData } from "./letter-pdf";
+import { Sheet, schoolSignature, type LetterData } from "./letter-pdf";
 import { rgb, type RGB } from "pdf-lib";
 
 const INK: RGB = rgb(0, 0, 0);
@@ -44,21 +44,17 @@ export async function renderDocumentPdf(d: DocData): Promise<Uint8Array> {
   const s = await new Sheet().init();
 
   // ── the head ──────────────────────────────────────────────────────────
-  s.text("PRIVATE AND CONFIDENTIAL", { bold: true });
-  s.text(`Date: ${d.issuedOn}`, { after: 10 });
-  s.text("EUROKIDS JMD ENCLAVE");
-  s.text("(Operated by Veena Educational Services)", { after: 12 });
-  s.text(d.title, { bold: true, after: 10 });
+  // Deliberately plain. The employment agreement opens PRIVATE AND
+  // CONFIDENTIAL because it carries a salary; a parent being asked for
+  // consent about their own child does not need to be greeted that way.
+  // The legal entity appears once, small, because the consent has to run to
+  // the right company — that is the part which actually has to be sound.
+  s.text(d.title, { bold: true, size: 15, after: 2 });
+  s.text("EuroKids JMD Enclave, operated by Veena Educational Services · Bungalow 1, JMD Enclave, Mohammadwadi, Pune 411060",
+    { size: 9.5, color: MUTE, lead: 12, after: 12 });
+  s.text(`Date: ${d.issuedOn}`, { after: 12 });
 
-  // Who this is about, stated once and plainly, so a parent reading it in a
-  // hurry sees their own child's name before anything else.
-  const who: string[] = [];
-  if (d.childName) who.push(`Child: **${d.childName}**${d.childUin ? ` (${d.childUin})` : ""}`);
-  who.push(`Parent / Guardian: **${d.partyName}**`);
-  if (d.contact?.phone) who.push(`Contact: ${d.contact.phone}`);
-  s.text(who.join("\n"), { after: 12 });
-
-  if (d.intro) s.text(d.intro, { after: 6 });
+  if (d.intro) s.text(d.intro, { after: 4 });
 
   // ── the clauses ───────────────────────────────────────────────────────
   for (const c of d.clauses || []) {
@@ -112,9 +108,10 @@ export async function renderDocumentPdf(d: DocData): Promise<Uint8Array> {
   // ── for the school ────────────────────────────────────────────────────
   s.gap(10);
   s.text("For EuroKids JMD Enclave", { size: 11 });
-  if (d.schoolSignaturePng) {
+  const schoolSig = d.schoolSignaturePng ?? schoolSignature();
+  if (schoolSig) {
     try {
-      const img = await s.doc.embedPng(dataUrlToBytes(d.schoolSignaturePng));
+      const img = await s.doc.embedPng(dataUrlToBytes(schoolSig));
       const w = 130, h = (img.height / img.width) * w;
       s.room(h + 6);
       s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
