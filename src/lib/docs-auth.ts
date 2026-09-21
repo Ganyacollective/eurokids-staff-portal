@@ -39,9 +39,14 @@ export async function requireDocuments(req: Request): Promise<Caller> {
 export type DocTemplate = {
   id: number; slug: string; name: string; title: string; intro: string;
   clauses: { heading: string; body: string }[];
-  fields: { key: string; label: string; placeholder?: string; required?: boolean }[];
+  fields: { key: string; label: string; placeholder?: string; required?: boolean; type?: string }[];
   declaration: string;
 };
+
+// The blank template: the person sending it writes the words, and the
+// pipeline is otherwise identical. Two ready-made forms will never cover
+// every undertaking a school needs signed.
+export const isCustom = (t: { slug?: string }) => t.slug === "custom";
 
 export const longDate = (d: Date) =>
   d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
@@ -60,11 +65,20 @@ export function buildDoc(
     school: "EuroKids JMD Enclave",
   };
   const issued = opts.issuedOn || new Date();
+  // A written-yourself document carries its title and its text in the two
+  // fields rather than in the template. Blank lines separate the points, the
+  // way anyone writing in a box expects them to.
+  const custom = isCustom(tpl);
+  const customClauses = custom
+    ? String(input.values.doc_body || "").split(/\n\s*\n/)
+        .map((b) => b.trim()).filter(Boolean)
+        .map((body) => ({ heading: "", body: fillDoc(body, vars) }))
+    : null;
   return {
-    title: fillDoc(tpl.title, vars),
+    title: custom ? (input.values.doc_title || "Declaration") : fillDoc(tpl.title, vars),
     issuedOn: longDate(issued),
-    intro: fillDoc(tpl.intro, vars),
-    clauses: (tpl.clauses || []).map((c) => ({ heading: c.heading, body: fillDoc(c.body, vars) })),
+    intro: custom ? "" : fillDoc(tpl.intro, vars),
+    clauses: customClauses ?? (tpl.clauses || []).map((c) => ({ heading: c.heading, body: fillDoc(c.body, vars) })),
     declaration: fillDoc(tpl.declaration, vars),
     partyName: input.partyName,
     partyRole: "Parent / Guardian",
@@ -83,8 +97,11 @@ export function missingForDoc(tpl: DocTemplate, input: {
   values: Record<string, string>; channel: "link" | "in_person";
 }): string[] {
   const gaps: string[] = [];
-  if (!input.childName?.trim()) gaps.push("the child's name");
-  if (!input.partyName?.trim()) gaps.push("the parent's name");
+  // A written-yourself document may have nothing to do with a child — an
+  // undertaking from a vendor, a note to a landlord — so the child's name is
+  // only insisted on for the ready-made forms.
+  if (!isCustom(tpl) && !input.childName?.trim()) gaps.push("the child's name");
+  if (!input.partyName?.trim()) gaps.push("the name of the person signing");
   if (input.channel === "link" && !input.email?.trim()) gaps.push("an email address to send it to");
   for (const f of tpl.fields || []) {
     if (f.required && !String(input.values?.[f.key] || "").trim()) gaps.push(f.label.toLowerCase());

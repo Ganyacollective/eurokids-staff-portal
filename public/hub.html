@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=53">
-<link rel="prefetch" href="/brand/enquiries.js?v=53" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=54">
+<link rel="prefetch" href="/brand/enquiries.js?v=54" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -596,14 +596,16 @@ function paintDocs(){
 /* ── raise one ────────────────────────────────────────────────────────── */
 function openDocForm(tplId){
   const t = _docTpl.find(x => x.id === tplId); if (!t) return;
-  const body = openDrawer(t.name, t.title);
+  // The blank one asks for its own title and text; the ready-made ones do not.
+  const custom = t.slug === 'custom';
+  const body = openDrawer(t.name, custom ? 'Write it yourself — same letterhead, same signing' : t.title);
   body.innerHTML = `
     <div class="grp"><h3>Who it is about</h3><div class="box">
-      <div class="row"><div class="l">Child's name</div>
-        <input class="in wide" id="dc-child" placeholder="As it should read on the form"></div>
+      <div class="row"><div class="l">Child's name${custom ? '<span class="sub">Optional on a written-yourself document</span>' : ''}</div>
+        <input class="in wide" id="dc-child" placeholder="${custom ? 'Leave blank if it is not about a child' : 'As it should read on the form'}"></div>
       <div class="row"><div class="l">UIN<span class="sub">Optional — links it to the child's record</span></div>
         <input class="in wide" id="dc-uin" placeholder="EK/1769/…"></div>
-      <div class="row"><div class="l">Parent or guardian</div>
+      <div class="row"><div class="l">${custom ? 'Who signs it' : 'Parent or guardian'}</div>
         <input class="in wide" id="dc-party" placeholder="Full name"></div>
       <div class="row"><div class="l">Their email<span class="sub">Needed to send it; not needed to sign at the desk</span></div>
         <input class="in wide" id="dc-email" type="email" placeholder="parent@example.com"></div>
@@ -611,10 +613,14 @@ function openDocForm(tplId){
         <input class="in wide" id="dc-phone" placeholder="98765 43210"></div>
     </div></div>
 
-    <div class="grp"><h3>Details for this form</h3><div class="box">
-      ${(t.fields || []).map(f => `<div class="row"><div class="l">${esc(f.label)}${
-          f.required ? '' : '<span class="sub">Optional</span>'}</div>
-        <input class="in wide" data-f="${esc(f.key)}" placeholder="${esc(f.placeholder || '')}"></div>`).join('')
+    <div class="grp"><h3>${custom ? 'What it says' : 'Details for this form'}</h3><div class="box">
+      ${(t.fields || []).map(f => f.type === 'textarea'
+        ? `<div class="rowx"><label class="l" style="display:block;margin-bottom:6px">${esc(f.label)}</label>
+             <textarea class="in" data-f="${esc(f.key)}" rows="10" placeholder="${esc(f.placeholder || '')}"
+               style="width:100%;font-family:inherit;line-height:1.55"></textarea></div>`
+        : `<div class="row"><div class="l">${esc(f.label)}${
+            f.required ? '' : '<span class="sub">Optional</span>'}</div>
+           <input class="in wide" data-f="${esc(f.key)}" placeholder="${esc(f.placeholder || '')}"></div>`).join('')
         || '<div class="rowx hint">This form needs nothing beyond the names above.</div>'}
     </div></div>
 
@@ -3810,7 +3816,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=53"></script>
+<script src="/brand/enquiries.js?v=54"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
