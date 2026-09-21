@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=44">
-<link rel="prefetch" href="/brand/enquiries.js?v=44" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=45">
+<link rel="prefetch" href="/brand/enquiries.js?v=45" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -144,9 +144,10 @@ const TABS = {
   discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => has('finance') },
   fees:       { label: 'Fee Grid',      icon: 'grid',   sect: 'Reference',     need: () => has('fees') || has('finance') },
   templates:  { label: 'Letter templates', icon: 'mail', sect: 'Setup',       need: () => has('finance') },
+  letters:    { label: 'Appointment letters', icon: 'mail', sect: 'Staff',    need: () => has('letters') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
 };
-const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Reference', 'Setup'];
+const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reference', 'Setup'];
 const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
 const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'] };
@@ -310,11 +311,12 @@ function renderChooser(){
 }
 
 /* ── users & access (owner only) ─────────────────────── */
-const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts','finance','salary'];
+const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts','finance','salary','letters'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
   payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
   receipts:'Receipts & cash', finance:'Finance (money)',
-  salary:'Salaries (staff pay)' };
+  salary:'Salaries (staff pay)',
+  letters:'Appointment letters (shows salary)' };
 
 async function hubUsersApi(method, body){
   const { data: { session: s } } = await getSb().auth.getSession();
@@ -503,8 +505,180 @@ function renderApp(){
   el('main').scrollTop = 0; window.scrollTo({ top: 0 });
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
-     templates: tabTemplates,
+     templates: tabTemplates, letters: tabLetters,
      enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_setup: tabEnqSetup }[tab] || tabOverview)();
+}
+
+/* ── Appointment letters ──────────────────────────────────────────────────
+   The whole point of this screen is that generating a letter should take
+   thirty seconds, not an afternoon of copying a Word draft. Everything it
+   needs already lives on the employee record in the staff portal; the salary
+   comes from the pay book. This tab is behind its own grant because it shows
+   what people are paid. */
+let _letters = null;
+
+async function lettersApi(path, opts = {}){
+  const { data: { session: sess } } = await getSb().auth.getSession();
+  const r = await fetch(`/api/letters${path}`, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json',
+               Authorization: `Bearer ${sess.access_token}`, ...(opts.headers || {}) },
+  });
+  if (opts.raw) return r;
+  return r.json().catch(() => ({ ok: false, error: 'The server did not answer.' }));
+}
+
+const LETTER_STATE = {
+  draft:    { l: 'Not sent',  c: 'var(--label-3)' },
+  sent:     { l: 'Sent',      c: 'var(--acc)' },
+  viewed:   { l: 'Opened',    c: 'var(--warn)' },
+  signed:   { l: 'Signed',    c: 'var(--good)' },
+  declined: { l: 'Declined',  c: 'var(--crit)' },
+  cancelled:{ l: 'Cancelled', c: 'var(--label-3)' },
+};
+
+async function tabLetters(){
+  el('body').innerHTML = head('Appointment letters',
+    'Drawn from the employee record in the staff portal. Nothing is typed twice.',
+    `<button class="btn line sm" id="al-refresh">Refresh</button>`);
+  el('body').insertAdjacentHTML('beforeend', `<div id="al-body"><div class="loading">Loading the roster…</div></div>`);
+  el('al-refresh').onclick = () => { _letters = null; tabLetters(); };
+
+  if (!_letters) {
+    const r = await lettersApi('/staff');
+    if (!r.ok) { el('al-body').innerHTML = `<div class="err">${esc(r.error)}</div>`; return; }
+    _letters = r.staff;
+  }
+  paintLetters();
+}
+
+function paintLetters(){
+  const staff = _letters || [];
+  const signed  = staff.filter(s => s.latest?.status === 'signed');
+  const waiting = staff.filter(s => s.latest && s.latest.status !== 'signed');
+  const none    = staff.filter(s => !s.latest);
+
+  const row = (s) => {
+    const st = s.latest ? (LETTER_STATE[s.latest.status] || LETTER_STATE.draft) : null;
+    const ready = s.missing.length === 0;
+    return `<button class="linkrow" data-emp="${esc(s.id)}"
+        style="display:flex;justify-content:space-between;gap:12px;align-items:center;color:var(--label);width:100%">
+      <span style="min-width:0">
+        <strong>${esc(s.name)}</strong>
+        <span class="hint"> ${esc(s.designation || s.department || '')}</span>
+        <div class="hint" style="margin-top:2px">${
+          s.latest
+            ? `${esc(st.l)}${s.latest.signed_at ? ' · ' + longDate(String(s.latest.signed_at).slice(0,10))
+               : s.latest.sent_at ? ' · sent ' + longDate(String(s.latest.sent_at).slice(0,10)) : ''}`
+            : ready ? 'Ready to write' : `Needs ${esc(s.missing.slice(0,2).join(', '))}${s.missing.length>2 ? ' and more' : ''}`
+        }</div>
+      </span>
+      <span style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
+        ${st ? `<span style="width:8px;height:8px;border-radius:50%;background:${st.c};display:inline-block"></span>` : ''}
+        <span class="hint">${s.salary > 0 ? money(s.salary) : '—'}</span>
+        <span style="color:var(--label-3)">›</span>
+      </span>
+    </button>`;
+  };
+
+  const group = (title, list, note) => list.length
+    ? `<div class="grp"><h3>${title}</h3><div class="box">${list.map(row).join('')}</div>
+       ${note ? `<div class="foot">${note}</div>` : ''}</div>` : '';
+
+  el('al-body').innerHTML =
+      group('Waiting on them', waiting, 'Sent, not yet signed. Open one to resend the link or see when it was read.')
+    + group('Still to write', none.filter(s => !s.missing.length))
+    + group('Not ready yet', none.filter(s => s.missing.length),
+        'These are missing something the letter needs. Fill it in on the employee record in the staff portal — the letter reads from there.')
+    + group('Signed', signed)
+    + (staff.length ? '' : `<div class="empty"><div class="ic">📄</div><h3>No staff on the roster</h3>
+        <div>Add people in the staff portal first.</div></div>`);
+
+  el('al-body').querySelectorAll('[data-emp]').forEach(b =>
+    b.onclick = () => openLetter(b.dataset.emp));
+}
+
+/* ── one person, one screen ───────────────────────────────────────────── */
+function openLetter(empId){
+  const s = (_letters || []).find(x => x.id === empId);
+  if (!s) return;
+  const body = openDrawer(s.name, `${s.designation || ''}${s.department ? ' · ' + s.department : ''}`);
+  const sent = (s.letters || []).filter(l => l.status !== 'draft');
+
+  body.innerHTML = `
+    ${s.missing.length ? `<div class="err">This letter is missing ${esc(s.missing.join(', '))}.
+      Fill it in on her employee record in the staff portal, then come back — the letter reads from there
+      rather than asking you to type it again.</div>` : ''}
+
+    <div class="grp"><h3>What goes in the letter</h3><div class="box">
+      <div class="row"><div class="l">Role<span class="sub">From the employee record</span></div>
+        <div class="v">${esc(s.designation || '—')}</div></div>
+      <div class="row"><div class="l">Working pattern<span class="sub">Change it in the staff portal</span></div>
+        <div class="v" style="text-align:right;max-width:58%">${esc(s.schedule_label || '—')}</div></div>
+      <div class="row"><div class="l">Hours</div>
+        <div class="v">${s.reporting_minutes != null ? esc(clockOf(s.reporting_minutes)) : '—'}${
+          s.punch_out_minutes != null ? ' to ' + esc(clockOf(s.punch_out_minutes)) : ''}</div></div>
+      <div class="row"><div class="l">Starts on</div>
+        <input class="in" id="al-start" type="date" value="${esc(s.joining_date || '')}"></div>
+      <div class="row"><div class="l">Monthly salary<span class="sub">From the pay book. Changing it here writes the letter only, not the pay book.</span></div>
+        <input class="in num" id="al-sal" type="number" value="${s.salary || ''}" placeholder="0"></div>
+      <div class="row"><div class="l">Send to</div>
+        <input class="in wide" id="al-email" type="email" value="${esc(s.email || '')}" placeholder="her email address"></div>
+      <div class="row"><div class="l">Signing code check<span class="sub">She confirms the last four digits of this number</span></div>
+        <div class="v hint">${s.phone ? '••••' + esc(String(s.phone).slice(-4)) : 'no number on file'}</div></div>
+    </div><div class="foot">Address and bank details come from her employee record and appear on the letter as they are held there.</div></div>
+
+    <div class="grp"><div class="box">
+      <button class="linkrow" id="al-preview">See the letter first</button>
+      <button class="linkrow" id="al-send" style="color:var(--good);font-weight:600">Send it to her for signing</button>
+    </div><div class="foot">She gets the PDF and a private link. On her phone: read, enter the code we email her, sign with her finger. The signed copy comes back to both of you.</div></div>
+
+    ${sent.length ? `<div class="grp"><h3>Already sent</h3><div class="box">
+      ${sent.map(l => {
+        const st = LETTER_STATE[l.status] || LETTER_STATE.draft;
+        return `<div class="row"><div class="l">${esc(st.l)}
+            <span class="sub">${l.sent_at ? 'sent ' + longDate(String(l.sent_at).slice(0,10)) : ''}${
+              l.signed_at ? ' · signed ' + longDate(String(l.signed_at).slice(0,10)) : ''} · to ${esc(l.to_email || '')}</span></div>
+          <div class="v" style="color:${st.c}">${l.status === 'signed' ? '✓' : ''}</div></div>`;
+      }).join('')}
+    </div></div>` : ''}
+
+    <div id="al-msg"></div>`;
+
+  el('al-preview').onclick = async () => {
+    const r = await lettersApi('/preview', { raw: true, method: 'POST', body: JSON.stringify(payload(s)) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); return el('al-msg').innerHTML = `<div class="err">${esc(j.error || 'Could not build the letter.')}</div>`; }
+    const url = URL.createObjectURL(await r.blob());
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
+  el('al-send').onclick = async () => {
+    const to = el('al-email').value.trim();
+    if (!confirm(`Send ${s.name}'s appointment letter to ${to}?\n\nShe will be able to sign it on her phone.`)) return;
+    const b = el('al-send'); b.disabled = true; b.textContent = 'Sending…';
+    const r = await lettersApi('/send', { method: 'POST', body: JSON.stringify({ ...payload(s), to_email: to }) });
+    b.disabled = false; b.textContent = 'Send it to her for signing';
+    if (!r.ok) return el('al-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`;
+    el('al-msg').innerHTML = `<div class="ok">Sent to ${esc(to)}. She can sign it from her phone.</div>`;
+    _letters = null; tabLetters();
+  };
+
+  function payload(s){
+    return {
+      employee_id: s.id,
+      salary: Number(el('al-sal').value) || 0,
+      starts_on: el('al-start').value || null,
+      overrides: { email: el('al-email').value.trim() },
+    };
+  }
+}
+
+// 495 → "8:15 am". The portal stores minutes past midnight.
+function clockOf(min){
+  const m = ((Math.round(Number(min)) % 1440) + 1440) % 1440;
+  const h24 = Math.floor(m / 60), mm = m % 60, h = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h}:${String(mm).padStart(2,'0')} ${h24 < 12 ? 'am' : 'pm'}`;
 }
 
 /* ── schedule coverage: what the coordinator still has to fill ──
@@ -3413,7 +3587,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=44"></script>
+<script src="/brand/enquiries.js?v=45"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

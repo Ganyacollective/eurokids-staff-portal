@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Your appointment letter · EuroKids JMD Enclave</title>
+<link rel="icon" href="/favicon.png">
+<style>
+  /* Built for a phone held in one hand, by someone who is slightly nervous.
+     Big type, one thing per screen, nothing that looks like a form at work. */
+  :root{
+    --blue:#21409A; --green:#15803D; --pink:#E83C59; --ink:#15181C; --mute:#6B7280;
+    --line:#E5E7EB; --wash:#F7F8FA; --r:14px;
+    --safe: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{font:16px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);background:var(--wash);padding-bottom:calc(24px + var(--safe))}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 40px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:22px;margin-bottom:14px;
+        box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .brand{display:flex;align-items:center;gap:10px;padding:8px 2px 14px}
+  .brand img{height:34px;width:auto}
+  .brand span{font-size:12px;color:var(--mute);letter-spacing:.2px}
+  h1{font-size:26px;line-height:1.25;margin:0 0 6px;letter-spacing:-.4px}
+  h2{font-size:17px;margin:0 0 10px}
+  p{margin:0 0 12px}
+  .mute{color:var(--mute)}
+  .small{font-size:13.5px}
+  .tiny{font-size:12px;color:var(--mute);line-height:1.5}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin:0 0 6px}
+  input[type=text],input[type=tel]{width:100%;font-size:17px;padding:13px 14px;border:1px solid var(--line);
+    border-radius:11px;background:#fff;color:var(--ink);font-family:inherit}
+  input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(33,64,154,.12)}
+  .btn{display:block;width:100%;font:inherit;font-size:17px;font-weight:700;padding:15px 18px;border-radius:12px;
+       border:0;background:var(--green);color:#fff;cursor:pointer}
+  .btn[disabled]{opacity:.5;cursor:default}
+  .btn.line{background:#fff;color:var(--blue);border:1.5px solid var(--line);font-weight:600}
+  .btn+.btn{margin-top:10px}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .facts{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:16px 0}
+  .facts div{display:flex;justify-content:space-between;gap:14px;padding:11px 14px;border-bottom:1px solid var(--line);font-size:14.5px}
+  .facts div:last-child{border-bottom:0}
+  .facts b{font-weight:650;text-align:right}
+  .ok{background:#ECFDF3;border:1px solid #ABEFC6;color:#0B7B3E;padding:11px 13px;border-radius:11px;font-size:14px;margin-bottom:12px}
+  .err{background:#FEF3F2;border:1px solid #FECDCA;color:#B42318;padding:11px 13px;border-radius:11px;font-size:14px;margin-bottom:12px}
+  .pad{height:170px;border:1.5px dashed #CBD5E1;border-radius:12px;background:#fff;touch-action:none;width:100%;display:block}
+  .otp{letter-spacing:10px;font-size:26px;text-align:center;font-weight:700}
+  embed,iframe{width:100%;height:62vh;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .step{display:none}.step.on{display:block}
+  .foot{text-align:center;padding:18px 6px;font-size:12px;color:var(--mute);line-height:1.6}
+  a{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <img src="/brand/icons/icon-192.png" alt="" onerror="this.style.display='none'">
+    <span>EuroKids JMD Enclave · Mohammadwadi, Pune</span>
+  </div>
+
+  <div id="app"><div class="card"><p class="mute">Opening your letter…</p></div></div>
+
+  <div class="foot">
+    Any trouble at all — call the school on <a href="tel:+917875096690">+91 78750 96690</a>.<br>
+    This page is private to you. Please don't forward the link.
+  </div>
+</div>
+
+<script>
+const token = location.hash.replace(/^#/, '').trim();
+const app = document.getElementById('app');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api = (p, opt) => fetch(`/api/sign/${encodeURIComponent(token)}${p}`, opt).then(r => r.json().catch(() => ({ ok:false, error:'The server did not answer.' })));
+
+let me = null;
+
+function shell(html){ app.innerHTML = html; }
+function err(msg){ const b = document.getElementById('msg'); if (b) b.innerHTML = `<div class="err">${esc(msg)}</div>`; }
+function note(msg){ const b = document.getElementById('msg'); if (b) b.innerHTML = `<div class="ok">${esc(msg)}</div>`; }
+
+// ── 1. who are you, and here is your letter ────────────────────────────
+function cover(){
+  const first = (me.name || '').split(/\s+/)[0];
+  shell(`
+    <div class="card">
+      <h1>Hello ${esc(first)} 👋</h1>
+      <p class="mute">Your appointment letter from EuroKids JMD Enclave is ready.</p>
+      <div class="facts">
+        <div><span class="mute">Your role</span><b>${esc(me.designation || '—')}</b></div>
+        ${me.starts_on ? `<div><span class="mute">You start on</span><b>${esc(longDate(me.starts_on))}</b></div>` : ''}
+        <div><span class="mute">Letter dated</span><b>${esc(me.issued_on || '')}</b></div>
+      </div>
+      <p class="small">Read it properly — it's short, and the important things are on the first page. Sign it when you're happy. If anything is unclear, call us before you sign; we would much rather explain.</p>
+      <button class="btn" id="read">Read my letter</button>
+      <a class="btn line" style="text-align:center;text-decoration:none;margin-top:10px" href="/api/sign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener">Open as a PDF</a>
+    </div>`);
+  document.getElementById('read').onclick = reader;
+}
+
+function reader(){
+  shell(`
+    <div class="card">
+      <h2>Your letter</h2>
+      <iframe src="/api/sign/${encodeURIComponent(token)}/pdf#view=FitH" title="Your appointment letter"></iframe>
+      <p class="tiny" style="margin-top:10px">Can't see it here? <a href="/api/sign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener">Open it in a new tab</a>.</p>
+      <button class="btn" id="go" style="margin-top:14px">I've read it — sign</button>
+      <button class="btn line" id="back">Back</button>
+    </div>`);
+  document.getElementById('go').onclick = identify;
+  document.getElementById('back').onclick = cover;
+}
+
+// ── 2. prove it's you ──────────────────────────────────────────────────
+function identify(){
+  shell(`
+    <div class="card">
+      <h2>Just checking it's you</h2>
+      <p class="small mute">We'll email a six-digit code to ${esc(me.email_hint || 'your email')}.</p>
+      <div id="msg"></div>
+      <div style="margin-bottom:14px">
+        <label for="four">Last 4 digits of your mobile number</label>
+        <input id="four" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
+        <p class="tiny" style="margin-top:6px">The number the school has for you. If it has changed, call us first.</p>
+      </div>
+      <button class="btn" id="send">Email me the code</button>
+      <button class="btn line" id="back">Back to the letter</button>
+    </div>`);
+  document.getElementById('back').onclick = reader;
+  const b = document.getElementById('send');
+  b.onclick = async () => {
+    const four = document.getElementById('four').value.replace(/\D/g, '');
+    if (me.phone_hint && four.length !== 4) return err('Please enter the last four digits of your mobile number.');
+    b.disabled = true; b.textContent = 'Sending…';
+    const r = await api('/otp', { method: 'POST' });
+    b.disabled = false; b.textContent = 'Email me the code';
+    if (!r.ok) return err(r.error || 'Could not send the code.');
+    signStep(four, r.sent_to);
+  };
+}
+
+// ── 3. code, name, signature ───────────────────────────────────────────
+function signStep(four, sentTo){
+  shell(`
+    <div class="card">
+      <h2>Sign your letter</h2>
+      <div id="msg"><div class="ok">Code sent to ${esc(sentTo || 'your email')}. It's good for ten minutes.</div></div>
+
+      <div style="margin-bottom:16px">
+        <label for="otp">The six-digit code</label>
+        <input id="otp" type="tel" inputmode="numeric" maxlength="6" class="otp" placeholder="000000" autocomplete="one-time-code">
+        <p class="tiny" style="margin-top:6px">Didn't arrive? Check spam, or <a href="#" id="again">send it again</a>.</p>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <label for="full">Your full name</label>
+        <input id="full" type="text" value="${esc(me.name || '')}" autocomplete="name">
+      </div>
+
+      <label>Sign with your finger</label>
+      <canvas class="pad" id="pad"></canvas>
+      <div class="row" style="margin:8px 0 18px">
+        <button class="btn line" id="clear" style="padding:9px;font-size:14px">Clear</button>
+      </div>
+
+      <p class="tiny" style="margin-bottom:14px">By signing you confirm you have read this letter and accept it. We record the time, your code and your device as proof of signing, as the law allows.</p>
+      <button class="btn" id="done">Sign and send</button>
+      <button class="btn line" id="back">Back</button>
+    </div>`);
+
+  const pad = setupPad(document.getElementById('pad'));
+  document.getElementById('clear').onclick = pad.clear;
+  document.getElementById('back').onclick = reader;
+  document.getElementById('again').onclick = async (e) => {
+    e.preventDefault();
+    const r = await api('/otp', { method: 'POST' });
+    r.ok ? note(r.note || 'A new code is on its way.') : err(r.error || 'Could not resend.');
+  };
+
+  const b = document.getElementById('done');
+  b.onclick = async () => {
+    const otp = document.getElementById('otp').value.replace(/\D/g, '');
+    const full = document.getElementById('full').value.trim();
+    if (otp.length !== 6) return err('Please enter the six-digit code from your email.');
+    if (full.length < 3) return err('Please type your full name.');
+    if (pad.empty()) return err('Please sign in the box with your finger.');
+    b.disabled = true; b.textContent = 'Signing…';
+    const r = await api('/complete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp, phone_last4: four, signer_name: full, signature_png: pad.png() }),
+    });
+    b.disabled = false; b.textContent = 'Sign and send';
+    if (!r.ok) return err(r.error || 'Could not sign.');
+    done(r);
+  };
+}
+
+// ── 4. done ────────────────────────────────────────────────────────────
+function done(r){
+  shell(`
+    <div class="card" style="text-align:center">
+      <div style="font-size:46px;line-height:1;margin:6px 0 14px">🎉</div>
+      <h1>That's done</h1>
+      <p class="mute">Welcome to EuroKids JMD Enclave. A signed copy is on its way to your email — keep it somewhere safe.</p>
+      <div class="facts" style="text-align:left">
+        <div><span class="mute">Signed</span><b>${esc(r.signed_at || '')}</b></div>
+        <div><span class="mute">Reference</span><b>${esc(r.reference || '')}</b></div>
+      </div>
+      <a class="btn" style="text-decoration:none" href="/api/sign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener">Download my signed letter</a>
+    </div>`);
+}
+
+// ── the signature pad ──────────────────────────────────────────────────
+// Drawn at device resolution so it is not a blurry smear in the PDF, and
+// trimmed to the ink so the signature sits on the line rather than floating
+// in a large transparent rectangle.
+function setupPad(cv){
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const fit = () => {
+    const r = cv.getBoundingClientRect();
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    const c = cv.getContext('2d');
+    c.scale(dpr, dpr); c.lineWidth = 2.4; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#15181C';
+  };
+  fit();
+  let drawing = false, dirty = false, last = null;
+  const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const c = () => cv.getContext('2d');
+  cv.addEventListener('pointerdown', e => { drawing = true; dirty = true; last = pos(e); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = pos(e); const ctx = c();
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p;
+  });
+  const end = () => { drawing = false; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end); cv.addEventListener('pointerleave', end);
+  return {
+    clear(){ c().clearRect(0, 0, cv.width, cv.height); dirty = false; },
+    empty(){ return !dirty; },
+    png(){
+      // Trim to the ink.
+      const ctx = c(), w = cv.width, h = cv.height;
+      const d = ctx.getImageData(0, 0, w, h).data;
+      let x0 = w, y0 = h, x1 = 0, y1 = 0;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (d[(y * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      if (x1 <= x0 || y1 <= y0) return cv.toDataURL('image/png');
+      const pad = Math.round(6 * dpr);
+      x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+      x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+      const out = document.createElement('canvas');
+      out.width = x1 - x0; out.height = y1 - y0;
+      out.getContext('2d').drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+      return out.toDataURL('image/png');
+    },
+  };
+}
+
+const longDate = d => { try {
+  return new Date(String(d).slice(0,10) + 'T00:00:00Z').toLocaleDateString('en-IN',
+    { day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
+} catch(_) { return d; } };
+
+// ── boot ───────────────────────────────────────────────────────────────
+(async () => {
+  if (!token) return shell(`<div class="card"><h2>This link is incomplete</h2>
+    <p class="mute">Please open the link exactly as it came in your email, or ask the school to send it again.</p></div>`);
+  const r = await api('');
+  if (!r.ok) return shell(`<div class="card"><h2>We can't open this</h2><p class="mute">${esc(r.error || '')}</p></div>`);
+  me = r;
+  if (me.status === 'signed') {
+    return shell(`<div class="card" style="text-align:center">
+      <div style="font-size:42px;margin:4px 0 12px">✅</div>
+      <h1>Already signed</h1>
+      <p class="mute">This letter was signed by ${esc(me.signer_name || me.name)}. Your copy was emailed to you.</p>
+      <a class="btn" style="text-decoration:none" href="/api/sign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener">Open the signed letter</a>
+    </div>`);
+  }
+  cover();
+})();
+</script>
+</body>
+</html>

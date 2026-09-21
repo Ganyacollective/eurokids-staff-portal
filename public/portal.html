@@ -1708,7 +1708,9 @@ function renderEmployees(){
     <td><div class="font-medium">${e.display_name}${e.is_active ? '' : ' <span class="badge b-inactive">archived</span>'}</div>${e.display_name !== e.name_petpooja.trim() ? `<div class="text-xs text-gray-400">PetPooja: "${e.name_petpooja}"</div>` : ''}${e.joining_date ? `<div class="text-xs text-gray-400">Joined ${fmtDateShort(e.joining_date)}</div>` : ''}${e.left_date ? `<div class="text-xs text-gray-400">Left ${fmtDateShort(e.left_date)}</div>` : ''}</td>
     <td class="text-gray-600">${e.department}</td>
     <td class="text-gray-600">${e.designation}</td>
-    <td class="text-gray-600">${minToTime(e.reporting_minutes)}</td>
+    <td class="text-gray-600">${minToTime(e.reporting_minutes)}${
+      (e.schedule_type === 'day_care' || /day\s*care|daycare/i.test(e.designation||''))
+        ? '<div class="text-xs text-gray-400">every Saturday</div>' : ''}</td>
     <td class="text-gray-600 text-xs">${e.phone || '<span class="text-gray-400 italic">—</span>'}</td>
     <td class="text-gray-600 text-xs">${e.email || '<span class="text-gray-400 italic">—</span>'}</td>
     <td class="text-right">${canSeePay() ? inr(salaryOf(e.id)) : '<span class="text-gray-300">—</span>'}</td>
@@ -3210,6 +3212,19 @@ function openEmployeeForm(id){
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Designation</label><input id="ef-desg" class="input" value="${e?.designation||''}" /></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Working pattern</label>
+          <select id="ef-sched" class="input">
+            ${[['teaching','Teacher — Mon to Sat, two Saturdays off'],
+               ['day_care','Day care — Mon to Sat, every Saturday'],
+               ['admin','Office — Mon to Sat, two Saturdays off'],
+               ['support','Support staff — Mon to Sat']]
+              .map(([v,l]) => `<option value="${v}" ${(e?.schedule_type || (/day\s*care|daycare/i.test(e?.designation||'') ? 'day_care' : e?.department==='Teacher' ? 'teaching' : e?.department==='Support Staff' ? 'support' : 'admin')) === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <p class="text-xs text-gray-500 mt-1">This is the line that appears in their appointment letter.</p></div>
+        <div><label class="text-xs font-medium text-gray-700 block mb-1">Reports to</label>
+          <input id="ef-reports" class="input" value="${e?.reports_to||''}" placeholder="e.g. the Centre Head" /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-medium text-gray-700 block mb-1">Reporting (HH:MM)</label><input id="ef-rep" type="time" class="input" value="${e?String(Math.floor(e.reporting_minutes/60)).padStart(2,'0')+':'+String(e.reporting_minutes%60).padStart(2,'0'):'09:00'}" /></div>
         ${canSeePay() ? `<div><label class="text-xs font-medium text-gray-700 block mb-1">Monthly salary (₹)</label>
           <input id="ef-sal" type="number" class="input" value="${salaryOf(e?.id) || ''}" placeholder="set under Pay" />
@@ -3335,6 +3350,8 @@ async function saveEmployee(id){
   const bankAccount = document.getElementById('ef-bank-account').value.trim();
   const bankIfsc = document.getElementById('ef-bank-ifsc').value.trim().toUpperCase();
   const bankHolder = document.getElementById('ef-bank-holder').value.trim();
+  const schedType = document.getElementById('ef-sched')?.value || null;
+  const reportsTo = document.getElementById('ef-reports')?.value.trim() || '';
   const clCFStr = document.getElementById('ef-cl-carryfwd').value.trim();
   const elCFStr = document.getElementById('ef-el-carryfwd').value.trim();
   const clCF = clCFStr === '' ? 0 : parseFloat(clCFStr);
@@ -3364,6 +3381,7 @@ async function saveEmployee(id){
       punch_out_minutes: punchOutMin,
       address, emergency_contact: emergency, aadhaar,
       bank_name: bankName, bank_account: bankAccount, bank_ifsc: bankIfsc, bank_account_name: bankHolder,
+      schedule_type: schedType, reports_to: reportsTo,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || empById(id).login_email || '',
@@ -3379,6 +3397,7 @@ async function saveEmployee(id){
       punch_out_minutes: punchOutMin,
       address, emergency_contact: emergency, aadhaar,
       bank_name: bankName, bank_account: bankAccount, bank_ifsc: bankIfsc, bank_account_name: bankHolder,
+      schedule_type: schedType, reports_to: reportsTo,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || '',

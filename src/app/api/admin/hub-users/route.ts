@@ -11,6 +11,7 @@ const OWNER_EMAILS = new Set(["abhinav@ganya.in"]);
 
 const VALID_MODULES = new Set([
   "staff_portal", "epms_admin", "pulse", "payroll", "fees", "kits", "admission", "receipts", "finance", "salary",
+  "letters",
 ]);
 
 async function requireOwner(req: NextRequest): Promise<{ ok: true; userId: string } | { ok: false; status: number; message: string }> {
