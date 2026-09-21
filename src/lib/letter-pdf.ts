@@ -14,7 +14,7 @@
 // serverless function, no Chromium to install and nothing to time out. The
 // cost is that we lay the text out ourselves, below.
 
-import { PDFDocument, PDFFont, PDFPage, rgb, RGB } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFPage, rgb, type RGB } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import fs from "node:fs";
 import path from "node:path";
