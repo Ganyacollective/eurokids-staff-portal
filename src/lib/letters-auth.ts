@@ -15,7 +15,9 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 export const admin = (): SupabaseClient =>
   createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-export type Caller = { ok: true; email: string; userId: string } | { ok: false; status: number; error: string };
+export type Caller =
+  | { ok: true; email: string; userId: string; isAdmin: boolean }
+  | { ok: false; status: number; error: string };
 
 // The bearer token the hub sends is the user's own session. We ask Supabase
 // who it belongs to, then ask the database what they are allowed to do —
@@ -37,7 +39,7 @@ export async function requireLetters(req: Request): Promise<Caller> {
     return { ok: false, status: 403,
       error: "Appointment letters are a separate permission because they carry a salary. Ask Abhinav to switch on Letters for your account." };
   }
-  return { ok: true, email: who.user.email || "", userId: who.user.id };
+  return { ok: true, email: who.user.email || "", userId: who.user.id, isAdmin: prof?.role === "admin" };
 }
 
 // ── the roster ───────────────────────────────────────────────────────────

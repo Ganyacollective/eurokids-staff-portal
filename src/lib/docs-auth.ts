@@ -14,7 +14,9 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 export const admin = (): SupabaseClient =>
   createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-export type Caller = { ok: true; email: string; userId: string } | { ok: false; status: number; error: string };
+export type Caller =
+  | { ok: true; email: string; userId: string; isAdmin: boolean }
+  | { ok: false; status: number; error: string };
 
 export async function requireDocuments(req: Request): Promise<Caller> {
   const auth = req.headers.get("authorization") || "";
@@ -31,7 +33,7 @@ export async function requireDocuments(req: Request): Promise<Caller> {
   if (!((mods && mods.length) || prof?.role === "admin")) {
     return { ok: false, status: 403, error: "You need the Admission or Finance permission to send documents for signature." };
   }
-  return { ok: true, email: who.user.email || "", userId: who.user.id };
+  return { ok: true, email: who.user.email || "", userId: who.user.id, isAdmin: prof?.role === "admin" };
 }
 
 export type DocTemplate = {

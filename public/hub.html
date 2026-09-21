@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=52">
-<link rel="prefetch" href="/brand/enquiries.js?v=52" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=53">
+<link rel="prefetch" href="/brand/enquiries.js?v=53" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -672,8 +672,24 @@ function openDocReq(id, token){
       <a class="linkrow" href="/api/dsign/${encodeURIComponent(token)}/pdf" target="_blank" rel="noopener"
          style="display:block;color:var(--acc)">Open the document</a>
       ${r.status !== 'signed' ? `<button class="linkrow" id="dc-copy">Copy the signing link</button>` : ''}
+      ${r.status !== 'signed' ? `<button class="linkrow" id="dc-cancel">Withdraw this form</button>` : ''}
+      ${isOwner() ? `<button class="linkrow" id="dc-del" style="color:var(--crit)">Delete permanently</button>` : ''}
     </div>${r.status !== 'signed' ? '<div class="foot">Paste the link into WhatsApp if the parent does not use email.</div>' : ''}</div>
     <div id="dc-msg2"></div>`;
+
+  const scrubDoc = async (mode) => {
+    const hard = mode === 'delete';
+    if (!confirm(hard
+      ? `Delete this form permanently?\n\nThe form, its history and the signed PDF are removed and cannot be recovered.`
+      : `Withdraw this form?\n\nThe link stops working. The record of having sent it stays.`)) return;
+    const { data: { session: sess } } = await getSb().auth.getSession();
+    const res = await fetch(`/api/docs/${id}?mode=${mode}`, { method: 'DELETE',
+      headers: { Authorization: `Bearer ${sess.access_token}` } }).then(x => x.json()).catch(() => ({ ok:false, error:'No answer from the server.' }));
+    if (!res.ok) return el('dc-msg2').innerHTML = `<div class="err">${esc(res.error)}</div>`;
+    _docReqs = null; closeDrawer(true); tabDocs();
+  };
+  if (el('dc-cancel')) el('dc-cancel').onclick = () => scrubDoc('cancel');
+  if (el('dc-del')) el('dc-del').onclick = () => scrubDoc('delete');
   const c = el('dc-copy');
   if (c) c.onclick = async () => {
     const link = `${location.origin}/declare#${token}`;
@@ -825,9 +841,12 @@ function openLetter(empId){
         return `<div class="row"><div class="l">${esc(st.l)}
             <span class="sub">${l.sent_at ? 'sent ' + longDate(String(l.sent_at).slice(0,10)) : ''}${
               l.signed_at ? ' · signed ' + longDate(String(l.signed_at).slice(0,10)) : ''} · to ${esc(l.to_email || '')}</span></div>
-          <div class="v" style="color:${st.c}">${l.status === 'signed' ? '✓' : ''}</div></div>`;
+          <div class="v" style="display:flex;gap:10px;align-items:center">
+            ${l.status !== 'signed' ? `<button class="btn line sm" data-cancel="${l.id}">Withdraw</button>` : ''}
+            ${isOwner() ? `<button class="btn line sm" data-del="${l.id}" style="color:var(--crit)">Delete</button>` : ''}
+            <span style="color:${st.c}">${l.status === 'signed' ? '✓' : ''}</span></div></div>`;
       }).join('')}
-    </div></div>` : ''}
+    </div><div class="foot">Withdrawing stops the link working and keeps the record. Deleting removes the letter, its history and the stored PDF for good — for clearing out a test.</div></div>` : ''}
 
     <div id="al-msg"></div>`;
 
@@ -849,6 +868,22 @@ function openLetter(empId){
     el('al-msg').innerHTML = `<div class="ok">Sent to ${esc(to)}. She can sign it from her phone.</div>`;
     _letters = null; tabLetters();
   };
+
+  // Withdraw or delete. Two different things, and the wording says which.
+  const scrub = async (id, mode, label) => {
+    const hard = mode === 'delete';
+    if (!confirm(hard
+      ? `Delete this letter permanently?\n\nThe letter, its history and the signed PDF are removed and cannot be recovered.`
+      : `Withdraw this letter?\n\nThe link stops working. The record of having sent it stays.`)) return;
+    const { data: { session: sess } } = await getSb().auth.getSession();
+    const r = await fetch(`/api/letters/${id}?mode=${mode}`, { method: 'DELETE',
+      headers: { Authorization: `Bearer ${sess.access_token}` } }).then(x => x.json()).catch(() => ({ ok:false, error:'No answer from the server.' }));
+    if (!r.ok) return el('al-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`;
+    el('al-msg').innerHTML = `<div class="ok">${hard ? 'Deleted.' : 'Withdrawn.'}</div>`;
+    _letters = null; closeDrawer(true); tabLetters();
+  };
+  body.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => scrub(b.dataset.cancel, 'cancel'));
+  body.querySelectorAll('[data-del]').forEach(b => b.onclick = () => scrub(b.dataset.del, 'delete'));
 
   function payload(s){
     const who = LETTER_SIGNERS[Number(el('al-signer').value) || 0];
@@ -3775,7 +3810,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=52"></script>
+<script src="/brand/enquiries.js?v=53"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
