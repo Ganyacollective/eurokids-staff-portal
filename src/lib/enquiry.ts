@@ -175,7 +175,7 @@ export async function sendEnquiryWelcomeEmail(to: string[], e: EnquiryRow): Prom
     bodyHtml: `
       <p>Dear ${esc(parent)},</p>
       <p>Thank you for your interest in ${SCHOOL_NAME}${child}. We are a EuroKids preschool in Undri, Pune — Est. 2017, trusted by 3000+ parents — with a 6,000 sq ft play area and programmes from Play Group to Euro Senior${prog ? `, including <strong>${esc(prog)}</strong>` : ""}.</p>
-      <p>One of us will call you shortly to answer your questions and, if you like, book a visit so ${e.child_name ? esc(e.child_name) : "your child"} can see the school. If you would rather not wait, call us on <a href="tel:+912269622686" style="font-weight:700;text-decoration:none">${SCHOOL_PHONE}</a> or simply reply to this email.</p>
+      <p>One of us will call you shortly to answer your questions and, if you like, book a visit so ${e.child_name ? esc(e.child_name) : "your child"} can see the school. If you would rather not wait, call us on <a href="tel:+912069622686" style="font-weight:700;text-decoration:none">${SCHOOL_PHONE}</a> or simply reply to this email.</p>
       <p>We look forward to meeting you.</p>`,
     footerNote: `You are receiving this because you enquired at ${SCHOOL_NAME}. If that was not you, please ignore this email.`,
   });

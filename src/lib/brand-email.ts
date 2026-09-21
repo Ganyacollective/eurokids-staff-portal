@@ -6,8 +6,8 @@
 export const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://admin.eurokidsjmdenclave.org";
 export const SIGNATURE_IMG = `${SITE}/brand/email-signature.png`;
 export const SCHOOL_NAME = "EuroKids JMD Enclave";
-export const SCHOOL_PHONE = "022 696 22 686";
-export const SCHOOL_PHONE_TEL = "+912269622686";
+export const SCHOOL_PHONE = "020 6962 2686";
+export const SCHOOL_PHONE_TEL = "+912069622686";
 export const SCHOOL_EMAIL = "admin@eurokidsjmdenclave.org";
 // Staff mail — appointment letters, leave, payroll — is answered by HR, not
 // by the shared office inbox.

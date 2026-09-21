@@ -235,7 +235,7 @@ async function submit(){
     if (KIOSK) setTimeout(reset, 12000);
   } catch (e) {
     btn.disabled = false; btn.innerHTML = 'OK ' + OK;
-    el('e-' + Q[Q.length - 1].id).textContent = e.message + ' — or call us on 022 696 22 686.';
+    el('e-' + Q[Q.length - 1].id).textContent = e.message + ' — or call us on 020 6962 2686.';
   }
 }
 function reset(){ for (const k in a) delete a[k]; render(); show(0); }
