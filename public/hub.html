@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=56">
-<link rel="prefetch" href="/brand/enquiries.js?v=56" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=58">
+<link rel="prefetch" href="/brand/enquiries.js?v=58" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2350,6 +2350,7 @@ async function setBatch(uin, batch){
    parent's balance. Day care, uniform and event money never enters EPMS at
    all and never touches a fee.                                            */
 let _liab = { recs: [], kids: [], byLabel: {} };
+let _lbPad = null;                 // the signature pad inside Record Money
 
 // A half-typed receipt must survive a trip to another tab. Kept in memory for
 // the session and mirrored to localStorage so a stray refresh doesn't lose it.
@@ -2381,6 +2382,98 @@ const lbDraftClear = () => {
    be quietly rewritten is not a cash book. */
 const PEOPLE = ['Abhinav', 'Neeta', 'Diya', 'Office cash box'];
 
+// The list grows by itself. Whoever is typed into a handover once is offered
+// the next time, so "someone else" needs no settings screen.
+function people(exclude){
+  const seen = new Set(PEOPLE);
+  (_liab.chain || []).forEach(c => { if (c.to_person) seen.add(c.to_person); });
+  (_liab.recs || []).forEach(r => { if (r.received_by) seen.add(r.received_by); });
+  return [...seen].filter(n => n && n !== 'Bank' && n !== exclude).sort();
+}
+
+/* ── signing for money ─────────────────────────────────────────────────
+   Cash moves between people who are standing next to each other, so there is
+   no link to email and no code to check: the person taking it signs on the
+   tablet in front of the person handing it over. What makes it evidence is
+   that the entry is made from a signed-in staff account, the name is typed,
+   the drawing is theirs, and the time, device and network address are taken
+   by the server rather than the page.                                      */
+function signPad(host, label){
+  host.innerHTML = `
+    <div class="row" style="align-items:flex-start"><div class="l">${label || 'Signature'}
+      <span class="sub">They sign here, on this screen.</span></div>
+      <div style="flex:1;min-width:0">
+        <canvas class="sigpad" style="width:100%;height:150px;border:1.5px dashed var(--line);
+          border-radius:12px;background:#fff;touch-action:none;display:block"></canvas>
+        <button class="btn line sig-clear" style="padding:7px 12px;font-size:13px;margin-top:8px">Clear</button>
+      </div></div>`;
+  const cv = host.querySelector('canvas');
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const fit = () => {
+    const r = cv.getBoundingClientRect();
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    const c = cv.getContext('2d');
+    c.scale(dpr, dpr);
+    c.lineWidth = 2.4; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#15181C';
+  };
+  fit();
+  let drawing = false, dirty = false, last = null;
+  const ctx = () => cv.getContext('2d');
+  const pos = e => { const b = cv.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
+  cv.addEventListener('pointerdown', e => { drawing = true; dirty = true; last = pos(e); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => {
+    if (!drawing) return; e.preventDefault();
+    const p = pos(e), c = ctx();
+    c.beginPath(); c.moveTo(last.x, last.y); c.lineTo(p.x, p.y); c.stroke(); last = p;
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(k => cv.addEventListener(k, () => { drawing = false; }));
+  const api = {
+    empty: () => !dirty,
+    clear(){ ctx().clearRect(0, 0, cv.width, cv.height); dirty = false; },
+    png(){
+      // Trimmed to the ink, or the signature floats above the line in the PDF.
+      const c = ctx(), w = cv.width, h = cv.height;
+      const d = c.getImageData(0, 0, w, h).data;
+      let x0 = w, y0 = h, x1 = 0, y1 = 0;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (d[(y * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      if (x1 <= x0 || y1 <= y0) return cv.toDataURL('image/png');
+      const p = Math.round(6 * dpr);
+      x0 = Math.max(0, x0 - p); y0 = Math.max(0, y0 - p);
+      x1 = Math.min(w - 1, x1 + p); y1 = Math.min(h - 1, y1 + p);
+      const out = document.createElement('canvas');
+      out.width = x1 - x0; out.height = y1 - y0;
+      out.getContext('2d').drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+      return out.toDataURL('image/png');
+    },
+  };
+  host.querySelector('.sig-clear').onclick = e => { e.preventDefault(); api.clear(); };
+  return api;
+}
+
+async function custodyApi(path, body){
+  const { data: { session: s } } = await getSb().auth.getSession();
+  if (!s) return { ok: false, error: 'Your session has expired — please sign in again.' };
+  try {
+    const r = await fetch(`/api/custody${path}`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.access_token}` },
+      body: JSON.stringify(body) });
+    return await r.json().catch(() => ({ ok: false, error: 'The server did not answer.' }));
+  } catch (e) { return { ok: false, error: 'Could not reach the server: ' + e.message }; }
+}
+
+// Acknowledgements are behind the money permission, so they are fetched with
+// the session rather than linked to directly.
+async function openAck(id){
+  const { data: { session: s } } = await getSb().auth.getSession();
+  const r = await fetch(`/api/custody/pdf?id=${id}`, { headers: { Authorization: `Bearer ${s.access_token}` } });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); return alert(j.error || 'That acknowledgement could not be opened.'); }
+  const url = URL.createObjectURL(await r.blob());
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 async function receiptPhotoUrl(path){
   if (!path) return null;
   const { data } = await getSb().storage.from('receipts').createSignedUrl(path, 300);
@@ -2390,6 +2483,18 @@ async function openReceiptPhoto(path){
   const url = await receiptPhotoUrl(path);
   if (!url) return alert('That photograph could not be opened.');
   window.open(url, '_blank', 'noopener');
+}
+
+// Every acknowledgement signed against this receipt, newest last. Shown on
+// the row itself, because "who has it" and "who signed for it" are the same
+// question asked twice.
+function signedLinks(receiptId){
+  const signed = (_liab.chain || []).filter(c => c.receipt_id === receiptId && c.signed_at)
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  if (!signed.length) return '';
+  return '<br>' + signed.map(c =>
+    `<a style="font-size:10.5px;cursor:pointer" title="Signed by ${esc(c.signed_name || c.to_person || '')} on ${esc(shortDate(c.signed_at))}"
+        onclick="openAck(${c.id})">✓ signed${c.to_person ? ' — ' + esc(c.to_person) : ''}</a>`).join('<br>');
 }
 
 // Who is holding this money now, worked out from the chain.
@@ -2407,7 +2512,11 @@ async function tabLiability(){
   const [{ data: recs, error }, { data: kids }, { data: chain }] = await Promise.all([
     s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }).limit(2000),
     schedule().then(rows => ({ data: rows.slice().sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || '')) })),
-    s.schema('eurokids').from('receipt_custody').select('*').order('at'),
+    // Not select('*') — signature_png is a base64 image per row, and the list
+    // reads the whole chain.
+    s.schema('eurokids').from('receipt_custody')
+      .select('id, receipt_id, kind, from_person, to_person, at, note, logged_by, signed_name, signed_at, ack_ref, pdf_path')
+      .order('at'),
   ]);
   if (error) return el('body').innerHTML = fail(error);
   _liab.recs = recs || [];
@@ -2488,7 +2597,9 @@ async function tabLiability(){
         <div class="row"><div class="l">Amount</div><input class="in num" id="lb-amt" type="number" min="1" placeholder="₹"></div>
         <div class="row"><div class="l">Mode</div><select class="in" id="lb-mode"><option>Cash</option><option>UPI</option><option>Cheque</option><option>Other</option></select></div>
         <div class="row"><div class="l">Received on</div><input class="in" id="lb-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="row"><div class="l">Taken by<span class="sub">Whose hands it is in until it moves.</span></div><input class="in" id="lb-by" list="lb-people" placeholder="who took it" autocomplete="off"><datalist id="lb-people">${PEOPLE.map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+        <div class="row"><div class="l">Taken by<span class="sub">Whose hands it is in until it moves.</span></div><input class="in" id="lb-by" list="lb-people" placeholder="who took it" autocomplete="off"><datalist id="lb-people">${people().map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+        <div id="lb-pad"></div>
+        <div class="rowx hint">Optional here — but if whoever took the money signs now, the chain starts with a name on it.</div>
       </div></div>
 
       <div class="grp" id="lb-cheque-wrap" style="display:none"><h3>The cheque</h3><div class="box">
@@ -2509,6 +2620,7 @@ async function tabLiability(){
   el('lb-open').onclick = openRecord;
 
   function wireRecord(){
+  _lbPad = el('lb-pad') ? signPad(el('lb-pad'), 'Signature of whoever took it') : null;
   // ── who-is-paying toggle ────────────────────────────────────────────────
   // The cheque questions are meaningless for cash, so they only appear when
   // they mean something.
@@ -2621,7 +2733,8 @@ async function tabLiability(){
              : '<span class="chip c-good">posted</span>') : '—'}</td>
         <td class="hint">${shortDate(r.received_on)}</td>
         <td class="hint">${holder ? `<strong style="color:var(--ink)">${esc(holder)}</strong>` : esc(r.received_by || '—')}
-          ${holder && holder !== r.received_by ? `<br><span style="font-size:10.5px">via ${esc(r.received_by || '—')}</span>` : ''}</td>
+          ${holder && holder !== r.received_by ? `<br><span style="font-size:10.5px">via ${esc(r.received_by || '—')}</span>` : ''}
+          ${signedLinks(r.id)}</td>
         <td><input class="in" type="date" value="${r.deposited_on || ''}" style="padding:3px 6px;font-size:12px;width:auto"
               onchange="setDeposited(${r.id}, this.value, this)" ${r.voided_at ? 'disabled' : ''}></td>
         <td style="white-space:nowrap">
@@ -2693,12 +2806,29 @@ async function tabLiability(){
       return say(`Could not save: ${esc(error.message)}${error.hint ? ' — ' + esc(error.hint) : ''}`);
     }
 
-    // The first link in the chain: it came from the parent into someone's hands.
+    // The first link in the chain: it came from the parent into someone's
+    // hands. Signed if they signed; recorded either way, because the money is
+    // already in the drawer and must not go unrecorded over a blank canvas.
     if (data?.id) {
-      await getSb().schema('eurokids').from('receipt_custody').insert({
-        receipt_id: data.id, kind: 'collected', to_person: takenBy,
-        note: 'Taken from the payer', logged_by: who(),
-      }).then(() => {}, () => {});
+      const signed = _lbPad && !_lbPad.empty();
+      if (signed) {
+        const r = await custodyApi('/sign', {
+          receipt_id: data.id, kind: 'collected', to_person: takenBy,
+          note: 'Taken from the payer', signed_name: takenBy,
+          signature_png: _lbPad.png(),
+        });
+        if (!r.ok) {
+          await getSb().schema('eurokids').from('receipt_custody').insert({
+            receipt_id: data.id, kind: 'collected', to_person: takenBy,
+            note: 'Taken from the payer', logged_by: who(),
+          }).then(() => {}, () => {});
+        }
+      } else {
+        await getSb().schema('eurokids').from('receipt_custody').insert({
+          receipt_id: data.id, kind: 'collected', to_person: takenBy,
+          note: 'Taken from the payer', logged_by: who(),
+        }).then(() => {}, () => {});
+      }
     }
 
     lbDraftClear();
@@ -2778,26 +2908,48 @@ async function handOver(id){
       <div class="row"><div class="l">Currently with</div><div class="v">${esc(from || 'nobody recorded')}</div></div>
       <div class="row"><div class="l">Handed to</div>
         <input class="in" id="ho-to" list="ho-people" placeholder="who has it now" autocomplete="off">
-        <datalist id="ho-people">${PEOPLE.filter(n => n !== from).map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+        <datalist id="ho-people">${people(from).map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
       <div class="row"><div class="l">When</div><input class="in" id="ho-at" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="rowx"><input class="in" id="ho-note" placeholder="Anything worth remembering" style="width:100%"></div>
-    </div><div class="foot">Or record that it reached the bank, which closes the chain.</div></div>`;
+    </div></div>
+
+    <div class="grp"><h3>Signed for</h3><div class="box">
+      <div class="row"><div class="l">Name of the person taking it</div>
+        <input class="in" id="ho-signer" placeholder="their full name" autocomplete="off"></div>
+      <div id="ho-pad"></div>
+    </div><div class="foot">Hand them the tablet. They sign to say they have the money; we keep a copy with the time and device on it. Or record that it reached the bank, which closes the chain — the bank does not sign here.</div></div>`;
   el('drawer-foot').innerHTML = `<div id="pf-msg"></div>
     <button class="btn line" id="ho-bank">Banked instead</button><button class="btn" id="ho-save">Hand over</button>`;
 
+  const pad = signPad(el('ho-pad'), 'Their signature');
+  el('ho-to').addEventListener('input', () => {
+    // The name signed for defaults to whoever is taking it, and stays
+    // editable — a helper may sign on behalf of the cash box.
+    if (!el('ho-signer').dataset.touched) el('ho-signer').value = el('ho-to').value;
+  });
+  el('ho-signer').addEventListener('input', e => { e.target.dataset.touched = '1'; });
+
   const log = async (kind, to) => {
     const at = el('ho-at').value ? new Date(el('ho-at').value + 'T12:00:00').toISOString() : new Date().toISOString();
-    const { error } = await getSb().schema('eurokids').from('receipt_custody').insert({
-      receipt_id: id, kind, from_person: from || null, to_person: to || null,
-      at, note: (el('ho-note').value || '').trim() || null, logged_by: who(),
+    const r = await custodyApi('/sign', {
+      receipt_id: id, kind, from_person: from || null, to_person: to || null, at,
+      note: (el('ho-note').value || '').trim() || null,
+      signed_name: (el('ho-signer').value || '').trim() || to,
+      signature_png: kind === 'banked' || pad.empty() ? null : pad.png(),
     });
-    if (error) { el('pf-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return false; }
+    if (!r.ok) { el('pf-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`; return false; }
+    if (r.note) alert(r.note);
     return true;
   };
   el('ho-save').onclick = async () => {
     const to = (el('ho-to').value || '').trim();
     if (!to) return alert('Who has it now?');
-    if (await log('handover', to)) { closeDrawer(true); tabLiability(); }
+    if (pad.empty()) return el('pf-msg').innerHTML =
+      `<div class="err">Ask them to sign in the box. A handover nobody signed for is the problem this page exists to fix.</div>`;
+    const b = el('ho-save'); b.disabled = true; b.textContent = 'Saving…';
+    const okay = await log('handover', to);
+    b.disabled = false; b.textContent = 'Hand over';
+    if (okay) { closeDrawer(true); tabLiability(); }
   };
   el('ho-bank').onclick = async () => {
     if (!confirm('Record that this money reached the bank?')) return;
@@ -3178,7 +3330,27 @@ function statementHtml(c, ledger, items){
     </div>
     ${otherPays.length ? `<div class="foot">Also received, and not part of the school fee:<br>${otherPays.map(l =>
         `${esc(l.description || 'Other collection')} — <strong>${money(l.amount)}</strong>${l.on_date ? ' on ' + d(l.on_date) : ''}${l.mode ? ' · ' + esc(l.mode) : ''}`).join('<br>')}</div>` : ''}
-    ${held > 0 ? `<div class="foot warn">EuroKids still shows ${money(c.epms_due)} because ${money(held)} of this family's money has not been posted to them yet. The balance above is the honest one.</div>` : ''}
+    ${(() => {
+      // Why our number and EuroKids' number differ, itemised until it adds up.
+      //
+      // Naming only the unposted cash was a half-answer: EuroKids invoices the
+      // full fee and knows nothing of a concession we gave off our own margin,
+      // so that gap is theirs too. A reader who does the subtraction and finds
+      // it short stops trusting the whole page — correctly.
+      const epms = Number(c.epms_due || 0);
+      const gap = epms - owed;
+      if (!(gap > 1)) return '';
+      const bits = [];
+      if (held > 0.5) bits.push(`${money(held)} of their money we are holding and have not posted on`);
+      if (disc > 0.5) bits.push(`the ${money(disc)} concession we gave, which EuroKids does not know about`);
+      const rest = gap - (held > 0.5 ? held : 0) - (disc > 0.5 ? disc : 0);
+      if (Math.abs(rest) > 1) {
+        bits.push(`<strong>${money(Math.abs(rest))} neither of those explains${rest > 0 ? '' : ' (we are ahead by it)'}</strong> — worth checking`);
+      }
+      if (!bits.length) return '';
+      return `<div class="foot warn">EuroKids still shows ${money(epms)} against our ${money(owed)}.
+        The ${money(gap)} difference is ${bits.join(', and ')}. The balance above is the honest one.</div>`;
+    })()}
     </div>
     ${(() => {
       // The instalments, and how far each one has been met. Without this the
@@ -3816,7 +3988,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=56"></script>
+<script src="/brand/enquiries.js?v=58"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
