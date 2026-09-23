@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=58">
-<link rel="prefetch" href="/brand/enquiries.js?v=58" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=59">
+<link rel="prefetch" href="/brand/enquiries.js?v=59" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -50,7 +50,15 @@ const money = n => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
 // is most of the cost of drawing that table. Build each one once.
 const _DF = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', timeZone:'UTC' });
 const _DFY = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', year:'numeric', timeZone:'UTC' });
-const shortDate = d => d ? _DFY.format(new Date(d + 'T00:00:00Z')) : '—';
+// Takes a date ('2026-09-23') or a full timestamp; a bare date is read as UTC
+// so it never slips a day. Passing a timestamp to the date-only version used
+// to render "Invalid Date".
+const shortDate = d => {
+  if (!d) return '—';
+  const s = String(d);
+  const t = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00:00Z' : s);
+  return isNaN(t) ? '—' : _DFY.format(t);
+};
 const longDate  = d => d ? _DFY.format(new Date(d + 'T00:00:00Z')) : '—';
 
 // Typing in a search box should filter, not fire a render per keystroke.
@@ -2156,15 +2164,23 @@ function wireSync(s, afterSync){
           } catch (_) { /* the main sync already succeeded */ }
 
           // Third pass: money EPMS has just recognised for a family whose cash
-          // we are holding is us posting it onward. Consume the held amount by
-          // exactly that much, so the payment is counted once rather than twice.
+          // we are holding is *probably* us posting it onward — but only an
+          // exact whole receipt is certain enough to act on. Anything else is
+          // raised as a question in Liabilities and counts as the parent's own
+          // payment until someone answers it, because guessing the other way
+          // charges a family twice.
           let matched = '';
           try {
             const { data: m } = await getSb().schema('eurokids').rpc('auto_match_remittances');
             const row = Array.isArray(m) ? m[0] : m;
+            const bits = [];
             if (row && Number(row.matched_amount) > 0) {
-              matched = ` · ₹${Number(row.matched_amount).toLocaleString('en-IN')} of held cash settled`;
+              bits.push(`₹${Number(row.matched_amount).toLocaleString('en-IN')} of held cash settled`);
             }
+            if (row && Number(row.asked) > 0) {
+              bits.push(`${row.asked} to check in Liabilities`);
+            }
+            if (bits.length) matched = ' · ' + bits.join(' · ');
           } catch (_) { /* matching is a convenience, never a blocker */ }
 
           el('sync-info').textContent = (j.new_payments
@@ -2485,6 +2501,43 @@ async function openReceiptPhoto(path){
   window.open(url, '_blank', 'noopener');
 }
 
+/* ── money that turned up in EuroKids while we were holding cash ───────
+   Two things look identical from the sync's side: us posting a family's cash
+   onward, and the parent paying EuroKids themselves. Telling them apart by
+   rule was the bug that showed Ayansh Ghule owing 9,700 he had already paid —
+   the sync ate his online payment against the cash in our drawer, so the
+   money was counted for us and against him at once. Nobody guesses now.
+   Until it is answered it counts as the parent's own payment, because the
+   other default charges a family twice.                                    */
+function askPanel(){
+  const asks = _liab.asks || [];
+  if (!asks.length) return '';
+  return `<div class="panel" style="margin-bottom:16px;border-color:var(--warn)">
+    <div class="ptop"><h2>${asks.length} payment${asks.length === 1 ? '' : 's'} to account for</h2>
+      <span class="hint">Counting as the parent's own payment until you say otherwise</span></div>
+    ${asks.map(a => `<div class="row" style="align-items:center">
+      <div class="l" style="flex:1">
+        <strong style="color:var(--ink)">${esc(a.student_name || a.uin)}</strong> —
+        ${money(a.amount)} appeared in EuroKids on ${shortDate(a.raised_at)},
+        and we were holding ${money(a.held_at_the_time)} of this family's money at the time.
+        <span class="sub">Was that us posting their money on, or the parent paying EuroKids themselves?</span>
+      </div>
+      <div style="display:flex;gap:8px;white-space:nowrap">
+        <button class="btn line" onclick="answerAsk(${a.payment_event_id}, 'ours', this)">That was us posting</button>
+        <button class="btn line" onclick="answerAsk(${a.payment_event_id}, 'direct', this)">Parent paid direct</button>
+      </div></div>`).join('')}
+  </div>`;
+}
+
+async function answerAsk(eventId, answer, btn){
+  if (answer === 'ours' && !confirm('Record that this was us posting the family\'s money on to EuroKids?\n\nTheir held cash goes down by that much, and their balance stays where it is.')) return;
+  btn.disabled = true; const was = btn.textContent; btn.textContent = 'Saving…';
+  const { error } = await getSb().schema('eurokids')
+    .rpc('answer_remittance_question', { p_event: eventId, p_answer: answer, p_by: who() });
+  if (error) { btn.disabled = false; btn.textContent = was; return alert('Could not save that: ' + error.message); }
+  invalidate('sched'); tabLiability();
+}
+
 // Every acknowledgement signed against this receipt, newest last. Shown on
 // the row itself, because "who has it" and "who signed for it" are the same
 // question asked twice.
@@ -2509,7 +2562,7 @@ function heldBy(rec, chain){
 async function tabLiability(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   const s = getSb();
-  const [{ data: recs, error }, { data: kids }, { data: chain }] = await Promise.all([
+  const [{ data: recs, error }, { data: kids }, { data: chain }, { data: asks }] = await Promise.all([
     s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }).limit(2000),
     schedule().then(rows => ({ data: rows.slice().sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || '')) })),
     // Not select('*') — signature_png is a base64 image per row, and the list
@@ -2517,11 +2570,13 @@ async function tabLiability(){
     s.schema('eurokids').from('receipt_custody')
       .select('id, receipt_id, kind, from_person, to_person, at, note, logged_by, signed_name, signed_at, ack_ref, pdf_path')
       .order('at'),
+    s.schema('eurokids').from('remittance_question').select('*').is('answer', null).order('raised_at'),
   ]);
   if (error) return el('body').innerHTML = fail(error);
   _liab.recs = recs || [];
   _liab.chain = chain || [];
   _liab.kids = kids || [];
+  _liab.asks = asks || [];
 
   // "Name — Class" keeps two children of the same name apart.
   _liab.byLabel = {};
@@ -2551,6 +2606,8 @@ async function tabLiability(){
         <div class="stat"><div class="k">Other collections</div><div class="v">${money(otherMoney)}</div>
           <div class="m">Day care, uniform, events — ours, not EuroKids’</div></div>
       </div>
+
+      ${askPanel()}
 
       <div class="tools">
         <div class="search"><input class="in" id="lb-q" type="search" placeholder="Search a name"></div>
@@ -3988,7 +4045,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=58"></script>
+<script src="/brand/enquiries.js?v=59"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
