@@ -52,6 +52,15 @@ export function schoolSignature(): string | null {
   return _sigCache;
 }
 
+// A signature drawn on a phone is a wide, short scribble; one lifted from
+// paper can be nearly square. Sizing by width alone turned Neeta's into a
+// 120pt block that pushed the closing block onto its own page, and clamping
+// the height instead squashed it. Fit inside a box, keep the proportions.
+export function fitSignature(img: { width: number; height: number }, maxW: number, maxH: number) {
+  const k = Math.min(maxW / img.width, maxH / img.height);
+  return { w: img.width * k, h: img.height * k };
+}
+
 export type LetterData = {
   // who
   name: string;
@@ -271,10 +280,15 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
   s.text("(Operated by Veena Educational Services)", { after: 18 });
   s.text("Authorised Signatory", { after: 4 });
 
-  if (d.schoolSignaturePng) {
+  // Falls back to the signature on disk, the same way the declarations do.
+  // Without this the letters were the one kind of document going out over
+  // Neeta's name with an empty space above it — and nobody would notice until
+  // a teacher asked why her letter was unsigned.
+  const sig = d.schoolSignaturePng ?? schoolSignature();
+  if (sig) {
     try {
-      const img = await s.doc.embedPng(dataUrlToBytes(d.schoolSignaturePng));
-      const w = 150, h = (img.height / img.width) * w;
+      const img = await s.doc.embedPng(dataUrlToBytes(sig));
+      const { w, h } = fitSignature(img, 150, 58);
       s.room(h + 8);
       s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
       s.y -= h + 4;

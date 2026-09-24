@@ -6,7 +6,7 @@
 // merged into a template — which is why generating one should be a button,
 // not an afternoon.
 
-import { LetterData, rupeesInWords, rs } from "./letter-pdf";
+import { type LetterData, rupeesInWords, rs } from "./letter-pdf";
 
 // The roster as the staff portal stores it, in portal_state.data.employees.
 export type StaffRecord = {

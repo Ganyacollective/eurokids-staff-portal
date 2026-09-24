@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireMoney, admin } from "@/lib/money-auth";
+import { pdfDisposition } from "@/lib/pdf-name";
 
 // GET /api/custody/pdf?id=123 — open a stored acknowledgement.
 // Behind the same permission as signing it: a cash acknowledgement names who
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
   if (!id) return NextResponse.json({ ok: false, error: "Which acknowledgement?" }, { status: 400 });
 
   const a = admin();
-  const { data: row } = await a.from("receipt_custody").select("pdf_path, ack_ref").eq("id", id).maybeSingle();
+  const { data: row } = await a.from("receipt_custody").select("pdf_path, ack_ref, kind, to_person").eq("id", id).maybeSingle();
   if (!row?.pdf_path) return NextResponse.json({ ok: false, error: "No acknowledgement was stored for this one." }, { status: 404 });
 
   const { data, error } = await a.storage.from("receipts").download(row.pdf_path);
@@ -21,7 +22,9 @@ export async function GET(req: Request) {
   return new NextResponse(Buffer.from(await data.arrayBuffer()), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${row.ack_ref || "acknowledgement"}.pdf"`,
+      "Content-Disposition": pdfDisposition([
+        row.kind === "banked" ? "Deposit record" : "Money acknowledgement",
+        row.to_person, row.ack_ref]),
       "Cache-Control": "no-store",
     },
   });

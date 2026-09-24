@@ -8,7 +8,7 @@
 // Deliberately one page. Somebody is standing at a desk holding cash while
 // this is being signed.
 
-import { Sheet, rupeesInWords } from "./letter-pdf";
+import { Sheet, rupeesInWords, fitSignature } from "./letter-pdf";
 import { rgb, type RGB } from "pdf-lib";
 
 const INK: RGB = rgb(0, 0, 0);
@@ -101,7 +101,7 @@ export async function renderCustodyPdf(d: CustodyAck): Promise<Uint8Array> {
     s.gap(4);
     try {
       const img = await s.doc.embedPng(dataUrlToBytes(d.signaturePng));
-      const w = 150, h = Math.min(46, (img.height / img.width) * w);
+      const { w, h } = fitSignature(img, 150, 46);
       s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
       s.y -= h + 2;
     } catch { /* the typed name still stands if the drawing will not embed */ }

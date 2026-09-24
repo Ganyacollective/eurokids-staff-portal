@@ -6,7 +6,7 @@
 // Shares the page engine in letter-pdf.ts: A4, 14pt, 56.7pt margins, the JMD
 // Enclave artwork behind every page.
 
-import { Sheet, schoolSignature, type LetterData } from "./letter-pdf";
+import { Sheet, schoolSignature, fitSignature, type LetterData } from "./letter-pdf";
 import { rgb, type RGB } from "pdf-lib";
 
 const INK: RGB = rgb(0, 0, 0);
@@ -78,7 +78,7 @@ export async function renderDocumentPdf(d: DocData): Promise<Uint8Array> {
     if (d.signature.png) {
       try {
         const img = await s.doc.embedPng(dataUrlToBytes(d.signature.png));
-        const w = 165, h = Math.min(58, (img.height / img.width) * w);
+        const { w, h } = fitSignature(img, 165, 58);
         s.room(h + 8);
         s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
         s.y -= h + 2;
@@ -112,7 +112,7 @@ export async function renderDocumentPdf(d: DocData): Promise<Uint8Array> {
   if (schoolSig) {
     try {
       const img = await s.doc.embedPng(dataUrlToBytes(schoolSig));
-      const w = 130, h = (img.height / img.width) * w;
+      const { w, h } = fitSignature(img, 140, 54);
       s.room(h + 6);
       s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
       s.y -= h + 2;
