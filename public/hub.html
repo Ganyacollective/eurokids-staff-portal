@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=59">
-<link rel="prefetch" href="/brand/enquiries.js?v=59" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=60">
+<link rel="prefetch" href="/brand/enquiries.js?v=60" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2501,6 +2501,101 @@ async function openReceiptPhoto(path){
   window.open(url, '_blank', 'noopener');
 }
 
+/* ── paying EuroKids ───────────────────────────────────────────────────
+   The school cannot post notes, so it pays EuroKids by UPI from its own
+   account against the child and keeps the cash. That payment is a fact about
+   our side, and it is written down when it happens — the sync then only has
+   to agree with it. Before this existed the only evidence a payment had been
+   made was EuroKids eventually showing it, which is what made the matching
+   guess in the first place.                                               */
+async function payEuroKids(receiptId){
+  const rec = receiptId ? _liab.recs.find(x => x.id === receiptId) : null;
+  const live = _liab.recs.filter(r => !r.voided_at && r.purpose === 'tuition'
+    && Number(r.amount_rupees) - Number(r.remitted || 0) > 0.01);
+
+  // Owed per child, because a family may have handed money over twice.
+  const byChild = {};
+  live.forEach(r => {
+    const k = r.uin || r.student_name;
+    if (!k) return;
+    byChild[k] = byChild[k] || { uin: r.uin, name: r.student_name, open: 0 };
+    byChild[k].open += Number(r.amount_rupees) - Number(r.remitted || 0);
+  });
+  const kids = Object.values(byChild).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  if (!kids.length) return alert('There is no fee money waiting to go to EuroKids.');
+
+  const start = rec ? (rec.uin || rec.student_name) : (kids[0].uin || kids[0].name);
+  const body = openDrawer('Pay EuroKids', 'Record a payment you have made against a child’s account');
+  body.innerHTML = `
+    <div class="grp"><h3>Which child</h3><div class="box">
+      <div class="row"><div class="l">Child<span class="sub">Only children whose money is still with us</span></div>
+        <select class="in wide" id="pe-child">${kids.map(k =>
+          `<option value="${esc(k.uin || k.name)}" ${(k.uin || k.name) === start ? 'selected' : ''}>
+             ${esc(k.name)} — ${money(k.open)} still to go</option>`).join('')}</select></div>
+      <div class="row"><div class="l">Amount<span class="sub">Part of it is fine — you can pay the rest later</span></div>
+        <input class="in" id="pe-amt" type="number" inputmode="decimal" min="1" step="1"></div>
+      <div class="row"><div class="l">Paid on</div>
+        <input class="in" id="pe-on" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div></div>
+
+    <div class="grp"><h3>How it went</h3><div class="box">
+      <div class="row"><div class="l">Method</div>
+        <select class="in" id="pe-method">
+          <option>UPI</option><option>NEFT</option><option>Paytm POS</option><option>Card</option><option>Cash</option>
+        </select></div>
+      <div class="row"><div class="l">Reference<span class="sub">UTR or transaction number — how we prove it later</span></div>
+        <input class="in wide" id="pe-ref" placeholder="e.g. 428193016652"></div>
+      <div class="row"><div class="l">From which account</div>
+        <input class="in wide" id="pe-acct" list="pe-accts" placeholder="the account it left">
+        <datalist id="pe-accts">${[...new Set((_liab.pays || []).map(p => p.from_account).filter(Boolean))]
+          .map(n => `<option value="${esc(n)}">`).join('')}</datalist></div>
+      <div class="rowx"><input class="in" id="pe-note" placeholder="Anything worth remembering" style="width:100%"></div>
+    </div><div class="foot" id="pe-effect"></div></div>
+    <div id="pe-msg"></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="pe-cancel">Cancel</button><button class="btn" id="pe-save">Record the payment</button>`;
+  el('pe-cancel').onclick = closeDrawer;
+
+  const openOf = () => {
+    const k = el('pe-child').value;
+    return (byChild[k] || {}).open || 0;
+  };
+  const effect = () => {
+    const amt = Number(el('pe-amt').value) || 0;
+    const open = openOf();
+    const after = Math.max(0, open - amt);
+    el('pe-effect').innerHTML = amt > 0
+      ? `After this, ${money(after)} of this child's money is still to go to EuroKids.
+         <strong>The cash in the drawer does not change</strong> — record that separately when the notes are banked.`
+      : `This child's money still to reach EuroKids: <strong>${money(open)}</strong>.`;
+  };
+  el('pe-child').onchange = () => { el('pe-amt').value = ''; effect(); };
+  el('pe-amt').oninput = effect;
+  el('pe-amt').value = rec ? String(Math.round(openOf())) : '';
+  effect();
+
+  el('pe-save').onclick = async () => {
+    const amt = Number(el('pe-amt').value) || 0;
+    const open = openOf();
+    if (amt <= 0) return el('pe-msg').innerHTML = `<div class="err">How much did you pay?</div>`;
+    if (amt > open + 0.01 && !confirm(`That is ${money(amt - open)} more than this child's money with us.\n\nRecord it anyway?`)) return;
+    const b = el('pe-save'); b.disabled = true; b.textContent = 'Recording…';
+    const k = el('pe-child').value;
+    const { error } = await getSb().schema('eurokids').rpc('record_epms_payment', {
+      p_uin: (byChild[k] || {}).uin || k,
+      p_amount: amt,
+      p_paid_on: el('pe-on').value || null,
+      p_method: el('pe-method').value,
+      p_reference: (el('pe-ref').value || '').trim(),
+      p_from_account: (el('pe-acct').value || '').trim(),
+      p_paid_by: who(),
+      p_note: (el('pe-note').value || '').trim(),
+    });
+    b.disabled = false; b.textContent = 'Record the payment';
+    if (error) return el('pe-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`;
+    closeDrawer(true); invalidate('sched'); tabLiability();
+  };
+}
+
 /* ── money that turned up in EuroKids while we were holding cash ───────
    Two things look identical from the sync's side: us posting a family's cash
    onward, and the parent paying EuroKids themselves. Telling them apart by
@@ -2527,6 +2622,39 @@ function askPanel(){
         <button class="btn line" onclick="answerAsk(${a.payment_event_id}, 'direct', this)">Parent paid direct</button>
       </div></div>`).join('')}
   </div>`;
+}
+
+// We paid, and EuroKids has not shown it. Two days is long enough for a UPI
+// to appear; beyond that it usually means the payment went against the wrong
+// child, and finding that in three days rather than in March is the whole
+// point of writing the payment down.
+function unseenPanel(){
+  const late = (_liab.pays || []).filter(p => !p.seen_in_epms_at
+    && (Date.now() - new Date(p.paid_on + 'T00:00:00Z')) > 2 * 864e5);
+  if (!late.length) return '';
+  const total = late.reduce((a, p) => a + Number(p.amount || 0), 0);
+  return `<div class="panel" style="margin-bottom:16px;border-color:var(--crit)">
+    <div class="ptop"><h2>${money(total)} paid, not yet showing in EuroKids</h2>
+      <span class="hint">Usually a payment made against the wrong child</span></div>
+    ${late.map(p => `<div class="row">
+      <div class="l" style="flex:1"><strong style="color:var(--ink)">${esc(p.student_name || p.uin)}</strong> —
+        ${money(p.amount)} by ${esc(p.method || '')} on ${shortDate(p.paid_on)}${p.reference ? ` · ref ${esc(p.reference)}` : ''}
+        <span class="sub">Recorded by ${esc(p.paid_by || 'someone')}. Check EPMS, then void it here if it never went.</span></div>
+      <button class="btn line" onclick="voidPayment(${p.id}, this)" style="white-space:nowrap">It didn't go</button>
+    </div>`).join('')}
+  </div>`;
+}
+
+async function voidPayment(id, btn){
+  const p = (_liab.pays || []).find(x => x.id === id);
+  const why = prompt(`Void the ${money(p?.amount || 0)} payment for ${p?.student_name || 'this child'}?\n\nThe money goes back to "still to pay EuroKids". Why was it wrong?`);
+  if (why === null) return;
+  if (!why.trim()) return alert('Say why — an entry reversed for no stated reason is worse than the mistake.');
+  btn.disabled = true;
+  const { error } = await getSb().schema('eurokids')
+    .rpc('void_epms_payment', { p_id: id, p_by: who(), p_reason: why.trim() });
+  if (error) { btn.disabled = false; return alert('Could not void it: ' + error.message); }
+  invalidate('sched'); tabLiability();
 }
 
 async function answerAsk(eventId, answer, btn){
@@ -2562,7 +2690,7 @@ function heldBy(rec, chain){
 async function tabLiability(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   const s = getSb();
-  const [{ data: recs, error }, { data: kids }, { data: chain }, { data: asks }] = await Promise.all([
+  const [{ data: recs, error }, { data: kids }, { data: chain }, { data: asks }, { data: pays }] = await Promise.all([
     s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }).limit(2000),
     schedule().then(rows => ({ data: rows.slice().sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || '')) })),
     // Not select('*') — signature_png is a base64 image per row, and the list
@@ -2571,12 +2699,14 @@ async function tabLiability(){
       .select('id, receipt_id, kind, from_person, to_person, at, note, logged_by, signed_name, signed_at, ack_ref, pdf_path')
       .order('at'),
     s.schema('eurokids').from('remittance_question').select('*').is('answer', null).order('raised_at'),
+    s.schema('eurokids').from('epms_payment').select('*').is('voided_at', null).order('paid_on', { ascending: false }).limit(500),
   ]);
   if (error) return el('body').innerHTML = fail(error);
   _liab.recs = recs || [];
   _liab.chain = chain || [];
   _liab.kids = kids || [];
   _liab.asks = asks || [];
+  _liab.pays = pays || [];
 
   // "Name — Class" keeps two children of the same name apart.
   _liab.byLabel = {};
@@ -2597,17 +2727,34 @@ async function tabLiability(){
 
   el('body').innerHTML = head('Liabilities',
       'Money already in our hands. Cash still to reach the bank, fees still to reach EuroKids, and collections that were never EuroKids’ to begin with.',
-      `<button class="btn" id="lb-open">Record Money…</button>`)
-    + `<div class="stats" style="margin-bottom:16px">
-        <div class="stat crit"><div class="k">Owed to EuroKids</div><div class="v">${money(heldForEuro)}</div>
-          <div class="m">Fee money taken but not yet posted</div></div>
-        <div class="stat warn"><div class="k">Cash not banked</div><div class="v">${money(notBanked)}</div>
-          <div class="m">Physically with us</div></div>
-        <div class="stat"><div class="k">Other collections</div><div class="v">${money(otherMoney)}</div>
-          <div class="m">Day care, uniform, events — ours, not EuroKids’</div></div>
+      `<button class="btn line" id="lb-pay">Pay EuroKids…</button><button class="btn" id="lb-open">Record Money…</button>`)
+    + `<div class="stats" style="margin-bottom:10px">
+        <div class="stat warn"><div class="k">Cash in the drawer</div><div class="v">${money(notBanked)}</div>
+          <div class="m">Notes we are physically holding, until they are banked</div></div>
+        <div class="stat crit"><div class="k">Still to pay EuroKids</div><div class="v">${money(heldForEuro)}</div>
+          <div class="m">Fee money taken from parents that has not been passed on</div></div>
+        <div class="stat"><div class="k">Ours to keep</div><div class="v">${money(otherMoney)}</div>
+          <div class="m">Day care, uniform, events — never EuroKids’</div></div>
+      </div>
+
+      <!-- The one thing the coordinator has to understand, said once, plainly.
+           These two numbers move on different days and for different reasons,
+           and treating them as one is how cash goes missing. -->
+      <div class="panel" style="margin-bottom:16px;padding:14px 16px">
+        <div class="hint" style="line-height:1.65;font-size:13px">
+          <strong style="color:var(--ink)">These two are not the same money.</strong><br>
+          We cannot send notes to EuroKids, so we pay them by UPI from our own bank account against the child,
+          and keep the cash until we bank it. So:
+          <strong style="color:var(--ink)">paying EuroKids does not reduce the cash in the drawer</strong>, and
+          <strong style="color:var(--ink)">banking the cash does not reduce what we owe EuroKids</strong>.
+          A parent's ₹20,000 can be half paid on and still sitting here in full.
+          Record the payment with <em>Pay EuroKids</em> the moment you make it, and the date the notes go to the bank
+          in the Banked column.
+        </div>
       </div>
 
       ${askPanel()}
+      ${unseenPanel()}
 
       <div class="tools">
         <div class="search"><input class="in" id="lb-q" type="search" placeholder="Search a name"></div>
@@ -2675,6 +2822,7 @@ async function tabLiability(){
     wireRecord();
   };
   el('lb-open').onclick = openRecord;
+  el('lb-pay').onclick = () => payEuroKids(null);
 
   function wireRecord(){
   _lbPad = el('lb-pad') ? signPad(el('lb-pad'), 'Signature of whoever took it') : null;
@@ -2786,7 +2934,9 @@ async function tabLiability(){
           ${r.photo_path ? `<a class="hint" style="font-size:10.5px;cursor:pointer" onclick="openReceiptPhoto('${esc(r.photo_path)}')">photo</a>` : ''}</td>
         <td class="r num" style="font-weight:600">${money(r.amount_rupees)}</td>
         <td class="r num">${isFee ? (held > 0.01
-             ? `<span style="color:var(--crit);font-weight:600">${money(held)}</span>`
+             ? `<span style="color:var(--crit);font-weight:600">${money(held)}</span>${
+                 Number(r.remitted || 0) > 0.01
+                   ? `<div class="hint" style="font-size:10.5px">${money(r.remitted)} already paid on</div>` : ''}`
              : '<span class="chip c-good">posted</span>') : '—'}</td>
         <td class="hint">${shortDate(r.received_on)}</td>
         <td class="hint">${holder ? `<strong style="color:var(--ink)">${esc(holder)}</strong>` : esc(r.received_by || '—')}
@@ -2796,6 +2946,7 @@ async function tabLiability(){
               onchange="setDeposited(${r.id}, this.value, this)" ${r.voided_at ? 'disabled' : ''}></td>
         <td style="white-space:nowrap">
           ${r.voided_at ? `<span class="hint">voided${r.voided_by ? ' by ' + esc(r.voided_by) : ''}</span>` : `
+          ${isFee && held > 0.01 ? `<a style="cursor:pointer" onclick="payEuroKids(${r.id})">Pay EuroKids</a> · ` : ''}
           ${holder ? `<a style="cursor:pointer" onclick="handOver(${r.id})">Hand over</a> · ` : ''}
           ${r.uin ? `<a style="cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
           ${r.uin ? `<a style="cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
@@ -4045,7 +4196,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=59"></script>
+<script src="/brand/enquiries.js?v=60"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
