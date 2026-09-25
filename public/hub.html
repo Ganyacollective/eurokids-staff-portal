@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=61">
-<link rel="prefetch" href="/brand/enquiries.js?v=61" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=62">
+<link rel="prefetch" href="/brand/enquiries.js?v=62" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2371,7 +2371,8 @@ let _lbPad = null;                 // the signature pad inside Record Money
 // A half-typed receipt must survive a trip to another tab. Kept in memory for
 // the session and mirrored to localStorage so a stray refresh doesn't lose it.
 const LB_FIELDS = ['lb-child','lb-name','lb-email','lb-phone','lb-purpose',
-                   'lb-purpose-note','lb-mode','lb-amt','lb-on','lb-by'];
+                   'lb-purpose-note','lb-mode','lb-amt','lb-on','lb-by',
+                   'lb-jname','lb-jfrom'];
 const lbDraftSave = () => {
   const d = { who: _liab.who };
   LB_FIELDS.forEach(id => { const e = el(id); if (e) d[id] = e.value; });
@@ -2624,6 +2625,48 @@ function askPanel(){
   </div>`;
 }
 
+/* ── fees taken before the admission exists ────────────────────────────
+   Held here, named, and waiting for the day the child is punched into EPMS.
+   The link is a deliberate act by a person, because matching a name typed in
+   September to a roster entry created in October is exactly the kind of guess
+   that went wrong with the remittances.                                    */
+function pendingPanel(options){
+  const rows = _liab.pending || [];
+  if (!rows.length) return '';
+  const total = rows.reduce((a, r) => a + Number(r.amount_rupees || 0), 0);
+  return `<div class="panel" style="margin-bottom:16px">
+    <div class="ptop"><h2>${money(total)} taken before admission</h2>
+      <span class="hint">Link each one once the child is on the roll</span></div>
+    ${rows.map(r => `<div class="row" style="align-items:center">
+      <div class="l" style="flex:1">
+        <strong style="color:var(--ink)">${esc(r.student_name || 'unnamed')}</strong> —
+        ${money(r.amount_rupees)} ${esc(String(r.mode).toLowerCase())} on ${shortDate(r.received_on)}
+        <span class="sub">Admission expected ${r.for_admission_from
+          ? new Date(r.for_admission_from + 'T00:00:00Z').toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+          : 'later'}${r.payer_phone ? ' · ' + esc(r.payer_phone) : ''}</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;white-space:nowrap">
+        <input class="in" id="pl-${r.id}" list="lb-kids-link" placeholder="pick the child, once admitted"
+               autocomplete="off" style="min-width:230px">
+        <button class="btn line" onclick="linkPending(${r.id}, this)">Link</button>
+      </div></div>`).join('')}
+    <datalist id="lb-kids-link">${options}</datalist>
+  </div>`;
+}
+
+async function linkPending(id, btn){
+  const typed = (el('pl-' + id).value || '').trim().toLowerCase();
+  const k = _liab.byLabel[typed];
+  if (!k) return alert('Pick the child from the list — start typing and choose a suggestion.\n\nIf they are not there yet, the admission has not reached EPMS. Sync first.');
+  const r = (_liab.pending || []).find(x => x.id === id);
+  if (!confirm(`Attach ${money(r?.amount_rupees || 0)} taken from ${r?.student_name || 'this family'} to ${k.student_name}?\n\nIt becomes part of that child's fee record, and moves into "still to pay EuroKids".`)) return;
+  btn.disabled = true; btn.textContent = 'Linking…';
+  const { error } = await getSb().schema('eurokids')
+    .rpc('link_receipt_to_child', { p_receipt: id, p_uin: k.uin, p_by: who() });
+  if (error) { btn.disabled = false; btn.textContent = 'Link'; return alert('Could not link it: ' + error.message); }
+  invalidate('sched'); tabLiability();
+}
+
 // We paid, and EuroKids has not shown it. Two days is long enough for a UPI
 // to appear; beyond that it usually means the payment went against the wrong
 // child, and finding that in three days rather than in March is the whole
@@ -2720,10 +2763,17 @@ async function tabLiability(){
 
   const live = _liab.recs.filter(r => !r.voided_at);
   const sum = f => live.filter(f).reduce((a, r) => a + Number(r.amount_rupees), 0);
-  const heldForEuro = live.filter(r => r.purpose === 'tuition')
+  // Fee money for a child with no UIN is not "owed to EuroKids": they have
+  // not invoiced a child who is not on the roll, so there is nothing to pay
+  // and nowhere to pay it. It sits in its own line until the admission is
+  // punched in and the receipt is linked.
+  const heldForEuro = live.filter(r => r.purpose === 'tuition' && r.uin)
     .reduce((a, r) => a + (Number(r.amount_rupees) - Number(r.remitted || 0)), 0);
   const notBanked = sum(r => r.mode === 'Cash' && !r.deposited_on);
   const otherMoney = sum(r => r.purpose !== 'tuition');
+  const pending = live.filter(r => r.purpose === 'tuition' && !r.uin);
+  const beforeAdmission = pending.reduce((a, r) => a + (Number(r.amount_rupees) - Number(r.remitted || 0)), 0);
+  _liab.pending = pending;
 
   el('body').innerHTML = head('Liabilities',
       'Money already in our hands. Cash still to reach the bank, fees still to reach EuroKids, and collections that were never EuroKids’ to begin with.',
@@ -2735,6 +2785,8 @@ async function tabLiability(){
           <div class="m">Fee money taken from parents that has not been passed on</div></div>
         <div class="stat"><div class="k">Ours to keep</div><div class="v">${money(otherMoney)}</div>
           <div class="m">Day care, uniform, events — never EuroKids’</div></div>
+        ${beforeAdmission > 0 ? `<div class="stat"><div class="k">Taken before admission</div><div class="v">${money(beforeAdmission)}</div>
+          <div class="m">Fees from families not yet on the roll — nothing to pay EuroKids until they are</div></div>` : ''}
       </div>
 
       <!-- The one thing the coordinator has to understand, said once, plainly.
@@ -2755,6 +2807,7 @@ async function tabLiability(){
 
       ${askPanel()}
       ${unseenPanel()}
+      ${pendingPanel(options)}
 
       <div class="tools">
         <div class="search"><input class="in" id="lb-q" type="search" placeholder="Search a name"></div>
@@ -2779,8 +2832,15 @@ async function tabLiability(){
     body.innerHTML = `
       <div class="grp"><div class="box">
         <div class="row"><div class="l">Paid by</div>
-          <div class="seg"><button id="lb-t-child" data-who="child">A school child</button><button id="lb-t-other" data-who="other">Someone else</button></div></div>
-      </div><div class="foot">“Someone else” is for day care, guests and anything not tied to a child on the roll.</div></div>
+          <div class="seg"><button id="lb-t-child" data-who="child">A school child</button><button id="lb-t-joining" data-who="joining">Joining later</button><button id="lb-t-other" data-who="other">Someone else</button></div></div>
+      </div><div class="foot">“Joining later” is fee money from a family whose admission has not been punched into EuroKids yet — you link it to the child once it has. “Someone else” is for day care, guests and anything not tied to a child on the roll.</div></div>
+
+      <div class="grp" id="lb-joining-row" style="display:none"><h3>Child joining later</h3><div class="box">
+        <div class="row"><div class="l">Child's name<span class="sub">As it will be entered on admission</span></div>
+          <input class="in wide" id="lb-jname" placeholder="Full name" autocomplete="off"></div>
+        <div class="row"><div class="l">Admission expected<span class="sub">The month the fee will be set from</span></div>
+          <input class="in" id="lb-jfrom" type="month"></div>
+      </div><div class="foot">This is tuition and it is not ours — but there is nothing to pay EuroKids yet, because they have not invoiced a child who is not on the roll. It waits in its own line until you link it.</div></div>
 
       <div class="grp" id="lb-child-row"><h3>Child</h3><div class="box">
         <div class="row"><div class="l">Child</div><input class="in wide" id="lb-child" list="lb-kids" placeholder="Start typing a name" autocomplete="off"><datalist id="lb-kids">${options}</datalist></div>
@@ -2788,7 +2848,7 @@ async function tabLiability(){
       </div><div class="foot" id="lb-child-hint">${(kids || []).length} children on the roll</div></div>
 
       <div class="grp" id="lb-other-row" style="display:none"><h3>Payer</h3><div class="box">
-        <div class="row"><div class="l">Name</div><input class="in wide" id="lb-name" placeholder="e.g. Aarav (day care only)"></div>
+        <div class="row" id="lb-name-row"><div class="l">Name</div><input class="in wide" id="lb-name" placeholder="e.g. Aarav (day care only)"></div>
         <div class="row"><div class="l">Email</div><input class="in wide" id="lb-email" type="email" placeholder="optional — for the receipt"></div>
         <div class="row"><div class="l">Phone</div><input class="in wide" id="lb-phone" placeholder="optional"></div>
       </div></div>
@@ -2839,11 +2899,18 @@ async function tabLiability(){
   const setWho = who => {
     _liab.who = who;
     el('lb-t-child').classList.toggle('on', who === 'child');
-    el('lb-t-other').classList.toggle('on', who !== 'child');
+    el('lb-t-joining').classList.toggle('on', who === 'joining');
+    el('lb-t-other').classList.toggle('on', who === 'other');
     el('lb-child-row').style.display = who === 'child' ? '' : 'none';
+    el('lb-joining-row').style.display = who === 'joining' ? '' : 'none';
+    // The payer block carries the email and phone, which a joining family
+    // needs as much as anyone — they are the only way to reach them before
+    // the child exists in EPMS.
     el('lb-other-row').style.display = who === 'child' ? 'none' : '';
-    // Someone off the roll can never be paying EuroKids tuition.
-    if (who !== 'child') { el('lb-purpose').value = 'other'; }
+    el('lb-name-row').style.display = who === 'joining' ? 'none' : '';
+    // Someone off the roll can never be paying EuroKids tuition — but a
+    // family joining in October certainly can, and is.
+    if (who === 'other') { el('lb-purpose').value = 'other'; }
     togglePurposeNote();
     refreshReceiptTick();
   };
@@ -2853,10 +2920,14 @@ async function tabLiability(){
     const hasAddress = _liab.who === 'child'
       ? !!_liab.byLabel[(el('lb-child').value || '').trim().toLowerCase()]
       : !!(el('lb-email').value || '').trim();
-    box.disabled = !hasAddress;
-    if (!hasAddress) box.checked = false;
-    el('lb-receipt-label').style.opacity = hasAddress ? '1' : '.55';
-    el('lb-receipt-hint').textContent = hasAddress ? 'Goes to the family, cc the office.'
+    // A child with no UIN has no fee ledger yet, so a receipt email would
+    // have nothing true to say about their balance.
+    const canSend = hasAddress && _liab.who !== 'joining';
+    box.disabled = !canSend;
+    if (!canSend) box.checked = false;
+    el('lb-receipt-label').style.opacity = canSend ? '1' : '.55';
+    el('lb-receipt-hint').textContent = canSend ? 'Goes to the family, cc the office.'
+      : _liab.who === 'joining' ? 'Not until the admission exists — write them a manual receipt for now.'
       : (_liab.who === 'child' ? 'Pick a child first.' : 'Add their email above to enable this.');
   };
   const togglePurposeNote = () => {
@@ -2864,6 +2935,7 @@ async function tabLiability(){
     el('lb-purpose-note-wrap').style.display = other ? '' : 'none';
   };
   el('lb-t-child').onclick = () => { setWho('child'); lbDraftSave(); };
+  el('lb-t-joining').onclick = () => { setWho('joining'); lbDraftSave(); };
   el('lb-t-other').onclick = () => { setWho('other'); lbDraftSave(); };
   el('lb-purpose').onchange = () => { togglePurposeNote(); lbDraftSave(); };
 
@@ -2965,11 +3037,20 @@ async function tabLiability(){
     const say = (h, c='err') => el('pf-msg').innerHTML = `<div class="${c}">${h}</div>`;
     if (amt <= 0) return say('Enter an amount.');
 
-    let uin = null, name = null, purpose = 'other', email = null, phone = null;
+    let uin = null, name = null, purpose = 'other', email = null, phone = null, joiningFrom = null;
     if (_liab.who === 'child') {
       const k = _liab.byLabel[(el('lb-child').value || '').trim().toLowerCase()];
       if (!k) return say('Pick a child from the list — start typing and choose a suggestion.');
       uin = k.uin; name = k.student_name; purpose = el('lb-purpose').value;
+    } else if (_liab.who === 'joining') {
+      name = (el('lb-jname').value || '').trim();
+      if (!name) return say("What is the child's name?");
+      const m = (el('lb-jfrom').value || '').trim();
+      if (!m) return say('Which month is the admission expected from? The fee depends on it.');
+      joiningFrom = m + '-01';
+      purpose = 'tuition';
+      email = (el('lb-email').value || '').trim().toLowerCase() || null;
+      phone = (el('lb-phone').value || '').trim() || null;
     } else {
       name = (el('lb-name').value || '').trim();
       if (!name) return say('Whose money is this? Enter a name.');
@@ -3007,6 +3088,7 @@ async function tabLiability(){
       cheque_bank:   isCheque ? (el('lb-chq-bank').value || '').trim() || null : null,
       cheque_dated:  isCheque ? (el('lb-chq-date').value || null) : null,
       photo_path: photoPath,
+      for_admission_from: joiningFrom,
     }).select('id').maybeSingle();
     if (error) {
       btn.disabled = false; btn.textContent = 'Record';
@@ -4196,7 +4278,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=61"></script>
+<script src="/brand/enquiries.js?v=62"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

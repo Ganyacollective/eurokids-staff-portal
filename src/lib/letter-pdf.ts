@@ -298,15 +298,16 @@ export async function renderLetterPdf(d: LetterData): Promise<Uint8Array> {
   s.text(`Name: ${d.signedByName}`);
   s.text(`Designation: ${d.signedByRole}`, { after: 22 });
 
-  s.text("I have read and understood the contents of this letter. The said terms and conditions have been agreed & accepted by me and I am signing herewith in token of having accepted the letter and the terms and conditions mentioned therein.",
+  // The sentence the teacher signs under. It was the densest thing on the
+  // page and the only part she has to mean.
+  s.text("I have read this letter and I understand it. I accept the job and the terms set out above, and I am signing to say so.",
     { after: 18 });
-  s.text("I accept the above terms & conditions", { after: 14 });
 
   if (d.signature) {
     if (d.signature.png) {
       try {
         const img = await s.doc.embedPng(dataUrlToBytes(d.signature.png));
-        const w = 160, h = Math.min(58, (img.height / img.width) * w);
+        const { w, h } = fitSignature(img, 160, 58);
         s.room(h + 8);
         s.page.drawImage(img, { x: L, y: s.y - h, width: w, height: h });
         s.y -= h + 2;
