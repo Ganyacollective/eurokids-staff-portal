@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=62">
-<link rel="prefetch" href="/brand/enquiries.js?v=62" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=63">
+<link rel="prefetch" href="/brand/enquiries.js?v=63" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -149,6 +149,8 @@ const TABS = {
   compose:    { label: 'Send Email',    icon: 'mail',   sect: 'Communication', need: () => has('finance') || has('admission') },
   docs:       { label: 'Forms for signature', icon: 'mail', sect: 'Communication', need: () => has('finance') || has('admission') },
   reminders:  { label: 'Reminders',     icon: 'bell',   sect: 'Communication', need: () => has('finance') },
+  assets:     { label: 'Equipment',     icon: 'box',    sect: 'School',        need: () => has('inventory') || isOwner() },
+  supplies:   { label: 'Supplies',      icon: 'tray',   sect: 'School',        need: () => has('inventory') || isOwner() },
   kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
   discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => has('finance') },
   fees:       { label: 'Fee Grid',      icon: 'grid',   sect: 'Reference',     need: () => has('fees') || has('finance') },
@@ -156,7 +158,7 @@ const TABS = {
   letters:    { app: 'letters', label: 'Appointment letters', icon: 'mail', sect: 'Staff', need: () => has('letters') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
 };
-const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reference', 'Setup'];
+const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'School', 'Reference', 'Setup'];
 const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
 const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'], letters: ['letters'] };
@@ -327,12 +329,13 @@ function renderChooser(){
 }
 
 /* ── users & access (owner only) ─────────────────────── */
-const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts','finance','salary','letters'];
+const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts','finance','salary','letters','inventory'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
   payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
   receipts:'Receipts & cash', finance:'Finance (money)',
   salary:'Salaries (staff pay)',
-  letters:'Appointment letters (shows salary)' };
+  letters:'Appointment letters (shows salary)',
+  inventory:'Inventory (equipment & supplies)' };
 
 async function hubUsersApi(method, body){
   const { data: { session: s } } = await getSb().auth.getSession();
@@ -351,7 +354,8 @@ function modRows(prefix, selected){
     <label class="row" style="cursor:pointer"><span class="l">${MODULE_LABEL[m]}${
       m==='finance' ? '<span class="sub">The school\u2019s books \u2014 totals, discounts, the fee grid. Most people do not need this.</span>'
       : m==='receipts' ? '<span class="sub">Record cash and cheques taken at the desk, and see what a family has paid. Without the school-wide totals.</span>'
-      : m==='salary' ? '<span class="sub">What every member of staff earns, and their increments. Give this to almost nobody.</span>' : ''}</span>
+      : m==='salary' ? '<span class="sub">What every member of staff earns, and their increments. Give this to almost nobody.</span>'
+      : m==='inventory' ? '<span class="sub">Equipment, where it is and who has it, and the running list of supplies to buy. No money or family data.</span>' : ''}</span>
       <input type="checkbox" class="sw ${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}></label>`).join('');
 }
 
@@ -522,6 +526,7 @@ function renderApp(){
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
      templates: tabTemplates, letters: tabLetters, docs: tabDocs,
+     assets: tabAssets, supplies: tabSupplies,
      enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_setup: tabEnqSetup }[tab] || tabOverview)();
 }
 
@@ -3284,6 +3289,535 @@ async function delReceipt(id){
 // query was slower than that. Wait for the tab to actually finish painting.
 async function openPlanFrom(uin){ openPlan(uin); }
 
+/* ══ INVENTORY ══════════════════════════════════════════════════════════
+   Two tabs, because the two halves of "inventory" want opposite things.
+
+   Equipment is about one object: this speaker, in this room, in this
+   teacher's care, under warranty until that date. The code on the sticker is
+   the whole point — it turns "the speaker that stopped working" into SP2, and
+   SP2 has a purchase date, a bill and a person answerable for it.
+
+   Supplies are about a rhythm. Nobody will count bottles every evening, so
+   there is no stock figure to get wrong: just what was bought and when, and
+   the app works out from your own history when the next one is due.        */
+
+// The letter half of the code. Keeping this list short is deliberate — a
+// category nobody can guess the prefix for is a category nobody will use.
+const ASSET_KINDS = [
+  ['SP', 'Speaker / audio'],   ['PC', 'Computer / tablet'], ['PR', 'Printer'],
+  ['CC', 'Camera / CCTV'],     ['AC', 'AC / cooler'],       ['FN', 'Fan'],
+  ['LT', 'Light'],             ['FR', 'Furniture'],         ['PL', 'Play equipment'],
+  ['KT', 'Kitchen'],           ['WT', 'Water / RO'],        ['MU', 'Musical instrument'],
+  ['TY', 'Teaching material'], ['OT', 'Other'],
+];
+const ASSET_STATE = {
+  in_use:  { l: 'In use',       c: 'var(--good)' },
+  repair:  { l: 'At repair',    c: 'var(--warn)' },
+  store:   { l: 'In store',     c: 'var(--label-3)' },
+  lost:    { l: 'Missing',      c: 'var(--crit)' },
+  retired: { l: 'Written off',  c: 'var(--label-3)' },
+};
+const ROOMS = ['Play Group', 'Nursery', 'Jr KG', 'Sr KG', 'Day care', 'Activity room',
+               'Office', 'Reception', 'Kitchen', 'Washroom', 'Gym / downstairs', 'Store', 'Outdoors'];
+
+let _inv = { assets: [], staff: [], supplies: [] };
+
+// toISOString() is UTC, so before 05:30 in Pune it hands back yesterday —
+// which would date a purchase wrongly and flip a warranty a day early.
+const todayHere = () => new Date(Date.now() + 19800000).toISOString().slice(0, 10);
+
+// The teachers, for "who is answerable for it". Same roster the letters use.
+async function invStaff(){
+  if (_inv.staff.length) return _inv.staff;
+  const { data } = await getSb().from('portal_state').select('data').eq('id', 'main').maybeSingle();
+  _inv.staff = ((data?.data?.employees) || [])
+    .filter(e => e && e.display_name && e.is_active !== false)
+    .map(e => e.display_name).sort();
+  return _inv.staff;
+}
+
+async function tabAssets(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const [{ data, error }] = await Promise.all([
+    getSb().schema('eurokids').from('v_asset').select('*').order('code'),
+    invStaff(),
+  ]);
+  if (error) return el('body').innerHTML = fail(error);
+  _inv.assets = data || [];
+
+  const live = _inv.assets.filter(a => a.status !== 'retired');
+  const worth = live.reduce((s, a) => s + Number(a.price || 0), 0);
+  const inRepair = live.filter(a => a.status === 'repair').length;
+  const missing = live.filter(a => a.status === 'lost').length;
+  const today = todayHere();
+  const underWarranty = live.filter(a => a.warranty_until && a.warranty_until >= today).length;
+
+  el('body').innerHTML = head('Equipment',
+      'Everything the school owns that is worth being able to find. Each item has a code, a room, and someone answerable for it.',
+      `<button class="btn" id="as-add">Add an item…</button>`)
+    + `<div class="stats" style="margin-bottom:16px">
+        <div class="stat"><div class="k">Items</div><div class="v">${live.length}</div>
+          <div class="m">${money(worth)} at what we paid</div></div>
+        <div class="stat"><div class="k">Under warranty</div><div class="v">${underWarranty}</div>
+          <div class="m">Bills attached where we have them</div></div>
+        <div class="stat ${inRepair ? 'warn' : ''}"><div class="k">At repair</div><div class="v">${inRepair}</div>
+          <div class="m">Out of the building</div></div>
+        <div class="stat ${missing ? 'crit' : ''}"><div class="k">Missing</div><div class="v">${missing}</div>
+          <div class="m">Last known room and person are on the record</div></div>
+      </div>
+
+      <div class="tools">
+        <div class="search"><input class="in" id="as-q" type="search" placeholder="Code, name, room or person"></div>
+        <select class="in" id="as-f">
+          <option value="">Everything in use</option>
+          <option value="all">Including written off</option>
+          <option value="repair">At repair</option>
+          <option value="lost">Missing</option>
+          <option value="warranty">Under warranty</option>
+          <option value="due">Due for replacing</option>
+        </select>
+      </div>
+
+      <div class="panel"><div class="ptop"><h2 id="as-h">Items</h2>
+        <span class="hint">Tap a row for its history</span></div>
+        <div class="tw"><table><thead><tr><th>Code</th><th>Item</th><th>Where</th><th>Who</th>
+          <th>Bought</th><th class="r">Paid</th><th>Warranty</th><th>Status</th></tr></thead>
+        <tbody id="as-rows"></tbody></table></div></div>`;
+
+  const paint = () => {
+    const q = (el('as-q').value || '').trim().toLowerCase();
+    const f = el('as-f').value;
+    let rows = _inv.assets.filter(a => {
+      if (f === 'all') { /* everything */ }
+      else if (f === 'repair') { if (a.status !== 'repair') return false; }
+      else if (f === 'lost') { if (a.status !== 'lost') return false; }
+      else if (f === 'warranty') { if (!(a.warranty_until && a.warranty_until >= today)) return false; }
+      else if (f === 'due') { if (!(a.replace_due && a.replace_due <= today)) return false; }
+      else if (a.status === 'retired') return false;
+      if (!q) return true;
+      return [a.code, a.name, a.room, a.responsible, a.serial_no, a.vendor]
+        .some(v => String(v || '').toLowerCase().includes(q));
+    });
+    el('as-h').textContent = `${rows.length} item${rows.length === 1 ? '' : 's'}`;
+    el('as-rows').innerHTML = rows.map(a => {
+      const st = ASSET_STATE[a.status] || ASSET_STATE.in_use;
+      const warm = a.warranty_until && a.warranty_until >= today;
+      return `<tr style="cursor:pointer" onclick="openAsset(${a.id})">
+        <td><strong>${esc(a.code)}</strong></td>
+        <td>${esc(a.name)}${a.serial_no ? `<div class="hint" style="font-size:10.5px">#${esc(a.serial_no)}</div>` : ''}</td>
+        <td class="hint">${esc(a.room || '—')}</td>
+        <td class="hint">${esc(a.responsible || '—')}</td>
+        <td class="hint">${a.bought_on ? shortDate(a.bought_on) : '—'}</td>
+        <td class="r num">${a.price ? money(a.price) : '—'}</td>
+        <td class="hint">${a.warranty_until
+            ? `<span style="color:${warm ? 'var(--good)' : 'var(--label-3)'}">${shortDate(a.warranty_until)}</span>`
+            : '—'}${a.invoice_path ? ' 📎' : ''}</td>
+        <td><span class="chip" style="color:${st.c}">${st.l}</span></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
+  };
+  paint();
+  el('as-q').oninput = debounce(paint, 160);
+  el('as-f').onchange = paint;
+  el('as-add').onclick = () => addAsset();
+}
+
+/* ── adding one, or three ──────────────────────────────────────────────
+   Three speakers in three classrooms is one purchase and three objects, and
+   the difference matters the first time one of them stops working. So the
+   form takes a count: fill it in once, and it writes SP1, SP2, SP3 with the
+   same bill and the same date, each in its own room.                      */
+async function addAsset(){
+  const staff = await invStaff();
+  const body = openDrawer('Add equipment', 'One item, or several identical ones bought together');
+  body.innerHTML = `
+    <div class="grp"><h3>What it is</h3><div class="box">
+      <div class="row"><div class="l">Kind</div>
+        <select class="in" id="ax-kind">${ASSET_KINDS.map(([p, l]) =>
+          `<option value="${p}">${esc(l)}</option>`).join('')}</select></div>
+      <div class="row"><div class="l">Name<span class="sub">What you would call it out loud</span></div>
+        <input class="in wide" id="ax-name" placeholder="e.g. Bluetooth speaker with mic"></div>
+      <div class="row"><div class="l">How many<span class="sub">Identical items bought together</span></div>
+        <input class="in num" id="ax-n" type="number" min="1" max="30" value="1"></div>
+      <div class="row"><div class="l">Code<span class="sub">Goes on the sticker. Change it if the box already has one.</span></div>
+        <input class="in" id="ax-code" style="text-transform:uppercase"></div>
+    </div><div class="foot" id="ax-codes"></div></div>
+
+    <div class="grp"><h3>Where it goes</h3><div class="box">
+      <div id="ax-rooms"></div>
+      <div class="row" id="ax-serial-row"><div class="l">Serial number<span class="sub">Optional — only if there is one</span></div>
+        <input class="in wide" id="ax-serial"></div>
+    </div></div>
+
+    <div class="grp"><h3>The purchase</h3><div class="box">
+      <div class="row"><div class="l">Bought on</div><input class="in" id="ax-on" type="date" value="${todayHere()}"></div>
+      <div class="row"><div class="l">From</div><input class="in wide" id="ax-vendor" placeholder="shop or website"></div>
+      <div class="row"><div class="l">Price each</div><input class="in num" id="ax-price" type="number" min="0" placeholder="₹"></div>
+      <div class="row"><div class="l">Bought by</div><input class="in" id="ax-by" value="${esc(who())}"></div>
+      <div class="row"><div class="l">Warranty<span class="sub">Months. Leave blank if there is none.</span></div>
+        <input class="in num" id="ax-war" type="number" min="0" placeholder="12"></div>
+      <div class="row"><div class="l">Expected to last<span class="sub">Months — used to warn you before it dies</span></div>
+        <input class="in num" id="ax-life" type="number" min="0" placeholder="36"></div>
+      <div class="rowx"><label class="l" style="display:block;margin-bottom:6px">Bill or photo<span class="sub">Kept for the warranty claim</span></label>
+        <input class="in" id="ax-file" type="file" accept="image/*,application/pdf" capture="environment"></div>
+      <div class="rowx"><input class="in" id="ax-note" placeholder="Anything worth remembering" style="width:100%"></div>
+    </div></div>
+    <div id="ax-msg"></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="ax-cancel">Cancel</button><button class="btn" id="ax-save">Add</button>`;
+  el('ax-cancel').onclick = closeDrawer;
+
+  const roomRow = (i, n) => `<div class="row"><div class="l">${n > 1 ? `Item ${i + 1}` : 'Room'}<span class="sub" id="ax-code-${i}"></span></div>
+    <select class="in" data-room="${i}"><option value="">—</option>${ROOMS.map(r =>
+      `<option>${esc(r)}</option>`).join('')}</select>
+    <select class="in" data-resp="${i}" style="margin-left:8px"><option value="">nobody yet</option>${
+      staff.map(s => `<option>${esc(s)}</option>`).join('')}</select></div>`;
+
+  // "SP7" → { stem: 'SP', n: 7 }. Anything with no trailing number has no
+  // number to count from, which matters only when adding several.
+  // Keeps the padding it was given, so a batch starting at SP01 runs SP01,
+  // SP02 — not SP1, SP2, which could collide with codes already in use.
+  const splitCode = c => {
+    const m = /^(.*?)(\d+)$/.exec(String(c || '').trim().toUpperCase());
+    return m ? { stem: m[1], n: Number(m[2]), pad: m[2].length }
+             : { stem: String(c || '').trim().toUpperCase(), n: null, pad: 0 };
+  };
+  const mkCode = (stem, n, pad) => stem + String(n).padStart(pad, '0');
+
+  let codeTouched = false;
+  el('ax-code').oninput = () => { codeTouched = true; renumber(); };
+
+  // Redrawing the rows on every keystroke threw away rooms already chosen.
+  // Add and remove rows instead, and leave the ones in between alone.
+  const renumber = () => {
+    const n = Math.max(1, Math.min(30, Number(el('ax-n').value) || 1));
+    const { stem, n: start, pad } = splitCode(el('ax-code').value);
+    const host = el('ax-rooms');
+    while (host.children.length > n) host.lastElementChild.remove();
+    while (host.children.length < n) host.insertAdjacentHTML('beforeend', roomRow(host.children.length, n));
+    // The "Item 2" labels only exist when there is more than one.
+    [...host.children].forEach((row, i) => {
+      const lab = row.querySelector('.l');
+      if (lab) lab.firstChild.textContent = n > 1 ? `Item ${i + 1}` : 'Room';
+      const tag = el('ax-code-' + i);
+      if (tag) tag.textContent = (n > 1 && start !== null) ? ' ' + mkCode(stem, start + i, pad) : '';
+    });
+    el('ax-serial-row').style.display = n > 1 ? 'none' : '';
+    el('ax-codes').textContent = n === 1
+      ? 'One item, one code.'
+      : start === null
+        ? `“${el('ax-code').value.trim().toUpperCase()}” does not end in a number, so I cannot count from it. Give the first one a number — SP1, or 01.`
+        : `These will be ${mkCode(stem, start, pad)} to ${mkCode(stem, start + n - 1, pad)}, one per row above.`;
+  };
+
+  const refresh = async () => {
+    const prefix = el('ax-kind').value;
+    if (!codeTouched) {
+      const { data } = await getSb().schema('eurokids').rpc('next_asset_code', { p_prefix: prefix });
+      el('ax-code').value = String(data || (prefix + '1'));
+    }
+    renumber();
+  };
+  el('ax-kind').onchange = refresh;
+  el('ax-n').oninput = renumber;     // no round trip, so no race with Add
+  await refresh();
+
+  el('ax-save').onclick = async () => {
+    const name = (el('ax-name').value || '').trim();
+    if (!name) return el('ax-msg').innerHTML = `<div class="err">What is it called?</div>`;
+    const n = Math.max(1, Math.min(30, Number(el('ax-n').value) || 1));
+    const prefix = el('ax-kind').value;
+    const base = (el('ax-code').value || '').trim().toUpperCase() || (prefix + '1');
+    const { stem, n: start, pad } = splitCode(base);
+    // One item keeps whatever code was typed, exactly — the sticker on the box
+    // wins. Several need a number to count from, and guessing one silently was
+    // how "SPK-01" became "SPK--1".
+    if (n > 1 && start === null) {
+      return el('ax-msg').innerHTML = `<div class="err">“${esc(base)}” does not end in a number, so I cannot number ${n} items from it. Make the first one ${esc(base)}1, or use ${prefix}1.</div>`;
+    }
+
+    const b = el('ax-save'); b.disabled = true; b.textContent = 'Saving…';
+
+    // The bill first. A warranty claim with no bill is an argument, so if the
+    // upload fails nothing is written and the person can try again.
+    let filePath = null;
+    const file = el('ax-file')?.files?.[0];
+    if (file) {
+      b.textContent = 'Uploading the bill…';
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      filePath = `bills/${new Date().getFullYear()}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const up = await getSb().storage.from('inventory').upload(filePath, file, { contentType: file.type });
+      if (up.error) { b.disabled = false; b.textContent = 'Add';
+        return el('ax-msg').innerHTML = `<div class="err">The bill did not upload: ${esc(up.error.message)}. Nothing has been saved.</div>`; }
+    }
+
+    const rooms = [...body.querySelectorAll('[data-room]')].map(s => s.value || null);
+    const resps = [...body.querySelectorAll('[data-resp]')].map(s => s.value || null);
+    const common = {
+      name, category: (ASSET_KINDS.find(k => k[0] === prefix) || [, 'Other'])[1],
+      serial_no: n === 1 ? ((el('ax-serial').value || '').trim() || null) : null,
+      bought_on: el('ax-on').value || null,
+      vendor: (el('ax-vendor').value || '').trim() || null,
+      price: Number(el('ax-price').value) || null,
+      bought_by: (el('ax-by').value || '').trim() || null,
+      warranty_months: Number(el('ax-war').value) || null,
+      expected_life_months: Number(el('ax-life').value) || null,
+      invoice_path: filePath,
+      note: (el('ax-note').value || '').trim() || null,
+      created_by: who(),
+    };
+    // ?? null, not undefined: PostgREST rejects an array whose objects have
+    // different keys, and a missing room would drop the key entirely.
+    const rows = Array.from({ length: n }, (_, i) => ({
+      ...common,
+      code: n === 1 ? base : mkCode(stem, start + i, pad),
+      room: rooms[i] ?? null, responsible: resps[i] ?? null,
+    }));
+
+    const { data, error } = await getSb().schema('eurokids').from('asset').insert(rows).select('id, code, room, responsible');
+    b.disabled = false; b.textContent = 'Add';
+    if (error) {
+      // Nothing was written — Postgres takes the batch or none of it. The bill
+      // would otherwise sit in the bucket unreferenced, and a second attempt
+      // would upload another copy.
+      if (filePath) { await getSb().storage.from('inventory').remove([filePath]).then(() => {}, () => {}); }
+      const dupe = /duplicate key|unique constraint/i.test(error.message);
+      return el('ax-msg').innerHTML = `<div class="err">${dupe
+        ? `One of those codes is already in use — ${esc(rows[0].code)}${n > 1 ? ` to ${esc(rows[n-1].code)}` : ''}. Change the code and try again.`
+        : esc(error.message)}</div>`;
+    }
+
+    await getSb().schema('eurokids').from('asset_event').insert((data || []).map(a => ({
+      asset_id: a.id, event: 'added',
+      detail: { room: a.room, responsible: a.responsible, price: common.price, vendor: common.vendor },
+      by_whom: who(),
+    }))).then(() => {}, () => {});
+    closeDrawer(true); tabAssets();
+  };
+}
+
+/* ── one item, and what has happened to it ─────────────────────────────── */
+async function openAsset(id){
+  const a = _inv.assets.find(x => x.id === id); if (!a) return;
+  const staff = await invStaff();
+  const st = ASSET_STATE[a.status] || ASSET_STATE.in_use;
+  const { data: events } = await getSb().schema('eurokids').from('asset_event')
+    .select('*').eq('asset_id', id).order('at', { ascending: false });
+
+  const body = openDrawer(`${a.code} · ${a.name}`, a.room ? `${a.room}${a.responsible ? ' · ' + a.responsible : ''}` : 'Not placed yet');
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      <div class="row"><div class="l">Status</div><div class="v" style="color:${st.c}">${st.l}</div></div>
+      ${a.bought_on ? `<div class="row"><div class="l">Bought</div><div class="v">${shortDate(a.bought_on)}${a.vendor ? ' · ' + esc(a.vendor) : ''}</div></div>` : ''}
+      ${a.price ? `<div class="row"><div class="l">Paid</div><div class="v">${money(a.price)}${a.bought_by ? ` · by ${esc(a.bought_by)}` : ''}</div></div>` : ''}
+      ${a.warranty_until ? `<div class="row"><div class="l">Warranty until</div><div class="v">${shortDate(a.warranty_until)}</div></div>` : ''}
+      ${a.replace_due ? `<div class="row"><div class="l">Expect to replace</div><div class="v hint">${shortDate(a.replace_due)}</div></div>` : ''}
+      ${a.serial_no ? `<div class="row"><div class="l">Serial</div><div class="v hint">${esc(a.serial_no)}</div></div>` : ''}
+      ${a.note ? `<div class="rowx hint">${esc(a.note)}</div>` : ''}
+      ${a.invoice_path ? `<button class="linkrow" id="ay-bill" style="color:var(--acc)">Open the bill</button>` : ''}
+    </div></div>
+
+    <div class="grp"><h3>Move it</h3><div class="box">
+      <div class="row"><div class="l">Room</div>
+        <select class="in" id="ay-room"><option value="">—</option>${ROOMS.map(r =>
+          `<option ${r === a.room ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>
+      <div class="row"><div class="l">Looked after by</div>
+        <select class="in" id="ay-resp"><option value="">nobody yet</option>${staff.map(s =>
+          `<option ${s === a.responsible ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+      <div class="row"><div class="l">Status</div>
+        <select class="in" id="ay-status">${Object.entries(ASSET_STATE).map(([k, v]) =>
+          `<option value="${k}" ${k === a.status ? 'selected' : ''}>${v.l}</option>`).join('')}</select></div>
+      <div class="rowx"><input class="in" id="ay-why" placeholder="What changed, in a few words" style="width:100%"></div>
+    </div><div class="foot">Every change is kept, with who made it. Nothing here is overwritten quietly.</div></div>
+
+    <div class="grp"><h3>History</h3><div class="box">
+      ${(events || []).map(e => `<div class="row"><div class="l" style="flex:1">
+          <strong style="color:var(--ink)">${esc(assetWords(e))}</strong>
+          <span class="sub">${shortDate(e.at)}${e.by_whom ? ' · ' + esc(e.by_whom) : ''}${
+            e.detail?.why ? ' · ' + esc(e.detail.why) : ''}</span></div></div>`).join('')
+        || '<div class="rowx hint">Nothing recorded yet.</div>'}
+    </div></div>
+    <div id="ay-msg"></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="ay-close">Close</button><button class="btn" id="ay-save">Save the change</button>`;
+  el('ay-close').onclick = closeDrawer;
+  if (el('ay-bill')) el('ay-bill').onclick = () => openInvBill(a.invoice_path);
+
+  el('ay-save').onclick = async () => {
+    const room = el('ay-room').value || null;
+    const resp = el('ay-resp').value || null;
+    const status = el('ay-status').value;
+    const why = (el('ay-why').value || '').trim() || null;
+    if (room === (a.room || null) && resp === (a.responsible || null) && status === a.status) {
+      return el('ay-msg').innerHTML = `<div class="err">Nothing has changed.</div>`;
+    }
+    if ((status === 'lost' || status === 'retired') && !why) {
+      return el('ay-msg').innerHTML = `<div class="err">Say what happened — a missing item with no explanation helps nobody.</div>`;
+    }
+    const b = el('ay-save'); b.disabled = true; b.textContent = 'Saving…';
+    const { error } = await getSb().schema('eurokids').from('asset')
+      .update({ room, responsible: resp, status, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { b.disabled = false; b.textContent = 'Save the change';
+      return el('ay-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; }
+    const ev = status !== a.status ? status
+      : (resp !== (a.responsible || null) ? 'assigned' : 'moved');
+    await getSb().schema('eurokids').from('asset_event').insert({
+      asset_id: id, event: ev,
+      detail: { from_room: a.room, to_room: room, from_person: a.responsible, to_person: resp, why },
+      by_whom: who(),
+    }).then(() => {}, () => {});
+    closeDrawer(true); tabAssets();
+  };
+}
+
+function assetWords(e){
+  const d = e.detail || {};
+  switch (e.event) {
+    case 'added':    return `Added${d.room ? ' to ' + d.room : ''}`;
+    case 'moved':    return `Moved${d.from_room ? ' from ' + d.from_room : ''}${d.to_room ? ' to ' + d.to_room : ''}`;
+    case 'assigned': return `Given to ${d.to_person || 'nobody'}`;
+    case 'repair':   return 'Sent for repair';
+    case 'in_use':   return 'Back in use';
+    case 'store':    return 'Put in the store';
+    case 'lost':     return 'Reported missing';
+    case 'retired':  return 'Written off';
+    default:         return e.event;
+  }
+}
+
+/* ── supplies: the things that run out ─────────────────────────────────
+   No stock count. The only number anyone will keep honestly is what they
+   bought and when, so that is the only number asked for — and the gap
+   between past purchases is enough to say when the next one is due. If a
+   supply has been bought twice, the app knows its rhythm; if once, it says
+   so rather than guessing.                                                */
+const SUP_STATE = {
+  'overdue':           { l: 'Overdue',     c: 'var(--crit)',    o: 0 },
+  'due soon':          { l: 'Due soon',    c: 'var(--warn)',    o: 1 },
+  'never bought':      { l: 'Never bought',c: 'var(--label-3)', o: 2 },
+  'not enough history':{ l: 'First one',   c: 'var(--label-3)', o: 3 },
+  'fine':              { l: 'Fine',        c: 'var(--good)',    o: 4 },
+};
+
+async function tabSupplies(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const { data, error } = await getSb().schema('eurokids').from('v_supply_status').select('*');
+  if (error) return el('body').innerHTML = fail(error);
+  _inv.supplies = (data || []).filter(s => s.is_active)
+    .sort((a, b) => (SUP_STATE[a.state]?.o ?? 9) - (SUP_STATE[b.state]?.o ?? 9)
+                 || (b.days_since ?? -1) - (a.days_since ?? -1));
+
+  const late = _inv.supplies.filter(s => s.state === 'overdue');
+  const soon = _inv.supplies.filter(s => s.state === 'due soon');
+
+  el('body').innerHTML = head('Supplies',
+      'Dettol, hand wash, tissues — the things that quietly run out. Log what you buy and the list tells you what is next.',
+      `<button class="btn line" id="sp-new">New supply…</button><button class="btn" id="sp-buy">Log a purchase…</button>`)
+    + `<div class="stats" style="margin-bottom:16px">
+        <div class="stat ${late.length ? 'crit' : ''}"><div class="k">Overdue</div><div class="v">${late.length}</div>
+          <div class="m">Past the gap you normally leave</div></div>
+        <div class="stat ${soon.length ? 'warn' : ''}"><div class="k">Due soon</div><div class="v">${soon.length}</div>
+          <div class="m">Worth adding to the next shop</div></div>
+        <div class="stat"><div class="k">Tracked</div><div class="v">${_inv.supplies.length}</div>
+          <div class="m">Add one the first time you buy it</div></div>
+      </div>
+
+      <div class="panel"><div class="ptop"><h2>What to buy next</h2>
+        <span class="hint">Ordered by how overdue it is</span></div>
+        <div class="tw"><table><thead><tr><th>Item</th><th>Last bought</th><th class="r">How many</th>
+          <th>Usually every</th><th>Due</th><th></th></tr></thead>
+        <tbody id="sp-rows"></tbody></table></div></div>`;
+
+  el('sp-rows').innerHTML = _inv.supplies.map(s => {
+    const st = SUP_STATE[s.state] || SUP_STATE.fine;
+    return `<tr>
+      <td><strong>${esc(s.name)}</strong>${s.note ? `<div class="hint" style="font-size:10.5px">${esc(s.note)}</div>` : ''}</td>
+      <td class="hint">${s.last_bought ? `${shortDate(s.last_bought)}<div style="font-size:10.5px">${s.days_since} days ago</div>` : '—'}</td>
+      <td class="r num">${s.last_qty ? `${Number(s.last_qty)} ${esc(s.unit)}` : '—'}</td>
+      <td class="hint">${s.usual_days ? `${s.usual_days} days` : `<span style="color:var(--label-3)">not known yet</span>`}</td>
+      <td><span class="chip" style="color:${st.c}">${st.l}</span>${
+        s.due_on ? `<div class="hint" style="font-size:10.5px">${shortDate(s.due_on)}</div>` : ''}</td>
+      <td style="white-space:nowrap"><a style="cursor:pointer" onclick="logPurchase(${s.id})">Bought it</a></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--muted)">
+      Nothing tracked yet. Add the first one with “New supply”.</td></tr>`;
+
+  el('sp-new').onclick = newSupply;
+  el('sp-buy').onclick = () => logPurchase(null);
+}
+
+async function newSupply(){
+  const name = prompt('What is it called?\n\ne.g. Dettol 5L, Hand wash refill, Tissue box (100 pulls)');
+  if (name === null) return;
+  if (!name.trim()) return alert('It needs a name.');
+  const unit = prompt('What do you buy it in?\n\ne.g. bottle, box, packet, litre', 'bottle');
+  if (unit === null) return;
+  const { error } = await getSb().schema('eurokids').from('supply')
+    .insert({ name: name.trim(), unit: (unit || 'unit').trim() || 'unit' });
+  if (error) {
+    // The name is unique across everything, including items switched off. A
+    // duplicate is almost always one that was retired, so bring it back rather
+    // than telling the user it exists somewhere they cannot see.
+    if (/duplicate|unique/i.test(error.message)) {
+      const { error: e2 } = await getSb().schema('eurokids').from('supply')
+        .update({ is_active: true }).eq('name', name.trim());
+      if (!e2) { tabSupplies(); return; }
+    }
+    return alert('Could not add it: ' + error.message);
+  }
+  tabSupplies();
+}
+
+function logPurchase(supplyId){
+  const list = _inv.supplies;
+  if (!list.length) return alert('Add a supply first — “New supply”.');
+  const body = openDrawer('Log a purchase', 'What you bought, and when');
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      <div class="row"><div class="l">Item</div>
+        <select class="in wide" id="sq-item">${list.map(s =>
+          `<option value="${s.id}" ${s.id === supplyId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
+      <div class="row"><div class="l">How many</div><input class="in num" id="sq-qty" type="number" min="0.01" step="any" value="1"></div>
+      <div class="row"><div class="l">Bought on</div><input class="in" id="sq-on" type="date" value="${todayHere()}"></div>
+      <div class="row"><div class="l">Price each<span class="sub">Optional</span></div><input class="in num" id="sq-price" type="number" min="0" placeholder="₹"></div>
+      <div class="row"><div class="l">From<span class="sub">Optional</span></div><input class="in wide" id="sq-vendor" placeholder="shop"></div>
+      <div class="row"><div class="l">Bought by</div><input class="in" id="sq-by" value="${esc(who())}"></div>
+    </div><div class="foot" id="sq-hint"></div></div>
+    <div id="sq-msg"></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="sq-cancel">Cancel</button><button class="btn" id="sq-save">Log it</button>`;
+  el('sq-cancel').onclick = closeDrawer;
+
+  const hint = () => {
+    const s = list.find(x => String(x.id) === el('sq-item').value);
+    el('sq-hint').textContent = !s ? ''
+      : s.last_bought
+        ? `Last bought ${s.days_since} days ago${s.usual_days ? `, and you usually buy it every ${s.usual_days} days.` : '.'}`
+        : 'This is the first one on record, so there is nothing to compare it with yet.';
+  };
+  el('sq-item').onchange = hint; hint();
+
+  el('sq-save').onclick = async () => {
+    const qty = Number(el('sq-qty').value) || 0;
+    if (qty <= 0) return el('sq-msg').innerHTML = `<div class="err">How many?</div>`;
+    const b = el('sq-save'); b.disabled = true; b.textContent = 'Saving…';
+    const { error } = await getSb().schema('eurokids').from('supply_purchase').insert({
+      supply_id: Number(el('sq-item').value),
+      qty, bought_on: el('sq-on').value || null,
+      unit_price: Number(el('sq-price').value) || null,
+      vendor: (el('sq-vendor').value || '').trim() || null,
+      bought_by: (el('sq-by').value || '').trim() || null,
+    });
+    b.disabled = false; b.textContent = 'Log it';
+    if (error) return el('sq-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`;
+    closeDrawer(true); tabSupplies();
+  };
+}
+
+async function openInvBill(path){
+  if (!path) return;
+  const { data } = await getSb().storage.from('inventory').createSignedUrl(path, 300);
+  if (!data?.signedUrl) return alert('That file could not be opened.');
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+
 /* ── working down a list ────────────────────────────────────────────────
    Calling twenty families in a row meant closing the sheet, finding the
    place in the list again, and clicking the next name. Whichever list is on
@@ -3291,6 +3825,11 @@ async function openPlanFrom(uin){ openPlan(uin); }
 let _planOrder = [];
 const setPlanOrder = rows => { _planOrder = (rows || []).map(r => r.uin).filter(Boolean); };
 function stepChild(dir){
+  // Only when the sheet on screen is actually a child's plan. _planUin
+  // survives the drawer being reused for something else — an asset, a
+  // handover — and without this guard pressing j in the equipment drawer
+  // replaced it with whichever family was last open.
+  if (!_planSheet) return;
   const i = _planOrder.indexOf(_planUin);
   if (i < 0) return;
   const next = _planOrder[i + dir];
@@ -3312,6 +3851,9 @@ function paintStep(){
 
 /* ── payment plans: agreed fee, our discount, instalments, welcome letter ── */
 let _planUin = null;
+// True only while the drawer is showing a child's fee plan; cleared by
+// openDrawer, set by openPlan. The arrow keys and the ‹ › buttons use it.
+let _planSheet = false;
 let _planF = { q: '', cls: '', sort: 'new' };   // survives drawer open/close and tab switches
 
 async function tabPlans(){
@@ -3438,6 +3980,9 @@ function openDrawer(title, subtitle){
       if (e.key === 'ArrowUp'   || e.key === 'k') { e.preventDefault(); stepChild(-1); }
     });
   }
+  // Any drawer that is not a child's plan clears the flag; openPlan sets it
+  // again straight after calling this.
+  _planSheet = false;
   el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
   let wide = false; try { wide = localStorage.getItem('ek-drawer-wide') === '1'; } catch (_) {}
   dr.classList.toggle('wide', wide);
@@ -3674,6 +4219,7 @@ async function openPlan(uin){
   const known = (_cache.get('sched')?.val || []).find(k => k.uin === uin);
   const body = openDrawer(known?.student_name || uin,
     known ? `${known.program_name || ''}${known.batch ? ' · ' + known.batch : ''}${known.father_name ? ' · ' + known.father_name : ''} · ${uin}` : uin);
+  _planSheet = true;          // openDrawer cleared it a line ago
   paintStep();
   if (known) body.innerHTML = statementHtml(known, [], []) +
     `<div class="grp"><div class="box"><div class="rowx"><div class="skel" style="width:60%"></div></div>
@@ -4278,7 +4824,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=62"></script>
+<script src="/brand/enquiries.js?v=63"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
