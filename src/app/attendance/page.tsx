@@ -15,8 +15,9 @@ export default async function AttendancePage() {
     <div>
       <h1 className="text-2xl font-semibold text-eurokids-ink mb-1">Attendance Import</h1>
       <p className="text-sm text-gray-500 mb-8">
-        Upload PetPooja&rsquo;s monthly Excel/CSV. The reconciliation engine applies the late-strike,
-        Saturday, sandwich, holiday, and leave-application rules automatically.
+        Upload PetPooja&rsquo;s monthly Excel/CSV. This page runs the older engine, which applies the
+        late-strike, Saturday, holiday and leave-application rules. The sandwich rule is applied by
+        the staff portal, not here.
       </p>
 
       <UploadAttendance />

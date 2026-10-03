@@ -429,6 +429,58 @@
 // ============================================================
 const STORAGE_KEY = 'eurokids_staff_portal_v2';
 const AY = { start: '2026-04-06', end: '2027-03-19', label: '2026-27', cl_per_teacher: 7, el_per_teacher: 8, optional_hol_per_teacher: 5 };
+
+/* How much leave a person actually has this year.
+   ────────────────────────────────────────────────────────────────────────
+   A teacher who starts in September has not earned a September-to-March
+   year's worth of casual leave, and until now the portal gave her all seven
+   days on her first morning. The entitlement is counted in months from the
+   day her clock starts, rounded to the nearest half day — rounding down
+   would have someone join on the 2nd of a month and lose it.
+
+   Three dates can start that clock, in order of precedence:
+     entitlement_from  — set by hand. For someone who left and came back,
+                         this is the date they came back; their original
+                         joining date is still true and still on the record.
+     joining_date      — the ordinary case.
+     the year's start  — anyone already here.
+
+   Carry-forward is added afterwards and never prorated: it was earned in a
+   year already worked. A flat override (cl_allowance_override) replaces the
+   whole calculation, for the cases no rule will ever cover.               */
+const LEAVE_YEAR_MONTHS = 12;
+function monthsOfService(e){
+  const from = e.entitlement_from || e.joining_date || null;
+  if (!from || from <= AY.start) return { months: LEAVE_YEAR_MONTHS, prorated: false, from: null };
+  if (from > AY.end) return { months: 0, prorated: true, from };
+  const [y, m, d] = from.split('-').map(Number);
+  const [ey, em] = AY.end.split('-').map(Number);
+  // A month counts if they were here for most of it — joining on the 20th
+  // does not earn that month.
+  const firstWhole = d <= 15 ? (y * 12 + m) : (y * 12 + m + 1);
+  const months = Math.max(0, Math.min(LEAVE_YEAR_MONTHS, (ey * 12 + em) - firstWhole + 1));
+  return { months, prorated: true, from };
+}
+const halfUp = n => Math.round(n * 2) / 2;
+
+function leaveAllowance(e){
+  const { months, prorated, from } = monthsOfService(e);
+  const share = months / LEAVE_YEAR_MONTHS;
+  const clCF = (e.cl_carry_forward != null && !isNaN(e.cl_carry_forward)) ? Number(e.cl_carry_forward) : 0;
+  const elCF = (e.el_carry_forward != null && !isNaN(e.el_carry_forward)) ? Number(e.el_carry_forward) : 0;
+  const clBase = halfUp(AY.cl_per_teacher * share);
+  const elBase = halfUp(AY.el_per_teacher * share);
+  // The legacy override is a total, and still wins where it was set by hand.
+  const clSet = (e.cl_allowance_override != null && e.cl_carry_forward == null);
+  const elSet = (e.el_allowance_override != null && e.el_carry_forward == null);
+  return {
+    months, prorated, from, clCF, elCF, clBase, elBase,
+    fixed: clSet || elSet,
+    cl: clSet ? Number(e.cl_allowance_override) : clBase + clCF,
+    el: elSet ? Number(e.el_allowance_override) : elBase + elCF,
+    optHol: halfUp((AY.optional_hol_per_teacher || 5) * share),
+  };
+}
 const DEFAULT_STATE = {
   employees: [
     { id:'e1',  name_petpooja: "Manisha Zurange", display_name: "Manisha Zurange", email: "", department: "Support Staff", designation: "Cleaner", reporting_minutes: 450, is_active: true },
@@ -514,7 +566,7 @@ const DEFAULT_STATE = {
     { id:'l5', employee_id:'e20', leave_type: "CL", start_date: "2026-04-02", end_date: "2026-04-02", total_days: 1, reason: "urgency at home", status: "Approved", applied_at: "2026-04-01T20:00:00Z", reviewed_at: "2026-04-02T08:00:00Z" },
   ],
   attendanceMonths: {},  // keyed by 'YYYY-MM'
-  adjustments: [],  // forgiveness audit trail: {id, month, employee_id, date, kind: 'forgive_late'|'forgive_lwp'|'forgive_halflwp', reason, decided_at}
+  adjustments: [],  // forgiveness audit trail: {id, month, employee_id, date, kind: 'forgive_late'|'forgive_lwp'|'forgive_halflwp'|'forgive_sandwich', reason, decided_at}
   day_overrides: [],  // HR's manual day-status overrides: {id, employee_id, date, status, note, decided_at}
   special_days: [],  // {id, date, name, skip_late_strikes, notes} — sports day, annual function, etc.
   special_day_overrides: [],  // {id, special_day_id, employee_id, status: 'Present'|'CasualLeave'|'EarnedLeave'|'LWP'|'Excused', note}
@@ -889,7 +941,7 @@ const LATE_GRACE_MIN = 10, HALF_LWP_THRESHOLD = 90, STRIKE_TO_HALF_DAY = 3, SAT_
 // quietly re-run at startup from the raw punches it already holds — no
 // re-upload, nobody having to know a "Re-run" button exists. Bump this whenever
 // the rules change.
-const ENGINE_VERSION = 3;
+const ENGINE_VERSION = 4;   // v4 applies the sandwich rule
 
 function reconcile(rawRows, month){
   const holByDate = new Map(); state.holidays.forEach(h => holByDate.set(h.date, h));
@@ -1172,6 +1224,16 @@ function reconcile(rawRows, month){
       day.isStrike = false;
       s.lateStrikes--;
       s.lateDetails = s.lateDetails.filter(ld => ld.date !== adj.date);
+    } else if (adj.kind === 'forgive_lwp' && day.status === "LWP" && day.sandwiched) {
+      // It is a holiday the sandwich rule docked, not a day she failed to
+      // come in. Forgiving it returns a holiday, not a worked day — crediting
+      // a full day here over-counted attendance and left the holiday tally
+      // short.
+      day.forgiven_from = day.sandwich_from || "Holiday";
+      day.status = day.sandwich_from || "Holiday";
+      day.sandwiched = false;
+      s.lwpDays--;
+      s.holidays = (s.holidays || 0) + 1;
     } else if (adj.kind === 'forgive_lwp' && day.status === "LWP") {
       // Change the status itself. Adjusting only the counter meant a later
       // recount (triggered by any day override for this employee) restored
@@ -1371,6 +1433,101 @@ function reconcile(rawRows, month){
       s.holidays++;
       s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1;
     }
+  }
+
+  /* Last pass: the sandwich rule.
+     ──────────────────────────────────────────────────────────────────────
+     A holiday is a day the school gives. Taking leave on the working day
+     either side of one turns a single day off into a long weekend, which is
+     the thing the policy is written to stop. So: leave on the day before or
+     after a holiday, and that holiday is unpaid.
+
+     Written as a block rather than a single day because holidays arrive in
+     runs — a Friday holiday with Sunday behind it, two festival days
+     together. Leave on the Thursday costs every holiday in the run, not just
+     the Friday.
+
+     Two deliberate limits. Sundays are never converted: a week off is not the
+     school's to take back, and a rule that docked someone for a Sunday would
+     not survive being read out loud. And a half-day leave is not a trigger —
+     she was here for half the day.
+
+     This runs last, after the holiday back-fill and after HR's day
+     overrides, for two reasons that each caused a wrong answer when it ran
+     earlier: PetPooja's export omits holiday dates entirely — no biometric
+     activity, no row — so the single-day festival holidays the rule exists
+     for are synthesised further down and were simply not visible; and a day
+     HR corrects by hand has to be what the rule reads, or forgiving a wrong
+     LWP would leave the holiday beside it docked anyway.                    */
+  const DAY_MS = 86400000;
+  const shiftDate = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * DAY_MS).toISOString().slice(0, 10);
+  const AWAY_ON_LEAVE = new Set(['CasualLeave', 'EarnedLeave', 'LWP']);
+
+  for (const s of empSummary.values()) {
+    s.sandwichDays = 0;
+    const byDate = new Map();
+    for (const d of reconciledDays) if (d.employee_id === s.employee.id) byDate.set(d.date, d);
+    const seen = new Set();
+
+    for (const [date, day] of [...byDate].sort((a, b) => a[0].localeCompare(b[0]))) {
+      if (day.status !== 'Holiday' || seen.has(date)) continue;
+
+      // Walk out to the edges of the run of days off this holiday sits in.
+      let first = date, last = date;
+      // Only holidays and Sundays extend the run. A refunded Saturday used to
+      // be swallowed into it — so whether a holiday was docked turned on
+      // whether that Saturday fell inside the 2-free allowance, and the note
+      // then blamed the wrong day. A vacation extended the run by weeks.
+      const offish = d => d && (d.status === 'Holiday' || (d.status === 'WeekOff' && d.dow === 0));
+      while (offish(byDate.get(shiftDate(first, -1)))) first = shiftDate(first, -1);
+      while (offish(byDate.get(shiftDate(last, 1))))  last  = shiftDate(last, 1);
+
+      const block = [];
+      for (let d = first; d <= last; d = shiftDate(d, 1)) { block.push(d); seen.add(d); }
+
+      // The working day on each side. Days outside the imported month are
+      // unknown, not innocent — but charging for a day we cannot see would be
+      // guessing, so the rule only bites where we have the evidence.
+      const before = byDate.get(shiftDate(first, -1));
+      const after  = byDate.get(shiftDate(last, 1));
+      // Absent for the whole day, not half of it: a teacher who came in at
+      // lunchtime on a half-day was here, and the rule is about the day being
+      // missed. A holiday already turned unpaid by this same rule cannot
+      // itself trigger the next one.
+      const trigger = [before, after].find(d => d && AWAY_ON_LEAVE.has(d.status)
+        && d.in == null && d.out == null && !d.sandwiched);
+      if (!trigger) continue;
+
+      const side = trigger === before ? 'before' : 'after';
+      const why = trigger.status === 'LWP' ? 'absent' : 'on leave';
+      for (const d of block) {
+        const hd = byDate.get(d);
+        if (!hd || hd.status !== 'Holiday') continue;   // Sundays and vacations stay as they are
+        if (hd.is_overridden) continue;                 // HR set this day by hand; that stands
+        const excused = (state.adjustments || []).some(a => a.kind === 'forgive_sandwich'
+          && a.employee_id === s.employee.id && a.date === d);
+        if (excused) { hd.sandwich_excused = true; continue; }
+        const holName = hd.holiday_name || hd.note || 'Holiday';
+        hd.sandwiched = true;
+        hd.sandwich_from = hd.status;
+        hd.sandwich_name = holName;
+        hd.sandwich_trigger = trigger.date;
+        hd.status = 'LWP';
+        hd.note = `${holName} — unpaid: ${why} on ${fmtDateShort(trigger.date)}, the working day ${side} it`;
+        s.holidays = Math.max(0, (s.holidays || 0) - 1);
+        s.lwpDays++;
+        s.sandwichDays = (s.sandwichDays || 0) + 1;
+        anomalies.push({ id: uid(), kind: 'sandwich_violation', employee_id: s.employee.id, date: d,
+          description: `${s.employee.display_name}: ${fmtDateShort(d)} (${holName}) becomes unpaid — ${why} on ${fmtDateShort(trigger.date)}, the working day ${side} it. Forgive it on the day if there was a reason.` });
+      }
+    }
+  }
+
+
+  // Totals again: the rule above moved days into LWP after Pass 4 ran.
+  for (const s of empSummary.values()) {
+    s.strikeHalfDays = Math.floor(s.lateStrikes / STRIKE_TO_HALF_DAY);
+    s.totalCutDays = s.lwpDays + 0.5 * (s.strikeHalfDays + s.halfLwp);
   }
 
   return { reconciledDays, anomalies, summaries: Array.from(empSummary.values()), leave_credits };
@@ -2162,23 +2319,26 @@ function renderBalances(){
     // Carry-forward from last year is ADDED on top of the AY default — never replaces.
     // Legacy `*_allowance_override` (if present from earlier data) is interpreted as
     // already-total, kept for back-compat until the next year-end refresh.
-    const clCF = (e.cl_carry_forward != null && !isNaN(e.cl_carry_forward)) ? Number(e.cl_carry_forward) : 0;
-    const elCF = (e.el_carry_forward != null && !isNaN(e.el_carry_forward)) ? Number(e.el_carry_forward) : 0;
-    const clAllowance = (e.cl_allowance_override != null && e.cl_carry_forward == null) ? e.cl_allowance_override : (AY.cl_per_teacher + clCF);
-    const elAllowance = (e.el_allowance_override != null && e.el_carry_forward == null) ? e.el_allowance_override : (AY.el_per_teacher + elCF);
+    const allow = leaveAllowance(e);
+    const clCF = allow.clCF, elCF = allow.elCF;
+    const clAllowance = allow.cl, elAllowance = allow.el;
     const clLeft = clAllowance - cl, elLeft = elAllowance - el;
+    // Says why the number is what it is, so nobody has to ask.
+    const basis = allow.fixed ? 'set by hand'
+      : allow.prorated ? `${allow.months} of 12 months, from ${fmtDateShort(allow.from)}`
+      : '';
     const clDisplay = clCred > 0 ? `${cl} <span class="text-xs text-gray-400">(${clRaw}−${clCred} credited)</span>` : `${cl}`;
     const elDisplay = elCred > 0 ? `${el} <span class="text-xs text-gray-400">(${elRaw}−${elCred} credited)</span>` : `${el}`;
     // Left column: show "X of Y" with carry-forward breakdown if any
-    const clLeftDisplay = clCF > 0
-      ? `${clLeft} <span class="text-xs text-gray-400">of ${clAllowance} (${AY.cl_per_teacher}+${clCF} cf)</span>`
-      : `${clLeft} <span class="text-xs text-gray-400">of ${clAllowance}</span>`;
-    const elLeftDisplay = elCF > 0
-      ? `${elLeft} <span class="text-xs text-gray-400">of ${elAllowance} (${AY.el_per_teacher}+${elCF} cf)</span>`
-      : `${elLeft} <span class="text-xs text-gray-400">of ${elAllowance}</span>`;
+    const madeOf = (base, cf) => cf > 0 ? `${base}+${cf} cf` : `${base}`;
+    const clLeftDisplay = `${clLeft} <span class="text-xs text-gray-400">of ${clAllowance}${
+      allow.fixed ? '' : ` (${madeOf(allow.clBase, clCF)})`}</span>${
+      basis ? `<div class="text-xs text-gray-400">${basis}</div>` : ''}`;
+    const elLeftDisplay = `${elLeft} <span class="text-xs text-gray-400">of ${elAllowance}${
+      allow.fixed ? '' : ` (${madeOf(allow.elBase, elCF)})`}</span>`;
     // Optional-holiday tally against the AY cap
     const optHol = optHolCounts[e.id] || 0;
-    const optHolCap = AY.optional_hol_per_teacher || 3;
+    const optHolCap = allow.optHol;
     const optHolOver = optHol > optHolCap;
     const optHolDisplay = `${optHol} <span class="text-xs text-gray-400">of ${optHolCap}</span>${optHolOver?' <span class="text-xs text-red-600 font-semibold ml-1">over cap</span>':''}`;
     return `<tr>
@@ -2363,7 +2523,7 @@ function renderReports(){
     ${(() => {
       const empAdj = (state.adjustments||[]).filter(a => a.month===month && a.employee_id===viewingEmployeeId);
       if (!empAdj.length) return '';
-      const labelsMap = { forgive_late: "Late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP" };
+      const labelsMap = { forgive_late: "Late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP", forgive_sandwich: "Sandwich-rule holiday" };
       return `<div class="bg-green-50 border border-green-200 rounded-2xl p-5 mb-6">
         <h3 class="text-sm font-semibold text-green-800 mb-2">✓ Forgiven this month (${empAdj.length})</h3>
         <ul class="text-sm text-green-900 space-y-1">${empAdj.map(a => `<li>• ${labelsMap[a.kind]||'Cut'} on <b>${fmtDate(a.date)}</b> — ${escapeHtml(a.reason)} <button onclick="openForgiveModal('${viewingEmployeeId}','${a.date}','${a.kind}')" class="btn-link" style="margin-left:8px;font-size:12px">undo</button></li>`).join('')}</ul>
@@ -2407,10 +2567,11 @@ function renderReports(){
             const lateInfo = d.late ? `<div class="text-[10px] font-semibold" style="color:rgba(255,255,255,0.95)">+${d.late}m · ${minToTime(d.in)}</div>` : (d.in ? `<div class="text-[10px]" style="color:rgba(255,255,255,0.85)">${minToTime(d.in)}</div>` : '');
             const noteHtml = d.note ? `<div class="text-[10px] leading-tight" style="color:rgba(255,255,255,0.85)">${d.note}</div>` : '';
             const forgivenTag = d.forgiven ? `<div class="text-[9px] font-bold leading-none mt-auto self-start" style="background:rgba(255,255,255,0.25);padding:2px 5px;border-radius:4px;color:white">✓ FORGIVEN</div>` : '';
+            const sandwichTag = d.sandwiched ? `<div class="text-[9px] font-bold leading-none mt-auto self-start" style="background:rgba(255,255,255,0.3);padding:2px 5px;border-radius:4px;color:white">SANDWICH</div>` : '';
             const editedTag = d.is_overridden ? `<div class="text-[9px] font-bold leading-none mt-auto self-start" style="background:rgba(255,255,255,0.3);padding:2px 5px;border-radius:4px;color:white">✎ EDITED</div>` : '';
             const clickable = `onclick="openDayEditModal('${viewingEmployeeId}','${d.date}')" style="cursor:pointer" title="Click to edit this day"`;
             const statusLabel = d.status === "FullDay" ? "Full Day" : d.status === "CasualLeave" ? "CL" : d.status === "EarnedLeave" ? "EL" : d.status === "ForgotPunch" ? "Forgot Punch" : d.status === "WeekOff" ? "Week Off" : d.status === "HalfLWP" ? "Half LWP" : d.status;
-            cells.push(`<div class="day-cell day-${d.status} ${d.forgiven?'forgiven':''}" ${clickable}><div class="dow">${dowName(dow)}</div><div class="num">${dnum}</div><div class="text-[10px] font-semibold">${statusLabel}</div>${lateInfo}${noteHtml}${forgivenTag||editedTag}</div>`);
+            cells.push(`<div class="day-cell day-${d.status} ${d.forgiven?'forgiven':''}" ${clickable}><div class="dow">${dowName(dow)}</div><div class="num">${dnum}</div><div class="text-[10px] font-semibold">${statusLabel}</div>${lateInfo}${noteHtml}${forgivenTag||sandwichTag||editedTag}</div>`);
           }
           return cells.join('');
         })()}
@@ -2593,7 +2754,7 @@ function buildReportText(empId, month, opts={}){
   const empAdjustments = (state.adjustments||[]).filter(a => a.month === month && a.employee_id === empId);
   let forgivenSection = '';
   if (empAdjustments.length) {
-    const labelsMap = { forgive_late: "Late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP" };
+    const labelsMap = { forgive_late: "Late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP", forgive_sandwich: "Sandwich-rule holiday" };
     const items = empAdjustments.map(a => `  • ${labelsMap[a.kind]||'Cut'} on ${fmtDateShort(a.date)} (${dowName(dayOfWeek(a.date))}) — ${a.reason}`).join('\n');
     forgivenSection = `\nFORGIVEN THIS MONTH\nAs a one-time consideration we've not counted the following:\n${items}\n\nWithout this allowance your cuts would have been higher. Please be mindful going forward — these items remain on record but didn't affect this month's pay.\n`;
   }
@@ -2627,6 +2788,20 @@ function openDayEditModal(empId, date){
   ];
   const opts = STATUS_OPTIONS.map(o => `<option value="${o.val}" ${o.val===currentStatus?'selected':''}>${o.label}</option>`).join('');
 
+  // A day the sandwich rule turned unpaid explains itself here, and can be
+  // excused in one click — the rule is blunt on purpose, and a funeral is not
+  // a long weekend.
+  const sandwichLine = day?.sandwiched
+    ? `<div class="text-xs mb-2" style="background:#FEF3F2;border:1px solid #FECDCA;border-radius:8px;padding:9px 11px;color:#B42318">
+         <strong>${escapeHtml(day.sandwich_name || 'Holiday')} was turned unpaid by the sandwich rule</strong> —
+         she was away on ${fmtDate(day.sandwich_trigger)}, the working day beside it.
+         <button onclick="openForgiveModal('${empId}','${date}','forgive_sandwich')" class="btn-link" style="margin-left:6px;font-size:12px">Excuse this holiday</button>
+       </div>`
+    : day?.sandwich_excused
+      ? `<div class="text-xs mb-2" style="background:#ECFDF3;border:1px solid #ABEFC6;border-radius:8px;padding:9px 11px;color:#0B7B3E">
+           The sandwich rule was excused for this holiday. <button onclick="openForgiveModal('${empId}','${date}','forgive_sandwich')" class="btn-link" style="margin-left:6px;font-size:12px">undo</button></div>`
+      : '';
+
   const punchLine = (day?.in || day?.out)
     ? `<div class="text-xs text-gray-500 mb-2">PetPooja punches — in: <strong>${day.in?minToTime(day.in):'—'}</strong>, out: <strong>${day.out?minToTime(day.out):'—'}</strong></div>`
     : '<div class="text-xs text-gray-500 mb-2">No punch data from PetPooja for this day.</div>';
@@ -2637,6 +2812,7 @@ function openDayEditModal(empId, date){
 
   openModal(`Edit day — ${emp.display_name}, ${fmtDate(date)}`, `
     <div class="space-y-3">
+      ${sandwichLine}
       ${punchLine}
       <div class="text-xs text-gray-500">Engine's current verdict: <strong>${currentStatus}</strong>${existingOverride ? ' <span class="text-eurokids-blue">(currently overridden)</span>' : ''}</div>
       <div>
@@ -2687,9 +2863,9 @@ function removeDayOverride(ovId, month){
 
 function openForgiveModal(empId, date, kind){
   const emp = empById(empId);
-  const labels = { forgive_late: "late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP" };
+  const labels = { forgive_late: "late strike", forgive_lwp: "LWP day", forgive_halflwp: "½-day LWP", forgive_sandwich: "sandwich-rule holiday" };
   // If already forgiven, offer to undo
-  const existing = (state.adjustments||[]).find(a => a.employee_id===empId && a.date===date);
+  const existing = (state.adjustments||[]).find(a => a.employee_id===empId && a.date===date && a.kind===kind);
   if (existing) {
     if (confirm(`This ${labels[existing.kind]||'item'} was already forgiven (reason: "${existing.reason}"). Undo the forgiveness?`)) {
       const undoMonth = existing.month || existing.date?.slice(0,7);
@@ -3279,7 +3455,13 @@ function openEmployeeForm(id){
               <div class="text-xs text-gray-500 mt-1">Total EL this year = ${AY.el_per_teacher} + above</div>
             </div>
           </div>
-          <div class="text-xs text-gray-500">Standard allowance this AY ${AY.label}: <strong>${AY.cl_per_teacher} CL · ${AY.el_per_teacher} EL</strong>. Whatever you type above is <em>added</em> to that — leave-applications already in the system are not touched.</div>
+          <div>
+            <label class="text-xs font-medium text-gray-700 block mb-1">Leave counted from <span class="text-gray-400">(only if different from the joining date)</span></label>
+            <input id="ef-entfrom" type="date" class="input" value="${e?.entitlement_from||''}" />
+            <div class="text-xs text-gray-500 mt-1">For someone who left and came back: the date they came back. Their joining date above stays as it is.</div>
+          </div>
+          <div class="text-xs text-gray-500">Full year this AY ${AY.label}: <strong>${AY.cl_per_teacher} CL · ${AY.el_per_teacher} EL</strong>, prorated by the months served. Carry-forward is added on top and is never prorated — it was earned in a year already worked.</div>
+          <div id="ef-allow-preview" class="text-xs" style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:8px 10px;color:#3730A3"></div>
         </div>
       </div>
 
@@ -3323,6 +3505,24 @@ function openEmployeeForm(id){
     });
     loginEl.addEventListener('input', () => { loginEl.dataset.autofilled = '0'; });
   }
+
+  // Show the arithmetic as it is typed, so nobody has to take it on trust.
+  const previewAllowance = () => {
+    const box = document.getElementById('ef-allow-preview'); if (!box) return;
+    const a = leaveAllowance({
+      joining_date: document.getElementById('ef-join')?.value || null,
+      entitlement_from: document.getElementById('ef-entfrom')?.value || null,
+      cl_carry_forward: Number(document.getElementById('ef-cl-carryfwd')?.value) || 0,
+      el_carry_forward: Number(document.getElementById('ef-el-carryfwd')?.value) || 0,
+    });
+    box.innerHTML = a.prorated
+      ? `Counted from <strong>${fmtDateShort(a.from)}</strong> — <strong>${a.months} of 12 months</strong>, so <strong>${a.cl} CL</strong> (${a.clBase}${a.clCF ? ` + ${a.clCF} carried` : ''}) and <strong>${a.el} EL</strong> (${a.elBase}${a.elCF ? ` + ${a.elCF} carried` : ''}) this year.`
+      : `Here for the whole year — <strong>${a.cl} CL</strong> and <strong>${a.el} EL</strong>${(a.clCF || a.elCF) ? ', including what was carried forward' : ''}.`;
+  };
+  ['ef-join', 'ef-entfrom', 'ef-cl-carryfwd', 'ef-el-carryfwd'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', previewAllowance);
+  });
+  previewAllowance();
 }
 async function saveEmployee(id){
   const display = document.getElementById('ef-display').value.trim();
@@ -3382,6 +3582,7 @@ async function saveEmployee(id){
       address, emergency_contact: emergency, aadhaar,
       bank_name: bankName, bank_account: bankAccount, bank_ifsc: bankIfsc, bank_account_name: bankHolder,
       schedule_type: schedType, reports_to: reportsTo,
+      entitlement_from: document.getElementById('ef-entfrom')?.value || null,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || empById(id).login_email || '',
@@ -3398,6 +3599,7 @@ async function saveEmployee(id){
       address, emergency_contact: emergency, aadhaar,
       bank_name: bankName, bank_account: bankAccount, bank_ifsc: bankIfsc, bank_account_name: bankHolder,
       schedule_type: schedType, reports_to: reportsTo,
+      entitlement_from: document.getElementById('ef-entfrom')?.value || null,
       cl_carry_forward: clCF,
       el_carry_forward: elCF,
       login_email: loginEmail || '',

@@ -303,6 +303,9 @@ let myRequests = [];  // merged leaves (request + blob)
 let myCredits = [];   // leave_credits across reconciled months
 let myCarryForward = { cl: 0, el: 0 };  // additive carry-forward from previous AYs
 let myLegacyOverride = { cl: null, el: null };  // back-compat for old data shape
+// Worked out by the server from the joining date, so HR and the teacher can
+// never be looking at two different entitlements.
+let myAllowance = null;
 
 const HR_EMAILS = ['hr@eurokidsjmdenclave.org', 'abhinav@ganya.in'];
 
@@ -761,12 +764,14 @@ async function loadRequests(){
     myCredits = (json.credits || []).filter(c => c.date >= AY.start && c.date <= AY.end);
     myCarryForward = json.carry_forward || { cl: 0, el: 0 };
     myLegacyOverride = json.legacy_override || { cl: null, el: null };
+    myAllowance = json.allowance || null;
   } catch (e) {
     console.error('[loadRequests]', e);
     myRequests = [];
     myCredits = [];
     myCarryForward = { cl: 0, el: 0 };
     myLegacyOverride = { cl: null, el: null };
+    myAllowance = null;
   }
 }
 
@@ -784,8 +789,12 @@ function renderBalance(){
   const usedEL = Math.max(0, usedEL_raw - elCred);
   // Total = standard AY allowance + carry-forward from last year (additive)
   // Legacy override field, if present, is the literal total (back-compat)
-  const clTotal = (myLegacyOverride.cl != null) ? myLegacyOverride.cl : (AY.cl_per_teacher + (myCarryForward.cl || 0));
-  const elTotal = (myLegacyOverride.el != null) ? myLegacyOverride.el : (AY.el_per_teacher + (myCarryForward.el || 0));
+  // The server's figure first; the old arithmetic only as a fallback for a
+  // cached page talking to a version that does not send it yet.
+  const clTotal = myAllowance ? myAllowance.cl
+    : (myLegacyOverride.cl != null) ? myLegacyOverride.cl : (AY.cl_per_teacher + (myCarryForward.cl || 0));
+  const elTotal = myAllowance ? myAllowance.el
+    : (myLegacyOverride.el != null) ? myLegacyOverride.el : (AY.el_per_teacher + (myCarryForward.el || 0));
   document.getElementById('cl-total').textContent = clTotal;
   document.getElementById('el-total').textContent = elTotal;
   document.getElementById('cl-left').textContent  = Math.max(0, clTotal - usedCL);

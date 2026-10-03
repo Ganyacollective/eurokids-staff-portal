@@ -68,6 +68,8 @@ export async function GET(req: NextRequest) {
   // Pluck the per-employee carry-forward additions
   type Emp = {
     id: string;
+    joining_date?: string | null;
+    entitlement_from?: string | null;       // a rejoiner's clock restarts here
     cl_carry_forward?: number | null;
     el_carry_forward?: number | null;
     cl_allowance_override?: number | null;  // legacy field
@@ -76,14 +78,42 @@ export async function GET(req: NextRequest) {
   const employees = (portal?.data?.employees as Emp[]) || [];
   const empRecord = employees.find((e) => e.id === link.employee_id);
   // Carry-forward is additive on top of AY default; legacy override is total (back-compat).
-  const carryForward = {
-    cl: Number(empRecord?.cl_carry_forward ?? 0),
-    el: Number(empRecord?.el_carry_forward ?? 0),
-  };
+  // ?? does not catch NaN, and the employee form can store one. A NaN here
+  // reached the teacher's screen as the word "NaN" where her leave balance
+  // should be, while HR saw a correct number.
+  const num = (v: unknown) => (v == null || isNaN(Number(v)) ? 0 : Number(v));
+  const carryForward = { cl: num(empRecord?.cl_carry_forward), el: num(empRecord?.el_carry_forward) };
   const legacyOverride = {
     cl: empRecord?.cl_carry_forward == null && empRecord?.cl_allowance_override != null ? empRecord.cl_allowance_override : null,
     el: empRecord?.el_carry_forward == null && empRecord?.el_allowance_override != null ? empRecord.el_allowance_override : null,
   };
+
+  // The entitlement itself, worked out here rather than in the teacher's
+  // browser. It used to be computed in two places from a constant copied into
+  // two files, which is how a teacher and HR end up looking at different
+  // numbers for the same person.
+  const AY = { start: "2026-04-06", end: "2027-03-19", cl: 7, el: 8 };
+  const allowance = (() => {
+    const from = empRecord?.entitlement_from || empRecord?.joining_date || null;
+    let months = 12, prorated = false;
+    if (from && from > AY.start) {
+      prorated = true;
+      if (from > AY.end) months = 0;
+      else {
+        const [y, m, d] = from.split("-").map(Number);
+        const [ey, em] = AY.end.split("-").map(Number);
+        const firstWhole = d <= 15 ? y * 12 + m : y * 12 + m + 1;
+        months = Math.max(0, Math.min(12, ey * 12 + em - firstWhole + 1));
+      }
+    }
+    const half = (n: number) => Math.round(n * 2) / 2;
+    const share = months / 12;
+    return {
+      months, prorated, from,
+      cl: legacyOverride.cl != null ? Number(legacyOverride.cl) : half(AY.cl * share) + carryForward.cl,
+      el: legacyOverride.el != null ? Number(legacyOverride.el) : half(AY.el * share) + carryForward.el,
+    };
+  })();
 
   // 4) Merge — leave_request rows are primary. For each leave_request, if there
   //    exists a blob entry with matching source_id, prefer the blob's status &
@@ -131,5 +161,6 @@ export async function GET(req: NextRequest) {
   // 5) Sort newest first by applied_at
   merged.sort((a, b) => (b.applied_at || "").localeCompare(a.applied_at || ""));
 
-  return NextResponse.json({ ok: true, leaves: merged, credits, carry_forward: carryForward, legacy_override: legacyOverride, employee: link });
+  return NextResponse.json({ ok: true, leaves: merged, credits, carry_forward: carryForward, legacy_override: legacyOverride,
+    allowance, employee: link });
 }
