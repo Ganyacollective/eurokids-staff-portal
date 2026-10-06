@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=67">
-<link rel="prefetch" href="/brand/enquiries.js?v=67" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=68">
+<link rel="prefetch" href="/brand/enquiries.js?v=68" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -149,7 +149,14 @@ const TABS = {
   compose:    { label: 'Send Email',    icon: 'mail',   sect: 'Communication', need: () => has('finance') || has('admission') },
   docs:       { label: 'Forms for signature', icon: 'mail', sect: 'Communication', need: () => has('finance') || has('admission') },
   reminders:  { label: 'Reminders',     icon: 'bell',   sect: 'Communication', need: () => has('finance') },
-  daycare:    { label: 'Day care billing', icon: 'rupee', sect: 'School',      need: () => has('finance') || has('receipts') || has('admission') },
+  rb_home:      { app: 'billing', label: 'Reimbursements', icon: 'rupee', sect: 'Reimbursements',
+                  need: () => has('finance') || has('receipts') || has('admission') },
+  rb_customers: { app: 'billing', label: 'Customers',      icon: 'people', sect: 'Reimbursements',
+                  need: () => has('finance') || has('receipts') || has('admission') },
+  rb_recurring: { app: 'billing', label: 'Recurring',      icon: 'list',  sect: 'Reimbursements',
+                  need: () => has('finance') || has('receipts') || has('admission') },
+  bill_home:    { app: 'billing', label: 'Day care billing', icon: 'rupee', sect: 'Billing',
+                  need: () => has('finance') || has('receipts') },
   assets:     { label: 'Equipment',     icon: 'box',    sect: 'School',        need: () => has('inventory') || isOwner() },
   supplies:   { label: 'Supplies',      icon: 'tray',   sect: 'School',        need: () => has('inventory') || isOwner() },
   kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
@@ -159,10 +166,12 @@ const TABS = {
   letters:    { app: 'letters', label: 'Appointment letters', icon: 'mail', sect: 'Staff', need: () => has('letters') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
 };
-const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'School', 'Reference', 'Setup'];
-const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters' };
+const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reimbursements', 'Billing', 'School', 'Reference', 'Setup'];
+const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters',
+  billing: 'Billing & Reimbursements' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
-const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'], letters: ['letters'] };
+const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'], letters: ['letters'],
+  billing: ['rb_home', 'rb_customers', 'rb_recurring'] };
 const tabsFor = a => Object.keys(TABS).filter(t => (TABS[t].app || 'admissions') === (a || 'admissions') && TABS[t].need());
 
 /* ── boot ─────────────────────────────────────────────── */
@@ -222,7 +231,10 @@ function readUrl(){
   const a = m[0], t = m[1];
   if (a === 'apps' || a === '') { app = null; return; }
   if (t && TABS[t]) { app = TABS[t].app || 'admissions'; tab = t; }
-  else if (a === 'enquiries' || a === 'admissions') { app = a; }
+  // A bare #billing or #enquiries, hand-typed or truncated by a chat app that
+  // ate the second segment. Open the app at its first tab rather than the
+  // chooser, and never leave `tab` pointing at another app's tab.
+  else if (APP_NAME[a]) { app = a; tab = tabsFor(a).find(x => x !== 'users') || tab; }
 }
 function writeUrl(push){
   const want = app ? `#${app}/${tab}` : '#apps';
@@ -285,6 +297,9 @@ function renderChooser(){
   const doors = [
     { key:'admissions', name:'Fees & Children',
       desc:'Roster, fees, payment schedules, statements and kits.', ok:canAdmissions, href:null },
+    { key:'billing', name:'Billing & Reimbursements',
+      desc:'Day care invoices, the receipts parents claim from their employers, and who gets one each month.',
+      ok:(has('finance') || has('receipts') || has('admission')), href:null },
     { key:'staff', name:'Staff Portal',
       desc:'Leave, attendance and payroll.', ok:canStaff, href:'/staff' },
     { key:'enquiries', name:'Enquiries & Admissions',
@@ -320,7 +335,11 @@ function renderChooser(){
     b.onclick = () => {
       const d = doors.find(x => x.key === b.dataset.key);
       if (d.href) { location.href = d.href; return; }
-      app = d.key === 'enquiries' ? 'enquiries' : d.key === 'letters' ? 'letters' : 'admissions';
+      // A door key is an app name, except 'users', which is a single tab
+      // living inside the Fees app. Keyed off APP_NAME so a new app is
+      // reachable the moment it is named there — the Billing door spent a
+      // day opening the Fees app because this was a hand-written ladder.
+      app = d.key === 'users' ? 'admissions' : (APP_NAME[d.key] ? d.key : 'admissions');
       tab = d.key === 'users' ? 'users'
           : d.key === 'letters' ? 'letters'
           : (tabsFor(app).find(t => t !== 'users') || 'overview');
@@ -527,7 +546,9 @@ function renderApp(){
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
      templates: tabTemplates, letters: tabLetters, docs: tabDocs,
-     assets: tabAssets, supplies: tabSupplies, daycare: tabDaycare,
+     assets: tabAssets, supplies: tabSupplies,
+     rb_home: tabReimbursements, rb_customers: tabCustomers, rb_recurring: tabRecurring,
+     bill_home: tabDaycareBilling,
      enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_setup: tabEnqSetup }[tab] || tabOverview)();
 }
 
@@ -3290,20 +3311,17 @@ async function delReceipt(id){
 // query was slower than that. Wait for the tab to actually finish painting.
 async function openPlanFrom(uin){ openPlan(uin); }
 
-/* ══ DAY CARE BILLING ═══════════════════════════════════════════════════
-   Two documents off one engine.
+/* ══ BILLING & REIMBURSEMENTS ═══════════════════════════════════════════
+   Its own app, with two halves that share one engine and nothing else.
 
-   The reimbursement copy is what a parent claims against their employer:
-   hours, a rate per hour, the child named as a field, and always paid in
-   full — a claim with a balance on it is worth nothing. The monthly bill is
-   the ordinary one: quantities and rates, grouped under the child and the
-   month, terms on the back.
+   REIMBURSEMENTS is a document business, not a money business. The fee has
+   already been paid; what the parent needs is a receipt their employer will
+   accept. So there are no receivables here, no overdue, no collected —
+   those figures would all read zero or, worse, read as though a family owed
+   something. The only numbers that mean anything are counts.
 
-   Generating and sending are separate on purpose. The run on the 1st raises
-   drafts; sending is a decision, because a family behind on their own fees
-   should not be handed a claimable receipt until somebody says so.
-
-   Nothing here touches EPMS or the school fee ledger.                      */
+   BILLING is the money half: the monthly bill, and in time Razorpay. That is
+   where a receivables dashboard belongs.                                   */
 let _dc = { parties: [], children: [], rates: [], invoices: [], lines: [], recurring: [] };
 
 async function dcApi(path, body){
@@ -3323,103 +3341,497 @@ const dcMonth = d => d ? new Date(String(d).slice(0,10) + 'T00:00:00Z')
 const dcParty = id => (_dc.parties || []).find(p => p.id === id);
 const dcChild = id => (_dc.children || []).find(c => c.id === id);
 const dcLines = id => (_dc.lines || []).filter(l => l.invoice_id === id).sort((a,b)=>a.position-b.position);
+const dcKidsOf = pid => (_dc.children || []).filter(c => c.party_id === pid);
+const dcOf = kind => (_dc.invoices || []).filter(i => i.kind === kind);
 
-async function tabDaycare(){
-  el('body').innerHTML = '<div class="loading">Loading…</div>';
+async function dcLoad(){
   const r = await dcApi('/list');
+  if (r.ok) _dc = r;
+  return r;
+}
+
+/* ── Reimbursements: how many, never how much ─────────────────────────── */
+async function tabReimbursements(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const r = await dcLoad();
   if (!r.ok) return el('body').innerHTML = fail(r);
-  _dc = r;
 
-  const drafts = (_dc.invoices || []).filter(i => i.status === 'draft');
-  const sent   = (_dc.invoices || []).filter(i => i.status === 'sent');
-  const held   = drafts.filter(i => i.kind === 'reimbursement' && dcParty(i.party_id)?.hold_reimbursement);
-  const thisYear = sent.filter(i => String(i.invoice_date) >= todayHere().slice(0,4) + '-01-01')
-    .reduce((a, i) => a + Number(i.total || 0), 0);
+  const mine = dcOf('reimbursement');
+  const drafts = mine.filter(i => i.status === 'draft');
+  const sent = mine.filter(i => i.status === 'sent');
+  const held = drafts.filter(i => dcParty(i.party_id)?.hold_reimbursement);
+  const ready = drafts.filter(i => !dcParty(i.party_id)?.hold_reimbursement);
+  const thisMonth = todayHere().slice(0, 7);
+  const sentThisMonth = sent.filter(i => String(i.sent_at || '').slice(0, 7) === thisMonth);
+  const standing = (_dc.recurring || []).filter(x => x.kind === 'reimbursement' && x.status === 'active');
 
-  el('body').innerHTML = head('Day care billing',
-      'The monthly bill, and the receipt a parent claims from their employer. Nothing here touches the school fee.',
-      `<button class="btn line" id="dc-family">Add a family…</button><button class="btn" id="dc-new">New invoice…</button>`)
+  el('body').innerHTML = head('Reimbursements',
+      'The receipt a parent hands to their employer. The fee is already paid — nothing here is owed, so nothing here is counted in rupees.',
+      `<button class="btn line" id="rb-new">New receipt…</button>${
+        ready.length ? `<button class="btn" id="rb-sendall">Send all ${ready.length}</button>` : ''}`)
     + `<div class="stats" style="margin-bottom:16px">
-        <div class="stat ${drafts.length ? 'warn' : ''}"><div class="k">Waiting to send</div><div class="v">${drafts.length}</div>
-          <div class="m">Raised, numbered only when you send them</div></div>
-        <div class="stat ${held.length ? 'crit' : ''}"><div class="k">On hold</div><div class="v">${held.length}</div>
-          <div class="m">Family behind on fees — never sent automatically</div></div>
-        <div class="stat"><div class="k">Sent this year</div><div class="v">${money(thisYear)}</div>
-          <div class="m">${sent.length} document${sent.length === 1 ? '' : 's'}</div></div>
+        <div class="stat ${ready.length ? 'warn' : ''}"><div class="k">Ready to send</div><div class="v">${ready.length}</div>
+          <div class="m">Raised and waiting for you</div></div>
+        <div class="stat ${held.length ? 'crit' : ''}"><div class="k">Held back</div><div class="v">${held.length}</div>
+          <div class="m">Family behind on fees</div></div>
+        <div class="stat"><div class="k">Sent this month</div><div class="v">${sentThisMonth.length}</div>
+          <div class="m">${sent.length} altogether</div></div>
+        <div class="stat"><div class="k">Standing each month</div><div class="v">${standing.length}</div>
+          <div class="m">${standing.filter(x => x.auto_send).length} send themselves</div></div>
       </div>
 
-      <div class="panel" style="margin-bottom:16px"><div class="ptop"><h2 id="dc-h">Invoices</h2>
-        <span class="hint">A sent invoice is frozen — duplicate it rather than editing it</span></div>
+      ${held.length ? `<div class="panel" style="margin-bottom:16px;border-color:var(--crit)">
+        <div class="ptop"><h2>${held.length} held back</h2>
+          <span class="hint">Raised, but the family is behind on fees — Send all skips these</span></div>
+        ${held.map(i => { const p = dcParty(i.party_id), c = dcChild(i.child_id);
+          return `<div class="row" style="align-items:center">
+            <div class="l" style="flex:1"><strong style="color:var(--ink)">${esc(c?.name || '—')}</strong> —
+              ${dcMonth(i.period_start)}
+              <span class="sub">${esc(p?.display_name || '')}</span></div>
+            <div style="display:flex;gap:8px;white-space:nowrap">
+              <button class="btn line" onclick="dcHold(${i.party_id}, false)">Release the family</button>
+              <button class="btn line" onclick="dcSend(${i.id}, this)">Send this one</button>
+            </div></div>`; }).join('')}
+      </div>` : ''}
+
+      <div class="panel"><div class="ptop"><h2 id="rb-h">Receipts</h2>
+        <span class="hint">A sent receipt is frozen — duplicate it rather than editing it</span></div>
         <div class="tools" style="padding:0 16px 10px">
-          <div class="search"><input class="in" id="dc-q" type="search" placeholder="Child, family or number"></div>
-          <select class="in" id="dc-f">
-            <option value="draft">Waiting to send</option>
+          <div class="search"><input class="in" id="rb-q" type="search" placeholder="Child, family or number"></div>
+          <select class="in" id="rb-f">
+            <option value="draft">Ready to send</option>
             <option value="">Everything</option>
-            <option value="reimbursement">Reimbursement copies</option>
-            <option value="billing">Monthly bills</option>
             <option value="sent">Sent</option>
+            <option value="recurring">From a standing arrangement</option>
+            <option value="oneoff">One-off</option>
           </select>
         </div>
-        <div class="tw"><table><thead><tr><th>Number</th><th>Kind</th><th>Child</th><th>Family</th>
-          <th>Month</th><th class="r">Total</th><th>Status</th><th></th></tr></thead>
-        <tbody id="dc-rows"></tbody></table></div></div>
-
-      <div class="panel"><div class="ptop"><h2>Families</h2>
-        <span class="hint">Hold a family and their reimbursement copies stop going out on their own</span></div>
-        <div class="tw"><table><thead><tr><th>Family</th><th>Father</th><th>Children</th><th>Email</th>
-          <th>Phone</th><th>Reimbursement</th></tr></thead>
-        <tbody>${(_dc.parties || []).map(p => {
-          const kids = (_dc.children || []).filter(c => c.party_id === p.id);
-          return `<tr>
-            <td><strong>${esc(p.display_name)}</strong><div class="hint" style="font-size:10.5px">${esc(p.party_number || '')}</div></td>
-            <td class="hint">${esc(p.father_name || '—')}</td>
-            <td class="hint">${kids.map(k => esc(k.name) + (k.uin ? ' <span class="chip c-good">ours</span>' : '')).join('<br>') || '—'}</td>
-            <td class="hint">${esc(p.login_email || p.email || '—')}</td>
-            <td class="hint">${esc(p.mobile || '—')}</td>
-            <td><a style="cursor:pointer;color:${p.hold_reimbursement ? 'var(--crit)' : 'var(--good)'}"
-                   onclick="dcHold(${p.id}, ${!p.hold_reimbursement})">${p.hold_reimbursement ? 'On hold — release' : 'Sending — hold'}</a></td>
-          </tr>`;
-        }).join('') || `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--muted)">No families yet.</td></tr>`}
-        </tbody></table></div></div>`;
+        <div class="tw"><table><thead><tr><th>Number</th><th>Child</th><th>Family</th><th>Month</th>
+          <th>Raised</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rb-rows"></tbody></table></div></div>`;
 
   const paint = () => {
-    const q = (el('dc-q').value || '').trim().toLowerCase();
-    const f = el('dc-f').value;
-    const rows = (_dc.invoices || []).filter(i => {
+    const q = (el('rb-q').value || '').trim().toLowerCase();
+    const f = el('rb-f').value;
+    const rows = mine.filter(i => {
       if (f === 'draft' && i.status !== 'draft') return false;
       if (f === 'sent' && i.status !== 'sent') return false;
-      if ((f === 'reimbursement' || f === 'billing') && i.kind !== f) return false;
+      if (f === 'recurring' && !i.recurring_id) return false;
+      if (f === 'oneoff' && i.recurring_id) return false;
       if (!q) return true;
       const p = dcParty(i.party_id), c = dcChild(i.child_id);
       return [i.number, p?.display_name, c?.name].some(v => String(v || '').toLowerCase().includes(q));
     });
-    el('dc-h').textContent = `${rows.length} invoice${rows.length === 1 ? '' : 's'}`;
-    el('dc-rows').innerHTML = rows.map(i => {
+    el('rb-h').textContent = `${rows.length} receipt${rows.length === 1 ? '' : 's'}`;
+    el('rb-rows').innerHTML = rows.map(i => {
       const p = dcParty(i.party_id), c = dcChild(i.child_id);
-      const onHold = i.kind === 'reimbursement' && p?.hold_reimbursement;
+      const onHold = p?.hold_reimbursement;
       return `<tr>
         <td><strong>${esc(i.number || '—')}</strong></td>
-        <td><span class="chip ${i.kind === 'reimbursement' ? 'c-good' : 'c-mute'}">${i.kind === 'reimbursement' ? 'Reimbursement' : 'Bill'}</span></td>
         <td>${esc(c?.name || '—')}</td>
-        <td class="hint">${esc(p?.display_name || '—')}</td>
+        <td class="hint"><a style="cursor:pointer" onclick="dcOpenCustomer(${i.party_id})">${esc(p?.display_name || '—')}</a></td>
+        <td class="hint">${dcMonth(i.period_start)}</td>
+        <td class="hint">${i.recurring_id ? '<span class="chip c-mute">Monthly</span>' : '<span class="chip c-mute">One-off</span>'}</td>
+        <td>${i.status === 'sent'
+          ? `<span class="chip c-good">Sent</span><div class="hint" style="font-size:10.5px">${shortDate(i.sent_at)}</div>`
+          : onHold ? '<span class="chip c-crit">Held</span>' : '<span class="chip c-warn">Ready</span>'}</td>
+        <td style="white-space:nowrap">
+          <a style="cursor:pointer" onclick="dcPreview(${i.id})">Open</a>
+          ${i.status === 'draft' ? ` · <a style="cursor:pointer" onclick="dcEdit(${i.id})">Edit</a> · <a style="cursor:pointer" onclick="dcSend(${i.id}, this)">Send</a>` : ''}
+          · <a style="cursor:pointer" onclick="dcDuplicate(${i.id}, this)">Duplicate</a></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
+  };
+  paint();
+  el('rb-q').oninput = debounce(paint, 160);
+  el('rb-f').onchange = paint;
+  el('rb-new').onclick = () => dcInvoiceDrawer(null, 'reimbursement');
+  if (el('rb-sendall')) el('rb-sendall').onclick = () => dcSendAll(ready);
+}
+
+// One button on the 1st. Skips anyone held back, and says what it did —
+// sending twelve documents silently is how a family gets one they should not
+// have had.
+async function dcSendAll(ready){
+  if (!ready.length) return;
+  if (!confirm(`Send ${ready.length} receipt${ready.length === 1 ? '' : 's'} now?\n\nEach takes its number and is frozen. Families that are held back are skipped.`)) return;
+  const b = el('rb-sendall'); b.disabled = true;
+  const done = [], failed = [];
+  for (let i = 0; i < ready.length; i++) {
+    b.textContent = `Sending ${i + 1} of ${ready.length}…`;
+    const r = await dcApi('/send', { id: ready[i].id });
+    (r.ok ? done : failed).push(r.ok ? r.number : (dcChild(ready[i].child_id)?.name || ready[i].id) + ': ' + r.error);
+  }
+  b.disabled = false;
+  alert(`${done.length} sent.` + (failed.length ? `\n\n${failed.length} did not go:\n` + failed.join('\n') : ''));
+  tabReimbursements();
+}
+
+/* ── Customers ────────────────────────────────────────────────────────── */
+async function tabCustomers(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const r = await dcLoad();
+  if (!r.ok) return el('body').innerHTML = fail(r);
+
+  el('body').innerHTML = head('Customers',
+      'Whoever the receipt is addressed to. Open one to see everything ever issued to them.',
+      `<button class="btn" id="cu-new">Add a customer…</button>`)
+    + `<div class="panel">
+        <div class="tools" style="padding:14px 16px 10px">
+          <div class="search"><input class="in" id="cu-q" type="search" placeholder="Name, child, email or phone"></div>
+        </div>
+        <div class="tw"><table><thead><tr><th>Customer</th><th>Child</th><th>Email</th><th>Phone</th>
+          <th class="r">Receipts</th><th>Last one</th><th>Reimbursement</th></tr></thead>
+        <tbody id="cu-rows"></tbody></table></div></div>`;
+
+  const paint = () => {
+    const q = (el('cu-q').value || '').trim().toLowerCase();
+    const rows = (_dc.parties || []).filter(p => {
+      if (!q) return true;
+      const kids = dcKidsOf(p.id).map(k => k.name).join(' ');
+      return [p.display_name, p.father_name, p.email, p.mobile, kids]
+        .some(v => String(v || '').toLowerCase().includes(q));
+    });
+    el('cu-rows').innerHTML = rows.map(p => {
+      const kids = dcKidsOf(p.id);
+      const mine = (_dc.invoices || []).filter(i => i.party_id === p.id && i.status === 'sent');
+      const last = mine.map(i => i.sent_at).filter(Boolean).sort().slice(-1)[0];
+      return `<tr style="cursor:pointer" onclick="dcOpenCustomer(${p.id})">
+        <td><strong>${esc(p.display_name)}</strong><div class="hint" style="font-size:10.5px">${esc(p.party_number || '')}</div></td>
+        <td>${kids.map(k => esc(k.name)).join('<br>') || '—'}</td>
+        <td class="hint">${esc(p.email || '—')}</td>
+        <td class="hint">${esc(p.mobile || '—')}</td>
+        <td class="r num">${mine.length}</td>
+        <td class="hint">${last ? shortDate(last) : '—'}</td>
+        <td><span class="chip ${p.hold_reimbursement ? 'c-crit' : 'c-good'}">${p.hold_reimbursement ? 'Held' : 'Sending'}</span></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--muted)">No customers yet.</td></tr>`;
+  };
+  paint();
+  el('cu-q').oninput = debounce(paint, 160);
+  el('cu-new').onclick = () => dcCustomerDrawer();
+}
+
+// One customer, and everything ever issued to them.
+async function dcOpenCustomer(id){
+  const p = dcParty(id); if (!p) return;
+  const kids = dcKidsOf(id);
+  const mine = (_dc.invoices || []).filter(i => i.party_id === id)
+    .sort((a, b) => String(b.period_start || '').localeCompare(String(a.period_start || '')));
+
+  const body = openDrawer(p.display_name, `${p.party_number || ''}${p.employer_name ? ' · ' + p.employer_name : ''}`);
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      ${p.father_name ? `<div class="row"><div class="l">Father</div><div class="v">${esc(p.father_name)}</div></div>` : ''}
+      <div class="row"><div class="l">Email<span class="sub">Where the PDF goes</span></div><div class="v">${esc(p.email || '—')}</div></div>
+      <div class="row"><div class="l">Phone</div><div class="v">${esc(p.mobile || '—')}</div></div>
+      ${p.address ? `<div class="rowx hint">${esc(p.address)}</div>` : ''}
+      <div class="row"><div class="l">Children</div><div class="v">${kids.map(k => esc(k.name) + (k.uin ? ' (on our roll)' : '')).join(', ') || '—'}</div></div>
+      <div class="row"><div class="l">Reimbursement</div>
+        <div class="v"><a style="cursor:pointer;color:${p.hold_reimbursement ? 'var(--crit)' : 'var(--good)'}"
+          onclick="dcHold(${p.id}, ${!p.hold_reimbursement})">${p.hold_reimbursement ? 'Held — release' : 'Sending — hold'}</a></div></div>
+    </div><div class="foot">Holding a family keeps raising their receipts each month but never sends one until you release them.</div></div>
+
+    <div class="grp"><div class="box">
+      <button class="linkrow" onclick="dcCustomerDrawer(${p.id})">Edit this customer</button>
+      <button class="linkrow" onclick="dcInvoiceDrawer(null, 'reimbursement', ${p.id})">New receipt for them</button>
+    </div></div>
+
+    <div class="grp"><h3>Everything issued</h3><div class="box">
+      ${mine.map(i => `<div class="row">
+        <div class="l" style="flex:1"><strong style="color:var(--ink)">${esc(i.number || 'draft')}</strong>
+          — ${esc(dcChild(i.child_id)?.name || '')}, ${dcMonth(i.period_start)}
+          <span class="sub">${i.kind === 'reimbursement' ? 'Reimbursement receipt' : 'Monthly bill'} ·
+            ${i.status === 'sent' ? 'sent ' + shortDate(i.sent_at) : 'draft'}</span></div>
+        <a style="cursor:pointer;white-space:nowrap" onclick="dcPreview(${i.id})">Open</a>
+      </div>`).join('') || '<div class="rowx hint">Nothing issued yet.</div>'}
+    </div></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="cu-close">Close</button>`;
+  el('cu-close').onclick = closeDrawer;
+}
+
+async function dcCustomerDrawer(editId){
+  const p = editId ? dcParty(editId) : null;
+  const kid = p ? dcKidsOf(p.id)[0] : null;
+  const body = openDrawer(p ? 'Edit customer' : 'Add a customer', 'Who the receipt is addressed to, and the child it is about');
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      <div class="row"><div class="l">Name<span class="sub">As it should read on the receipt</span></div>
+        <input class="in wide" id="cu-name" value="${esc(p?.display_name || '')}" placeholder="e.g. Ms. Shikha Singh"></div>
+      <div class="row"><div class="l">Father's name</div><input class="in wide" id="cu-father" value="${esc(p?.father_name || '')}"></div>
+      <div class="row"><div class="l">Email<span class="sub">The PDF is sent here</span></div>
+        <input class="in wide" id="cu-email" type="email" value="${esc(p?.email || '')}"></div>
+      <div class="row"><div class="l">Phone</div><input class="in wide" id="cu-phone" value="${esc(p?.mobile || '')}"></div>
+      <div class="row"><div class="l">Employer<span class="sub">Who asks for the receipt</span></div>
+        <input class="in wide" id="cu-employer" value="${esc(p?.employer_name || '')}"></div>
+      <div class="rowx"><input class="in" id="cu-address" value="${esc(p?.address || '')}" placeholder="Address — optional, some employers ask for one" style="width:100%"></div>
+    </div></div>
+
+    <div class="grp"><h3>The child</h3><div class="box">
+      <div class="row"><div class="l">Child's name</div><input class="in wide" id="cu-child" value="${esc(kid?.name || '')}"></div>
+      <div class="row"><div class="l">Also on our roll?<span class="sub">Leave blank for a day-care-only child</span></div>
+        <input class="in wide" id="cu-uin" list="cu-kids" placeholder="start typing their name" autocomplete="off">
+        <datalist id="cu-kids"></datalist></div>
+      <div class="row"><div class="l">Class / group</div><input class="in wide" id="cu-class" value="${esc(kid?.class_label || '')}" placeholder="e.g. Nursery · Day care"></div>
+    </div>${p ? '<div class="foot">Editing the child here changes the first child on this record.</div>' : ''}</div>
+    <div id="cu-msg"></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="cu-cancel">Cancel</button><button class="btn" id="cu-save">${p ? 'Save' : 'Add'}</button>`;
+  el('cu-cancel').onclick = closeDrawer;
+
+  const roster = await schedule().catch(() => []);
+  const byLabel = {};
+  el('cu-kids').innerHTML = roster.map(k => {
+    const label = `${k.student_name} — ${k.program_name || 'class ?'}`;
+    byLabel[label.toLowerCase()] = k;
+    return `<option value="${esc(label)}">`;
+  }).join('');
+  el('cu-uin').oninput = () => {
+    const k = byLabel[(el('cu-uin').value || '').trim().toLowerCase()];
+    if (!k) return;
+    if (!el('cu-child').value.trim()) el('cu-child').value = k.student_name;
+    if (!el('cu-class').value.trim()) el('cu-class').value = `${k.program_name || ''} · Day care`.trim();
+  };
+
+  el('cu-save').onclick = async () => {
+    const name = (el('cu-name').value || '').trim();
+    const child = (el('cu-child').value || '').trim();
+    if (!name) return el('cu-msg').innerHTML = `<div class="err">Who is the receipt addressed to?</div>`;
+    if (!child) return el('cu-msg').innerHTML = `<div class="err">What is the child's name?</div>`;
+    const b = el('cu-save'); b.disabled = true; b.textContent = 'Saving…';
+    const sb = getSb().schema('eurokids');
+    const email = (el('cu-email').value || '').trim().toLowerCase() || null;
+    const k = byLabel[(el('cu-uin').value || '').trim().toLowerCase()];
+    const fields = {
+      display_name: name,
+      father_name: (el('cu-father').value || '').trim() || null,
+      email, login_email: email,
+      mobile: (el('cu-phone').value || '').trim() || null,
+      employer_name: (el('cu-employer').value || '').trim() || null,
+      address: (el('cu-address').value || '').trim() || null,
+    };
+    let partyId = editId;
+    if (editId) {
+      const { error } = await sb.from('billing_party').update(fields).eq('id', editId);
+      if (error) { b.disabled = false; b.textContent = 'Save';
+        return el('cu-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; }
+    } else {
+      const { data, error } = await sb.from('billing_party')
+        .insert({ ...fields, created_by: who() }).select('id').single();
+      if (error) { b.disabled = false; b.textContent = 'Add';
+        return el('cu-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; }
+      partyId = data.id;
+    }
+    const kidFields = { name: child, uin: k?.uin || null,
+      class_label: (el('cu-class').value || '').trim() || null };
+    if (kid) await sb.from('billing_child').update(kidFields).eq('id', kid.id);
+    else await sb.from('billing_child').insert({ party_id: partyId, ...kidFields });
+    closeDrawer(true);
+    (tab === 'rb_customers' ? tabCustomers : tabReimbursements)();
+  };
+}
+
+/* ── Recurring: who gets one every month, and does it send itself ─────── */
+async function tabRecurring(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const r = await dcLoad();
+  if (!r.ok) return el('body').innerHTML = fail(r);
+  const rows = (_dc.recurring || []).filter(x => x.kind === 'reimbursement');
+
+  el('body').innerHTML = head('Recurring',
+      'A receipt raised on the 1st of every month. Each arrangement either sends itself or waits for you.',
+      `<button class="btn" id="rc-new">New arrangement…</button>`)
+    + `<div class="stats" style="margin-bottom:16px">
+        <div class="stat"><div class="k">Standing</div><div class="v">${rows.filter(x => x.status === 'active').length}</div>
+          <div class="m">Raised on the 1st</div></div>
+        <div class="stat"><div class="k">Send themselves</div><div class="v">${rows.filter(x => x.status === 'active' && x.auto_send).length}</div>
+          <div class="m">No one has to press anything</div></div>
+        <div class="stat"><div class="k">Wait for you</div><div class="v">${rows.filter(x => x.status === 'active' && !x.auto_send).length}</div>
+          <div class="m">Raised, then held until you send</div></div>
+      </div>
+
+      <div class="panel"><div class="ptop"><h2>Arrangements</h2>
+        <span class="hint">A family on hold is never sent to, whatever this says</span></div>
+        <div class="tw"><table><thead><tr><th>Child</th><th>Customer</th><th>Each month</th>
+          <th>Next</th><th>On the 1st</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows.map(x => {
+          const p = dcParty(x.party_id), c = dcChild(x.child_id);
+          const total = (x.lines || []).reduce((a, l) => a + Number(l.monthly_amount || (l.qty || 1) * (l.rate || 0)), 0);
+          return `<tr>
+            <td><strong>${esc(c?.name || '—')}</strong></td>
+            <td class="hint"><a style="cursor:pointer" onclick="dcOpenCustomer(${x.party_id})">${esc(p?.display_name || '—')}</a></td>
+            <td class="hint">${money(total)}</td>
+            <td class="hint">${dcMonth(x.next_month)}</td>
+            <td>${x.auto_send
+              ? '<span class="chip c-good">Raised and sent</span>'
+              : '<span class="chip c-warn">Raised, held for you</span>'}</td>
+            <td>${x.status === 'active' ? '<span class="chip c-good">Active</span>'
+                : `<span class="chip c-mute">${esc(x.status)}</span>`}</td>
+            <td style="white-space:nowrap">
+              <a style="cursor:pointer" onclick="dcToggleAuto(${x.id}, ${!x.auto_send})">${x.auto_send ? 'Hold for me' : 'Let it send'}</a> ·
+              <a style="cursor:pointer" onclick="dcRecurringDrawer(${x.id})">Edit</a> ·
+              <a style="cursor:pointer;color:var(--crit)" onclick="dcEndRecurring(${x.id})">End</a></td>
+          </tr>`;
+        }).join('') || `<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--muted)">
+          No standing arrangements. Add one and a receipt appears every month without anyone remembering.</td></tr>`}
+        </tbody></table></div></div>`;
+  el('rc-new').onclick = () => dcRecurringDrawer();
+}
+
+async function dcToggleAuto(id, on){
+  const { error } = await getSb().schema('eurokids').from('daycare_recurring')
+    .update({ auto_send: on, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) return alert(error.message);
+  tabRecurring();
+}
+
+async function dcEndRecurring(id){
+  if (!confirm('End this arrangement?\n\nNo more receipts are raised for it. Everything already issued stays exactly as it is.')) return;
+  const { error } = await getSb().schema('eurokids').from('daycare_recurring')
+    .update({ status: 'ended' }).eq('id', id);
+  if (error) return alert(error.message);
+  tabRecurring();
+}
+
+async function dcRecurringDrawer(editId){
+  const ex = editId ? (_dc.recurring || []).find(x => x.id === editId) : null;
+  const kids = _dc.children || [];
+  if (!kids.length) return alert('Add a customer first.');
+  const line0 = (ex?.lines || [])[0] || {};
+
+  const body = openDrawer(ex ? 'Edit arrangement' : 'New monthly arrangement',
+    'What to raise each month, and whether it may send itself');
+  body.innerHTML = `
+    <div class="grp"><div class="box">
+      <div class="row"><div class="l">Child</div>
+        <select class="in wide" id="rc-child">${kids.map(c => {
+          const p = dcParty(c.party_id);
+          return `<option value="${c.id}" ${ex?.child_id === c.id ? 'selected' : ''}>${esc(c.name)}${p ? ' — ' + esc(p.display_name) : ''}</option>`;
+        }).join('')}</select></div>
+      <div class="row"><div class="l">What it says</div>
+        <input class="in wide" id="rc-name" value="${esc(line0.name || 'Daycare')}"></div>
+      <div class="row"><div class="l">Fee for the month</div>
+        <input class="in num" id="rc-amt" type="number" step="any" value="${esc(line0.monthly_amount || '')}"></div>
+      <div class="row"><div class="l">Hours a day<span class="sub">Whole hours — the rate is worked out from these</span></div>
+        <input class="in num" id="rc-hpd" type="number" min="1" max="14" step="1" value="${esc(line0.hours_per_day || 5)}"></div>
+      <div class="hint" id="rc-breakup" style="padding:2px 16px 10px"></div>
+      <div class="row"><div class="l">Starting from</div>
+        <input class="in" id="rc-from" type="month" value="${(ex?.next_month || todayHere()).slice(0,7)}"></div>
+      <div class="row"><div class="l">Until<span class="sub">Blank means carry on</span></div>
+        <input class="in" id="rc-until" type="month" value="${ex?.end_month ? String(ex.end_month).slice(0,7) : ''}"></div>
+      <label class="row" style="cursor:pointer"><span class="l">Send it automatically each month
+        <span class="sub">Off means it is still raised on the 1st — it just waits for you to press Send</span></span>
+        <input type="checkbox" class="sw" id="rc-auto" ${ex?.auto_send ? 'checked' : ''}></label>
+    </div><div class="foot">A family on hold is never sent to, however this is set.</div></div>
+    <div id="rc-msg"></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="rc-cancel">Cancel</button><button class="btn" id="rc-save">${ex ? 'Save' : 'Create'}</button>`;
+  el('rc-cancel').onclick = closeDrawer;
+
+  const recap = () => {
+    const amt = Number(el('rc-amt').value) || 0, hpd = Number(el('rc-hpd').value) || 0;
+    const box = el('rc-breakup');
+    if (!(amt > 0 && hpd > 0)) { box.textContent = 'Enter the monthly fee and the hours a day.'; return; }
+    const b = dcSolve(amt, hpd);
+    box.innerHTML = `<span style="color:var(--good)">${b.monthlyHours} hours × ${b.rateText} = ${money(b.computed)}</span> — “${esc(b.description)}”`;
+  };
+  ['rc-amt', 'rc-hpd'].forEach(id => el(id).oninput = recap);
+  recap();
+
+  el('rc-save').onclick = async () => {
+    const amt = Number(el('rc-amt').value) || 0;
+    if (!(amt > 0)) return el('rc-msg').innerHTML = `<div class="err">What is the fee each month?</div>`;
+    const childId = Number(el('rc-child').value);
+    const kid = dcChild(childId);
+    const from = (el('rc-from').value || todayHere().slice(0,7)) + '-01';
+    const fields = {
+      kind: 'reimbursement', party_id: kid?.party_id, child_id: childId,
+      lines: [{ name: (el('rc-name').value || 'Daycare').trim(),
+                monthly_amount: amt, hours_per_day: Number(el('rc-hpd').value) || 5 }],
+      next_month: from,
+      end_month: el('rc-until').value ? el('rc-until').value + '-01' : null,
+      auto_send: !!el('rc-auto').checked,
+      status: 'active',
+      updated_at: new Date().toISOString(),
+    };
+    const b = el('rc-save'); b.disabled = true; b.textContent = 'Saving…';
+    const sb = getSb().schema('eurokids');
+    const { error } = ex
+      ? await sb.from('daycare_recurring').update(fields).eq('id', ex.id)
+      : await sb.from('daycare_recurring').insert({ ...fields, created_by: who() });
+    b.disabled = false; b.textContent = ex ? 'Save' : 'Create';
+    if (error) return el('rc-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`;
+    closeDrawer(true); tabRecurring();
+  };
+}
+
+/* ── Billing: the money half ──────────────────────────────────────────── */
+async function tabDaycareBilling(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const r = await dcLoad();
+  if (!r.ok) return el('body').innerHTML = fail(r);
+  const mine = dcOf('billing');
+  const drafts = mine.filter(i => i.status === 'draft');
+  const sent = mine.filter(i => i.status === 'sent');
+  const thisYear = sent.filter(i => String(i.invoice_date) >= todayHere().slice(0,4) + '-01-01')
+    .reduce((a, i) => a + Number(i.total || 0), 0);
+
+  el('body').innerHTML = head('Day care billing',
+      'The monthly bill a family pays. Raised after the fee is in, so it leaves fully paid.',
+      `<button class="btn" id="bl-new">New invoice…</button>`)
+    + `<div class="stats" style="margin-bottom:16px">
+        <div class="stat ${drafts.length ? 'warn' : ''}"><div class="k">Waiting to send</div><div class="v">${drafts.length}</div>
+          <div class="m">Numbered only when you send them</div></div>
+        <div class="stat"><div class="k">Billed this year</div><div class="v">${money(thisYear)}</div>
+          <div class="m">${sent.length} invoice${sent.length === 1 ? '' : 's'}</div></div>
+        <div class="stat"><div class="k">Online payment</div><div class="v">—</div>
+          <div class="m">Razorpay is not connected yet</div></div>
+      </div>
+
+      <div class="panel"><div class="ptop"><h2 id="bl-h">Invoices</h2>
+        <span class="hint">A sent invoice is frozen — duplicate it rather than editing it</span></div>
+        <div class="tools" style="padding:0 16px 10px">
+          <div class="search"><input class="in" id="bl-q" type="search" placeholder="Child, family or number"></div>
+          <select class="in" id="bl-f">
+            <option value="">Everything</option>
+            <option value="draft">Waiting to send</option>
+            <option value="sent">Sent</option>
+          </select>
+        </div>
+        <div class="tw"><table><thead><tr><th>Number</th><th>Child</th><th>Family</th><th>Month</th>
+          <th class="r">Total</th><th>Status</th><th></th></tr></thead>
+        <tbody id="bl-rows"></tbody></table></div></div>`;
+
+  const paint = () => {
+    const q = (el('bl-q').value || '').trim().toLowerCase();
+    const f = el('bl-f').value;
+    const rows = mine.filter(i => {
+      if (f && i.status !== f) return false;
+      if (!q) return true;
+      const p = dcParty(i.party_id), c = dcChild(i.child_id);
+      return [i.number, p?.display_name, c?.name].some(v => String(v || '').toLowerCase().includes(q));
+    });
+    el('bl-h').textContent = `${rows.length} invoice${rows.length === 1 ? '' : 's'}`;
+    el('bl-rows').innerHTML = rows.map(i => {
+      const p = dcParty(i.party_id), c = dcChild(i.child_id);
+      return `<tr>
+        <td><strong>${esc(i.number || '—')}</strong></td>
+        <td>${esc(c?.name || '—')}</td>
+        <td class="hint"><a style="cursor:pointer" onclick="dcOpenCustomer(${i.party_id})">${esc(p?.display_name || '—')}</a></td>
         <td class="hint">${dcMonth(i.period_start)}</td>
         <td class="r num">${money(i.total)}</td>
         <td>${i.status === 'sent'
           ? `<span class="chip c-good">Sent</span><div class="hint" style="font-size:10.5px">${shortDate(i.sent_at)}</div>`
-          : onHold ? '<span class="chip c-crit">On hold</span>'
           : '<span class="chip c-warn">Draft</span>'}</td>
         <td style="white-space:nowrap">
-          <a style="cursor:pointer" onclick="dcPreview(${i.id})">Open</a> ·
-          ${i.status === 'draft' ? `<a style="cursor:pointer" onclick="dcEdit(${i.id})">Edit</a> · <a style="cursor:pointer" onclick="dcSend(${i.id}, this)">Send</a> · ` : ''}
-          <a style="cursor:pointer" onclick="dcDuplicate(${i.id}, this)">Duplicate</a></td>
+          <a style="cursor:pointer" onclick="dcPreview(${i.id})">Open</a>
+          ${i.status === 'draft' ? ` · <a style="cursor:pointer" onclick="dcEdit(${i.id})">Edit</a> · <a style="cursor:pointer" onclick="dcSend(${i.id}, this)">Send</a>` : ''}
+          · <a style="cursor:pointer" onclick="dcDuplicate(${i.id}, this)">Duplicate</a></td>
       </tr>`;
-    }).join('') || `<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
+    }).join('') || `<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
   };
   paint();
-  el('dc-q').oninput = debounce(paint, 160);
-  el('dc-f').onchange = paint;
-  el('dc-family').onclick = () => dcFamilyDrawer();
-  el('dc-new').onclick = () => dcInvoiceDrawer();
+  el('bl-q').oninput = debounce(paint, 160);
+  el('bl-f').onchange = paint;
+  el('bl-new').onclick = () => dcInvoiceDrawer(null, 'billing');
 }
 
 async function dcPreview(id){
@@ -3441,7 +3853,7 @@ async function dcSend(id, a){
   const r = await dcApi('/send', { id });
   a.style.pointerEvents = '';
   if (!r.ok) { a.textContent = was; return alert(r.error); }
-  tabDaycare();
+  dcRefresh();
 }
 
 async function dcDuplicate(id, a){
@@ -3449,7 +3861,7 @@ async function dcDuplicate(id, a){
   const r = await dcApi('/duplicate', { id });
   a.textContent = was;
   if (!r.ok) return alert(r.error);
-  tabDaycare();
+  dcRefresh();
 }
 
 async function dcHold(partyId, hold){
@@ -3458,87 +3870,32 @@ async function dcHold(partyId, hold){
   const { error } = await getSb().schema('eurokids').from('billing_party')
     .update({ hold_reimbursement: hold }).eq('id', partyId);
   if (error) return alert(error.message);
-  tabDaycare();
+  dcRefresh();
 }
 
-/* ── a family ─────────────────────────────────────────────────────────── */
-async function dcFamilyDrawer(){
-  const body = openDrawer('Add a day care family', 'Who pays, and the child the invoices are about');
-  body.innerHTML = `
-    <div class="grp"><h3>Who pays</h3><div class="box">
-      <div class="row"><div class="l">Name on the invoice</div><input class="in wide" id="dfp-name" placeholder="e.g. Ms. Shikha Singh"></div>
-      <div class="row"><div class="l">Father's name</div><input class="in wide" id="dfp-father"></div>
-      <div class="row"><div class="l">Email<span class="sub">Where invoices and receipts go — and their login</span></div><input class="in wide" id="dfp-email" type="email"></div>
-      <div class="row"><div class="l">Phone</div><input class="in wide" id="dfp-phone"></div>
-      <div class="row"><div class="l">Employer<span class="sub">Who asks for the reimbursement copy</span></div><input class="in wide" id="dfp-employer"></div>
-    </div></div>
-    <div class="grp"><h3>The child</h3><div class="box">
-      <div class="row"><div class="l">Child's name</div><input class="in wide" id="dfp-child"></div>
-      <div class="row"><div class="l">Also on our roll?<span class="sub">Leave blank for a day-care-only child</span></div>
-        <input class="in wide" id="dfp-uin" list="dfp-kids" placeholder="start typing their name" autocomplete="off">
-        <datalist id="dfp-kids"></datalist></div>
-      <div class="row"><div class="l">Class / group</div><input class="in wide" id="dfp-class" placeholder="e.g. Nursery · Day care"></div>
-    </div><div class="foot">A day care child who is also ours keeps their admission number on the invoice, which is what an employer's finance team looks for.</div></div>
-    <div id="dfp-msg"></div>`;
-  el('drawer-foot').innerHTML = `<button class="btn line" id="dfp-cancel">Cancel</button><button class="btn" id="dfp-save">Add</button>`;
-  el('dfp-cancel').onclick = closeDrawer;
-
-  const kids = await schedule().catch(() => []);
-  const byLabel = {};
-  el('dfp-kids').innerHTML = kids.map(k => {
-    const label = `${k.student_name} — ${k.program_name || 'class ?'}`;
-    byLabel[label.toLowerCase()] = k;
-    return `<option value="${esc(label)}">`;
-  }).join('');
-  el('dfp-uin').oninput = () => {
-    const k = byLabel[(el('dfp-uin').value || '').trim().toLowerCase()];
-    if (!k) return;
-    if (!el('dfp-child').value.trim()) el('dfp-child').value = k.student_name;
-    if (!el('dfp-class').value.trim()) el('dfp-class').value = `${k.program_name || ''} · Day care`.trim();
-  };
-
-  el('dfp-save').onclick = async () => {
-    const name = (el('dfp-name').value || '').trim();
-    const child = (el('dfp-child').value || '').trim();
-    if (!name) return el('dfp-msg').innerHTML = `<div class="err">Who pays?</div>`;
-    if (!child) return el('dfp-msg').innerHTML = `<div class="err">What is the child's name?</div>`;
-    const b = el('dfp-save'); b.disabled = true; b.textContent = 'Saving…';
-    const sb = getSb().schema('eurokids');
-    const email = (el('dfp-email').value || '').trim().toLowerCase() || null;
-    const k = byLabel[(el('dfp-uin').value || '').trim().toLowerCase()];
-    const { data: party, error } = await sb.from('billing_party').insert({
-      display_name: name, father_name: (el('dfp-father').value || '').trim() || null,
-      email, login_email: email, mobile: (el('dfp-phone').value || '').trim() || null,
-      employer_name: (el('dfp-employer').value || '').trim() || null, created_by: who(),
-    }).select('id').single();
-    if (error) { b.disabled = false; b.textContent = 'Add';
-      return el('dfp-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; }
-    await sb.from('billing_child').insert({ party_id: party.id, name: child, uin: k?.uin || null,
-      class_label: (el('dfp-class').value || '').trim() || null });
-    closeDrawer(true); tabDaycare();
-  };
-}
-
-/* ── an invoice ───────────────────────────────────────────────────────── */
 function dcEdit(id){ dcInvoiceDrawer(id); }
 
-function dcInvoiceDrawer(editId){
+function dcInvoiceDrawer(editId, kind, partyId){
   const existing = editId ? (_dc.invoices || []).find(i => i.id === editId) : null;
+  const wantKind = existing?.kind || kind || 'reimbursement';
+  // Opened from a customer, so their child is already chosen.
+  const firstKid = partyId ? (dcKidsOf(partyId)[0] || null) : null;
   const exLines = editId ? dcLines(editId) : [];
-  if (!(_dc.parties || []).length) return alert('Add a family first.');
+  if (!(_dc.parties || []).length) return alert('Add a customer first.');
 
   const body = openDrawer(existing ? `Edit draft` : 'New invoice', 'It is numbered and frozen only when you send it');
   body.innerHTML = `
     <div class="grp"><div class="box">
       <div class="row"><div class="l">Kind</div>
         <select class="in wide" id="di-kind">
-          <option value="billing" ${existing?.kind === 'billing' ? 'selected' : ''}>Monthly bill — what the family pays</option>
-          <option value="reimbursement" ${existing?.kind === 'reimbursement' ? 'selected' : ''}>Reimbursement copy — for their employer</option>
+          <option value="billing" ${wantKind === 'billing' ? 'selected' : ''}>Monthly bill — what the family pays</option>
+          <option value="reimbursement" ${wantKind === 'reimbursement' ? 'selected' : ''}>Reimbursement receipt — for their employer</option>
         </select></div>
       <div class="row"><div class="l">Child</div>
         <select class="in wide" id="di-child">${(_dc.children || []).map(c => {
           const p = dcParty(c.party_id);
-          return `<option value="${c.id}" ${existing?.child_id === c.id ? 'selected' : ''}>${esc(c.name)}${p ? ' — ' + esc(p.display_name) : ''}</option>`;
+          const sel = existing?.child_id === c.id || (!existing && firstKid?.id === c.id);
+          return `<option value="${c.id}" ${sel ? 'selected' : ''}>${esc(c.name)}${p ? ' — ' + esc(p.display_name) : ''}</option>`;
         }).join('')}</select></div>
       <div class="row"><div class="l">From month</div><input class="in" id="di-month" type="month" value="${(existing?.period_start || todayHere()).slice(0,7)}"></div>
       <div class="row"><div class="l">How many months<span class="sub">A parent asking in October for April to June</span></div>
@@ -3560,9 +3917,13 @@ function dcInvoiceDrawer(editId){
   el('drawer-foot').innerHTML = `<button class="btn line" id="di-cancel">Cancel</button><button class="btn" id="di-save">${existing ? 'Save the draft' : 'Create the draft'}</button>`;
   el('di-cancel').onclick = closeDrawer;
 
+  // Hours a day is not a column — the line only records 130 hours, which is
+  // 5 × 26. Recovering it from the quantity matters: without it the form fell
+  // back to 5 hours and re-saving a 7-hour draft quietly reprinted the rate.
   let rows = exLines.length
     ? exLines.map(l => ({ name: l.name, description: l.description, qty: Number(l.qty), rate: Number(l.rate),
-        amount: Number(l.amount), hourly: Number(l.qty) > 40 }))
+        amount: Number(l.amount), hourly: Number(l.qty) > 40, rateId: l.rate_id || null,
+        hoursPerDay: Math.max(1, Math.round(Number(l.qty) / 26)) }))
     : [{ name: '', description: '', qty: 1, rate: 0, amount: 0, hourly: false }];
 
   const rateOpts = (sel) => (_dc.rates || []).map(r =>
@@ -3572,7 +3933,7 @@ function dcInvoiceDrawer(editId){
     el('di-lines').innerHTML = rows.map((r, i) => `
       <div class="rowx" style="border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:10px">
         <div class="row"><div class="l">Line ${i + 1}${rows.length > 1 ? ` <a style="cursor:pointer;color:var(--crit);font-size:11px" onclick="dcDropLine(${i})">remove</a>` : ''}</div>
-          <select class="in wide" data-pick="${i}"><option value="">— pick a rate —</option>${rateOpts()}</select></div>
+          <select class="in wide" data-pick="${i}"><option value="">— pick a rate —</option>${rateOpts(r.rateId)}</select></div>
         <div class="row"><div class="l">What it says</div><input class="in wide" data-name="${i}" value="${esc(r.name)}"></div>
         <div class="row"><div class="l">Charged by</div>
           <select class="in" data-mode="${i}">
@@ -3594,7 +3955,8 @@ function dcInvoiceDrawer(editId){
       const q = sel => body.querySelector(`[${sel}="${i}"]`);
       q('data-pick').onchange = e => {
         const rate = (_dc.rates || []).find(x => String(x.id) === e.target.value);
-        if (!rate) return;
+        if (!rate) { rows[i].rateId = null; return; }
+        rows[i].rateId = rate.id;
         rows[i].name = rate.name;
         rows[i].description = rate.description || '';
         if (rate.is_hourly) { rows[i].hourly = true; rows[i].hoursPerDay = Number(rate.hours_per_day) || 5; }
@@ -3627,11 +3989,10 @@ function dcInvoiceDrawer(editId){
         const amt = Number(r.amount) || 0, hpd = Number(r.hoursPerDay) || 0;
         const b = (amt > 0 && hpd > 0) ? dcSolve(amt, hpd) : null;
         if (box) box.innerHTML = !b ? 'Enter the monthly fee and the hours a day.'
-          : b.best.exact
-            ? `<span style="color:var(--good)">${b.best.monthlyHours} hours × ${money(b.best.ratePerHour)} = ${money(b.best.amount)} exactly</span> — “${esc(b.best.description)}”`
-            : `<span style="color:var(--crit)">${b.best.monthlyHours} × ${money(b.best.ratePerHour)} comes to ${money(b.best.amount)}, not ${money(amt)}.</span>
-               ${b.alternatives.length ? 'Try ' + b.alternatives.map(x => `${x.hoursPerDay} hours a day (${money(x.ratePerHour)}/hr)`).join(', ') + '.' : ''}`;
-        total += b ? b.best.amount : 0;
+          : b.reconciles
+            ? `<span style="color:var(--good)">${b.monthlyHours} hours × ${b.rateText} = ${money(b.computed)}</span> — “${esc(b.description)}”`
+            : `<span style="color:var(--crit)">${b.monthlyHours} hours × ${b.rateText} comes to ${money(b.computed)}, not ${money(amt)}.</span>`;
+        total += b ? b.amount : 0;
       } else {
         total += (Number(r.qty) || 0) * (Number(r.rate) || 0);
       }
@@ -3685,52 +4046,46 @@ function dcInvoiceDrawer(editId){
             : `Your Daycare Invoice is ready for ${dcMonth(month + '-01')}`)
         : null,
       lines: rows.filter(r => (r.name || '').trim()).map(r => r.hourly
-        ? { name: r.name, description: r.description || null, monthly_amount: Number(r.amount) || 0, hours_per_day: Number(r.hoursPerDay) || 0 }
-        : { name: r.name, description: r.description || null, qty: Number(r.qty) || 1, rate: Number(r.rate) || 0 }),
+        ? { rate_id: r.rateId || null, name: r.name, description: r.description || null, monthly_amount: Number(r.amount) || 0, hours_per_day: Number(r.hoursPerDay) || 0 }
+        : { rate_id: r.rateId || null, name: r.name, description: r.description || null, qty: Number(r.qty) || 1, rate: Number(r.rate) || 0 }),
     };
-    if (!payload.lines.length) { b.disabled = false; b.textContent = 'Create the draft';
+    if (!payload.lines.length) { b.disabled = false; b.textContent = existing ? 'Save the draft' : 'Create the draft';
       return el('di-msg').innerHTML = `<div class="err">Give at least one line a name.</div>`; }
     const r = await dcApi('/save', payload);
     b.disabled = false; b.textContent = existing ? 'Save the draft' : 'Create the draft';
     if (!r.ok) return el('di-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`;
-    closeDrawer(true); tabDaycare();
+    closeDrawer(true);
+    (tab === 'bill_home' ? tabDaycareBilling : tabReimbursements)();
   };
 }
 
 // The same arithmetic the server uses, so the screen and the document agree.
+// 26 day care days is the school's month and whole hours a day are the rule,
+// so the rate is the only free number — printed at the fewest decimals at
+// which hours x rate comes back to the agreed fee.
 function dcSolve(amount, hoursPerDay){
-  const DAYS = [20,21,22,23,24,25,26,27,28,29,30], PREFER = 26;
-  const build = (d) => {
-    const monthlyHours = Math.round(hoursPerDay * d * 100) / 100;
-    const paise = Math.round(amount * 100);
-    const exact = monthlyHours > 0 && Number.isInteger(paise / monthlyHours);
-    const ratePerHour = monthlyHours > 0 ? Math.round((amount / monthlyHours) * 100) / 100 : 0;
-    const total = Math.round(ratePerHour * monthlyHours * 100) / 100;
-    const hrs = hoursPerDay === 1 ? '1 hour daily' : `${hoursPerDay} hours daily`;
-    return { hoursPerDay, daysPerMonth: d, monthlyHours, ratePerHour,
-      amount: exact ? amount : total, exact, shortBy: exact ? 0 : Math.round((total - amount) * 100) / 100,
-      description: `${hrs} | ${d} daycare days in a month.` };
-  };
-  const exacts = DAYS.map(build).filter(x => x.exact)
-    .sort((a, b) => Math.abs(a.daysPerMonth - PREFER) - Math.abs(b.daysPerMonth - PREFER) || b.daysPerMonth - a.daysPerMonth);
-  if (exacts.length) return { best: exacts[0], alternatives: exacts.slice(1, 4) };
-  const alts = [];
-  for (let dh = 1; dh <= 4 && alts.length < 4; dh++) {
-    for (const h of [hoursPerDay - dh, hoursPerDay + dh]) {
-      if (h <= 0) continue;
-      const e = DAYS.map(d => {
-        const mh = Math.round(h * d * 100) / 100, p = Math.round(amount * 100);
-        if (!(mh > 0 && Number.isInteger(p / mh))) return null;
-        return { hoursPerDay: h, daysPerMonth: d, monthlyHours: mh,
-          ratePerHour: Math.round((amount / mh) * 100) / 100, amount, exact: true };
-      }).filter(Boolean).sort((a, b) => Math.abs(a.daysPerMonth - PREFER) - Math.abs(b.daysPerMonth - PREFER))[0];
-      if (e) alts.push(e);
-    }
+  const days = 26;
+  const hours = Math.max(1, Math.round(hoursPerDay));
+  const monthlyHours = hours * days;
+  const round = (n, d) => { const f = Math.pow(10, d); return Math.round((n + Number.EPSILON) * f) / f; };
+  let decimals = 2, rate = round(amount / monthlyHours, 2);
+  for (let d = 2; d <= 6; d++) {
+    rate = round(amount / monthlyHours, d); decimals = d;
+    if (round(rate * monthlyHours, 2) === round(amount, 2)) break;
   }
-  const nearest = DAYS.map(build).sort((a, b) => Math.abs(a.shortBy) - Math.abs(b.shortBy))[0];
-  return { best: nearest, alternatives: alts.slice(0, 4) };
+  const hrs = hours === 1 ? '1 hour daily' : `${hours} hours daily`;
+  return { hoursPerDay: hours, daysPerMonth: days, monthlyHours, ratePerHour: rate, rateDecimals: decimals,
+    rateText: rate.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }),
+    computed: round(rate * monthlyHours, 2), amount: round(amount, 2),
+    reconciles: round(rate * monthlyHours, 2) === round(amount, 2),
+    description: `${hrs} | ${days} daycare days in a month.` };
 }
 
+// Repaint whichever list is on screen.
+function dcRefresh(){
+  ({ rb_home: tabReimbursements, rb_customers: tabCustomers,
+     rb_recurring: tabRecurring, bill_home: tabDaycareBilling }[tab] || tabReimbursements)();
+}
 
 /* ══ INVENTORY ══════════════════════════════════════════════════════════
    Two tabs, because the two halves of "inventory" want opposite things.
@@ -5267,7 +5622,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=67"></script>
+<script src="/brand/enquiries.js?v=68"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
