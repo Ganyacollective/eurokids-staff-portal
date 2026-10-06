@@ -1,16 +1,10 @@
 // Both day care invoices, rendered side by side with the originals.
 import fs from "node:fs";
 import { renderInvoicePdf } from "../src/lib/invoice-pdf.ts";
-import { solveBreakup } from "../src/lib/hours-breakup.ts";
+import { breakup } from "../src/lib/hours-breakup.ts";
 
 const ORG = "Eurokids JMD Enclave";
 const ORG_LINES = [
-  "Bungalow 1, JMD Enclave, Mohammadwadi",
-  "Pune Maharashtra 411060",
-  "India",
-  "020 6962 2686",
-  "admin@eurokidsjmdenclave.org",
-  "www.eurokidsjmdenclave.org",
   "UDYAM-MH-26-0594497",
   "PAN : AARFV8391E",
   "Shop Act : 102859369903",
@@ -18,14 +12,14 @@ const ORG_LINES = [
 
 // 59 — the reimbursement copy. The fee is 12,000 and the parent needs it
 // shown as 5 hours a day.
-const { best: b } = solveBreakup(12000, 5);
+const b = breakup(12000, 5);
 fs.writeFileSync(process.argv[2] || "inv59.pdf", await renderInvoicePdf({
   kind: "reimbursement",
   number: "INV-000059",
   invoiceDate: "01/10/2026", dueDate: "01/10/2026", termsLabel: "Due on Receipt",
   billToName: "Ms. Shikha Singh",
   childName: "Dev Kumar",
-  lines: [{ name: "Daycare", description: b.description, qty: b.monthlyHours, rate: b.ratePerHour, amount: b.amount }],
+  lines: [{ name: "Daycare", description: b.description, qty: b.monthlyHours, rate: b.ratePerHour, rateText: b.rateText, amount: b.amount }],
   subtotal: b.amount, total: b.amount, paymentMade: b.amount, balanceDue: 0,
   orgName: ORG, orgLines: ORG_LINES,
   notes: [
@@ -67,4 +61,4 @@ fs.writeFileSync(process.argv[3] || "inv802.pdf", await renderInvoicePdf({
   ],
   signedByName: "Neeta Saxena",
 }));
-console.log("ok —", b.description, "@", b.ratePerHour, "=", b.amount);
+console.log("ok —", b.monthlyHours, "hours @", b.rateText, "=", b.computed, b.reconciles ? "ok" : "MISMATCH");

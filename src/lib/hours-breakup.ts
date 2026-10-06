@@ -1,107 +1,98 @@
-// Turning a monthly fee into hours and a rate per hour that actually multiply.
+// Turning a monthly fee into hours and a rate per hour that reconcile.
 //
-// The fee is the agreed thing: 12,000 a month. The hours are what the
-// employer's finance team checks. If the invoice says 130 hours at 92.40 they
-// will multiply it, get 12,012, and call the school — the original Zoho
-// invoice has exactly that defect and nobody had noticed.
+// Three things are fixed and not ours to move:
+//   the monthly fee   — what the parent agreed to pay, a round number
+//   26 day care days  — the school's month, a fact and not a convention
+//   whole hours a day — no child attends for 6.1 hours
 //
-// So we do not round a rate and hope. We choose the breakup. The number of
-// day care days in a month is a convention, not a measurement — 26 is the
-// usual one, but 25 is just as true and very often makes the division exact.
-// Given the fee and the hours a day, this finds the combination closest to
-// the convention whose rate per hour comes out to whole paise.
+// So the only free number is the rate per hour, and it is fee ÷ (26 × hours).
+// For 12,000 at 5 hours that is 92.307692…, which at two decimals is 92.31,
+// and 130 × 92.31 = 12,000.30. Not 12,000. This is exactly the defect in
+// INV-000059, where 130 × 92.40 is printed beside a total of 12,000 — the
+// numbers on the page do not multiply, and an employer's finance team
+// multiplies.
 //
-//   12,000 at 5 hours a day → 25 days, 125 hours, 96.00 an hour. Exactly.
-//   12,000 at 12 hours a day → 25 days, 300 hours, 40.00 an hour. Exactly.
-//
-// When nothing is exact it says so rather than printing an invoice that
-// cannot be checked.
+// The fix is not to move the fee or invent days. It is to print the rate at
+// the precision at which it reconciles: 92.3077 × 130 = 12,000.001, which to
+// the paisa is 12,000.00. So we find the fewest decimal places at which the
+// line multiplies back to the agreed fee, and show the rate like that — two
+// wherever the division is clean, more only where it has to be.
 
 export type Breakup = {
   hoursPerDay: number;
   daysPerMonth: number;
   monthlyHours: number;
-  ratePerHour: number;      // 2dp
-  amount: number;           // ratePerHour * monthlyHours, exactly
-  exact: boolean;           // does it come to the fee that was asked for?
-  shortBy: number;          // amount - requested, 0 when exact
-  description: string;      // '5 hours daily | 25 daycare days in a month.'
+  ratePerHour: number;       // rounded to rateDecimals
+  rateDecimals: number;      // how many places to print
+  rateText: string;          // the rate exactly as it should appear
+  amount: number;            // the agreed fee
+  reconciles: boolean;       // hours x rate = fee, to the paisa
+  computed: number;          // what hours x rate actually comes to
+  description: string;       // '5 hours daily | 26 daycare days in a month.'
 };
 
-const DEFAULT_DAYS = 26;
-// Hours a day are always whole. Nobody leaves a child for 6.1 hours, and an
-// invoice that says so is one an employer queries. The lever we move is the
-// number of day care days in the month, which is a convention anyway.
-const DAY_RANGE = [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30];
+export const DAYCARE_DAYS = 26;
+const MAX_DECIMALS = 6;
 
-const money2 = (n: number) => Math.round(n * 100) / 100;
+const round = (n: number, d: number) => {
+  const f = Math.pow(10, d);
+  return Math.round((n + Number.EPSILON) * f) / f;
+};
 
 export function describe(hoursPerDay: number, daysPerMonth: number) {
-  const h = hoursPerDay === 1 ? "1 hour daily" : `${trim(hoursPerDay)} hours daily`;
-  return `${h} | ${trim(daysPerMonth)} daycare days in a month.`;
+  const h = hoursPerDay === 1 ? "1 hour daily" : `${hoursPerDay} hours daily`;
+  return `${h} | ${daysPerMonth} daycare days in a month.`;
 }
-const trim = (n: number) => String(Number(n).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1"));
 
-function build(amount: number, hoursPerDay: number, daysPerMonth: number): Breakup {
-  const monthlyHours = money2(hoursPerDay * daysPerMonth);
-  const paise = Math.round(amount * 100);
-  // Exact when the fee in paise divides by the hours with nothing left over.
-  const exact = monthlyHours > 0 && Number.isInteger(paise / monthlyHours);
-  const ratePerHour = monthlyHours > 0 ? money2(amount / monthlyHours) : 0;
-  const total = money2(ratePerHour * monthlyHours);
+export function breakup(
+  amount: number,
+  hoursPerDay: number,
+  daysPerMonth: number = DAYCARE_DAYS,
+): Breakup {
+  const hours = Math.max(1, Math.round(hoursPerDay));
+  const days = Math.max(1, Math.round(daysPerMonth));
+  const monthlyHours = hours * days;
+
+  let decimals = 2, rate = round(amount / monthlyHours, 2);
+  for (let d = 2; d <= MAX_DECIMALS; d++) {
+    const r = round(amount / monthlyHours, d);
+    decimals = d; rate = r;
+    if (round(r * monthlyHours, 2) === round(amount, 2)) break;
+  }
+  const computed = round(rate * monthlyHours, 2);
+
   return {
-    hoursPerDay, daysPerMonth, monthlyHours, ratePerHour,
-    amount: exact ? amount : total,
-    exact,
-    shortBy: exact ? 0 : money2(total - amount),
-    description: describe(hoursPerDay, daysPerMonth),
+    hoursPerDay: hours,
+    daysPerMonth: days,
+    monthlyHours,
+    ratePerHour: rate,
+    rateDecimals: decimals,
+    rateText: rate.toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }),
+    amount: round(amount, 2),
+    reconciles: computed === round(amount, 2),
+    computed,
+    description: describe(hours, days),
   };
 }
 
-// The breakup to use, and the ones worth offering instead.
+// The breakup, plus the whole hour counts whose rate lands on two clean
+// decimals — for anyone who would rather move the hours than print 92.3077.
 export function solveBreakup(
   amount: number,
   hoursPerDay: number,
-  opts: { daysPerMonth?: number | null; preferDays?: number } = {},
+  opts: { daysPerMonth?: number | null } = {},
 ): { best: Breakup; alternatives: Breakup[] } {
-  const prefer = opts.preferDays ?? DEFAULT_DAYS;
-  hoursPerDay = Math.max(1, Math.round(hoursPerDay));
+  const days = opts.daysPerMonth || DAYCARE_DAYS;
+  const best = breakup(amount, hoursPerDay, days);
+  if (best.rateDecimals === 2) return { best, alternatives: [] };
 
-  // If the days were set deliberately, honour them — but still say whether
-  // the result can be checked.
-  if (opts.daysPerMonth) {
-    const chosen = build(amount, hoursPerDay, opts.daysPerMonth);
-    return { best: chosen, alternatives: chosen.exact ? [] : exactOptions(amount, hoursPerDay, prefer).slice(0, 4) };
-  }
-
-  const exacts = exactOptions(amount, hoursPerDay, prefer);
-  if (exacts.length) return { best: exacts[0], alternatives: exacts.slice(1, 4) };
-
-  // Nothing divides cleanly at these hours. Offer the nearest hour counts
-  // that do — "make it 4 hours and the rate comes out round" is exactly the
-  // adjustment that gets made in practice.
-  const byHours: Breakup[] = [];
-  for (let dh = 1; dh <= 4 && byHours.length < 4; dh++) {
-    for (const h of [hoursPerDay - dh, hoursPerDay + dh]) {
-      if (h <= 0 || !Number.isInteger(h)) continue;
-      const e = exactOptions(amount, h, prefer);
-      if (e.length) byHours.push(e[0]);
+  const tidy: Breakup[] = [];
+  for (let d = 1; d <= 6 && tidy.length < 3; d++) {
+    for (const h of [best.hoursPerDay - d, best.hoursPerDay + d]) {
+      if (h < 1 || h > 14) continue;
+      const b = breakup(amount, h, days);
+      if (b.rateDecimals === 2) tidy.push(b);
     }
   }
-  // Keep the hours that were asked for, but take the number of days that
-  // lands closest to the fee rather than the convention — being 4 paise out
-  // is arguable, being 40 is a phone call.
-  const nearest = DAY_RANGE.map((d) => build(amount, hoursPerDay, d))
-    .sort((a, b) => Math.abs(a.shortBy) - Math.abs(b.shortBy)
-                 || Math.abs(a.daysPerMonth - prefer) - Math.abs(b.daysPerMonth - prefer))[0];
-  return { best: nearest, alternatives: byHours.slice(0, 4) };
-}
-
-function exactOptions(amount: number, hoursPerDay: number, prefer: number): Breakup[] {
-  return DAY_RANGE
-    .map((d) => build(amount, hoursPerDay, d))
-    .filter((b) => b.exact)
-    // Closest to the convention first; on a tie, the larger month.
-    .sort((a, b) => Math.abs(a.daysPerMonth - prefer) - Math.abs(b.daysPerMonth - prefer)
-                 || b.daysPerMonth - a.daysPerMonth);
+  return { best, alternatives: tidy };
 }

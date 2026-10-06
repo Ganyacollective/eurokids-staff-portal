@@ -55,8 +55,8 @@ export async function GET(req: Request) {
     const lines = ((p.lines || []) as LineInput[]).map((l, i) => {
       const r = resolveLine(l);
       return { invoice_id: inv.id, position: i + 1, rate_id: r.rate_id, name: r.name,
-        description: r.description, qty: r.qty, rate: r.rate, amount: r.amount,
-        amount_is_fixed: r.amount_is_fixed };
+        description: r.description, qty: r.qty, rate: r.rate, rate_text: r.rate_text,
+        amount: r.amount, amount_is_fixed: r.amount_is_fixed };
     });
     if (lines.length) await a.from("daycare_invoice_line").insert(lines);
     await a.from("daycare_recurring").update({ next_month: nextMonth(period) }).eq("id", p.id);

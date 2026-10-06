@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       invoice_id: id, position: i + 1, rate_id: r.rate_id, name: r.name,
       description: l._desc ? (r.description ? `${l._desc} · ${r.description}` : l._desc) : r.description,
       qty: Math.round(r.qty * times * 100) / 100,
-      rate: r.rate,
+      rate: r.rate, rate_text: r.rate_text,
       amount: Math.round(r.amount * times * 100) / 100,
       amount_is_fixed: r.amount_is_fixed,
     };

@@ -22,15 +22,19 @@ import path from "node:path";
 import { rupeesInWords, schoolSignature, fitSignature } from "./letter-pdf";
 
 const W = 595.28, H = 841.89;
-const L = 42, R = W - 42, WIDTH = R - L;
-const TOP = H - 40, BOTTOM = 56;
+const L = 56.7, R = W - 56.7, WIDTH = R - L;
+// Clear of the logo at the top and the address strip at the foot — the same
+// measurements every other document the school sends uses.
+const TOP = H - 104, BOTTOM = 96;
 
-const INK: RGB = rgb(0.11, 0.12, 0.13);
-const BRAND: RGB = rgb(0.12, 0.25, 0.60);     // the EuroKids blue of the originals
-const MUTE: RGB = rgb(0.42, 0.45, 0.50);
-const HAIR: RGB = rgb(0.85, 0.86, 0.88);
-const BAR: RGB = rgb(0.25, 0.27, 0.30);
-const PANEL: RGB = rgb(0.95, 0.955, 0.96);
+const INK: RGB = rgb(0.09, 0.10, 0.11);
+const BRAND: RGB = rgb(0.13, 0.25, 0.60);     // the EuroKids blue
+const MUTE: RGB = rgb(0.45, 0.48, 0.52);
+// Rules sit behind the type, so they are faint. The first version used a
+// near-black bar and a grey heavy enough that figures looked smudged into it.
+const HAIR: RGB = rgb(0.89, 0.90, 0.92);
+const BAR: RGB = rgb(0.13, 0.25, 0.60);
+const PANEL: RGB = rgb(0.957, 0.965, 0.98);
 
 const asset = (...p: string[]) => path.join(process.cwd(), "public", "brand", ...p);
 
@@ -39,6 +43,7 @@ export type InvoiceLine = {
   description?: string | null;
   qty: number;
   rate: number;
+  rateText?: string | null;   // the rate at the precision that reconciles
   amount: number;
 };
 
@@ -78,10 +83,20 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
   const bold = await doc.embedFont(fs.readFileSync(asset("fonts", "body-bold.ttf")), { subset: true });
   const ital = await doc.embedFont(fs.readFileSync(asset("fonts", "body-italic.ttf")), { subset: true });
 
+  // The letterhead behind every page, as on the letters and the consents.
+  let bg: Awaited<ReturnType<PDFDocument["embedPng"]>> | undefined;
+  const lh = asset("letterhead.png");
+  if (fs.existsSync(lh)) bg = await doc.embedPng(fs.readFileSync(lh));
+
   let page = doc.addPage([W, H]);
+  if (bg) page.drawImage(bg, { x: 0, y: 0, width: W, height: H });
   let y = TOP;
   const pages = [page];
-  const newPage = () => { page = doc.addPage([W, H]); pages.push(page); y = TOP; };
+  const newPage = () => {
+    page = doc.addPage([W, H]);
+    if (bg) page.drawImage(bg, { x: 0, y: 0, width: W, height: H });
+    pages.push(page); y = TOP;
+  };
   const room = (h: number) => { if (y - h < BOTTOM) newPage(); };
 
   const put = (s: string, x: number, size = 9, f: PDFFont = reg, c: RGB = INK) =>
@@ -113,31 +128,31 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
   };
 
   // ── the head ──────────────────────────────────────────────────────────
-  put("TAX INVOICE", L, 24, reg, INK);
-  y -= 30;
-  put(`Invoice# ${d.number}`, L, 9.5, bold, BRAND);
-  y -= 22;
-  put("Balance Due", L, 7.5, reg, MUTE);
-  y -= 11;
-  put(money(d.balanceDue), L, 13, bold, INK);
+  put("TAX INVOICE", L, 22, reg, INK);
+  y -= 28;
+  put(`Invoice# ${d.number}`, L, 10, bold, BRAND);
+  y -= 24;
+  put("Balance Due", L, 8, reg, MUTE);
+  y -= 13;
+  put(money(d.balanceDue), L, 14, bold, INK);
 
-  // the organisation, right-aligned, starting level with the title
-  let oy = TOP;
-  const orgRight = (s: string, size: number, f: PDFFont, c: RGB) => {
-    page.drawText(s, { x: R - f.widthOfTextAtSize(s, size), y: oy - size, size, font: f, color: c });
-    oy -= size * 1.5;
-  };
-  oy = TOP - 58;
-  orgRight(d.orgName, 9.5, bold, INK);
-  for (const ln of d.orgLines) orgRight(ln, 9, reg, BRAND);
+  // The letterhead already carries the name, the address, the phone and the
+  // email in its own footer. Repeating them under the logo is the clutter
+  // that made the first draft look like a form; only the registration
+  // numbers, which an employer's finance team does look for, are added here.
+  let oy = TOP - 4;
+  for (const ln of d.orgLines) {
+    page.drawText(ln, { x: R - reg.widthOfTextAtSize(ln, 8.5), y: oy - 8.5, size: 8.5, font: reg, color: MUTE });
+    oy -= 13;
+  }
 
-  y = Math.min(y - 34, oy - 26);
+  y = Math.min(y - 30, oy - 20);
 
   // ── the facts, two columns ────────────────────────────────────────────
   const label = (k: string, v: string) => {
-    put(k, L, 9, reg, BRAND);
-    put(v, L + 118, 9, reg, INK);
-    y -= 16;
+    put(k, L, 9.5, reg, BRAND);
+    put(v, L + 118, 9.5, reg, INK);
+    y -= 17;
   };
   const factTop = y;
   label("Invoice Date :", d.invoiceDate);
@@ -148,8 +163,8 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
   if (d.kind === "reimbursement" && d.childName) label("Childs Name :", d.childName);
 
   const billY = factTop - 48;
-  page.drawText("Bill To", { x: L + 300, y: billY - 9, size: 9, font: reg, color: BRAND });
-  page.drawText(d.billToName, { x: L + 300, y: billY - 23, size: 9.5, font: bold, color: INK });
+  page.drawText("Bill To", { x: L + 280, y: billY - 9, size: 9.5, font: reg, color: BRAND });
+  page.drawText(d.billToName, { x: L + 280, y: billY - 24, size: 10, font: bold, color: INK });
 
   y = Math.min(y, billY - 34) - 8;
 
@@ -165,20 +180,22 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
   const hourly = d.kind === "reimbursement";
   const cols = {
     num: L + 8, item: L + 30,
-    qtyEnd: L + 330, rateEnd: L + 428, amtEnd: R - 8,
+    // A rate at four decimals is wider than one at two, and the first
+    // version let 92.3077 run into 12,000.00.
+    qtyEnd: L + 300, rateEnd: L + 400, amtEnd: R - 4,
     qtyHead: hourly ? ["Monthly", "Hours"] : ["Qty"],
     rateHead: hourly ? ["Rate Per", "Hour"] : ["Rate"],
   };
 
-  const headH = hourly ? 32 : 22;
+  const headH = hourly ? 34 : 24;
   room(headH + 40);
   page.drawRectangle({ x: L, y: y - headH, width: WIDTH, height: headH, color: BAR });
-  const hy = y - (hourly ? 13 : 15);
-  page.drawText("#", { x: cols.num, y: hy, size: 8.5, font: reg, color: rgb(1, 1, 1) });
-  page.drawText("Item & Description", { x: cols.item, y: hy, size: 8.5, font: reg, color: rgb(1, 1, 1) });
+  const hy = y - (hourly ? 14 : 16);
+  page.drawText("#", { x: cols.num, y: hy, size: 9, font: reg, color: rgb(1, 1, 1) });
+  page.drawText("Item & Description", { x: cols.item, y: hy, size: 9, font: reg, color: rgb(1, 1, 1) });
   const headRight = (parts: string[], xEnd: number) => {
     parts.forEach((p, i) => {
-      page.drawText(p, { x: xEnd - reg.widthOfTextAtSize(p, 8.5), y: hy - i * 11, size: 8.5, font: reg, color: rgb(1, 1, 1) });
+      page.drawText(p, { x: xEnd - reg.widthOfTextAtSize(p, 9), y: hy - i * 11, size: 9, font: reg, color: rgb(1, 1, 1) });
     });
   };
   headRight(cols.qtyHead, cols.qtyEnd);
@@ -195,21 +212,23 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
   }
 
   d.lines.forEach((ln, i) => {
-    const desc = ln.description ? wrap(ln.description, 330, 7.5, reg) : [];
-    room(20 + desc.length * 10);
+    const desc = ln.description ? wrap(ln.description, 300, 8, reg) : [];
+    room(26 + desc.length * 11);
+    y -= 15;
+    put(String(i + 1), cols.num, 9.5, reg, INK);
+    put(ln.name, cols.item, 9.5, reg, INK);
+    right(Number(ln.qty).toFixed(2), cols.qtyEnd, 9.5, reg, INK);
+    // The rate carries its own precision: 92.3077, not 92.31, because 130 x
+    // 92.31 is not 12,000 and somebody will multiply it.
+    right(ln.rateText || money(ln.rate), cols.rateEnd, 9.5, reg, INK);
+    right(money(ln.amount), cols.amtEnd, 9.5, reg, INK);
     y -= 12;
-    put(String(i + 1), cols.num, 9, reg, INK);
-    put(ln.name, cols.item, 9, reg, INK);
-    right(Number(ln.qty).toFixed(2), cols.qtyEnd, 9, reg, INK);
-    right(money(ln.rate), cols.rateEnd, 9, reg, INK);
-    right(money(ln.amount), cols.amtEnd, 9, reg, INK);
-    y -= 11;
     for (const dl of desc) {
-      page.drawText(dl, { x: cols.item, y: y - 7.5, size: 7.5, font: reg, color: MUTE });
-      y -= 10;
+      page.drawText(dl, { x: cols.item, y: y - 8, size: 8, font: reg, color: MUTE });
+      y -= 11;
     }
-    y -= 4;
-    page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: 0.5, color: HAIR });
+    y -= 7;
+    page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: 0.4, color: HAIR });
   });
 
   // ── the totals ────────────────────────────────────────────────────────

@@ -14,12 +14,6 @@ type Db = ReturnType<typeof admin>;
 
 export const ORG_NAME = "Eurokids JMD Enclave";
 export const ORG_LINES = [
-  "Bungalow 1, JMD Enclave, Mohammadwadi",
-  "Pune Maharashtra 411060",
-  "India",
-  "020 6962 2686",
-  "admin@eurokidsjmdenclave.org",
-  "www.eurokidsjmdenclave.org",
   "UDYAM-MH-26-0594497",
   "PAN : AARFV8391E",
   "Shop Act : 102859369903",
@@ -87,15 +81,19 @@ export function resolveLine(l: LineInput) {
       description: l.description || best.description,
       qty: best.monthlyHours,
       rate: best.ratePerHour,
+      rate_text: best.rateText,
       amount: best.amount,
-      amount_is_fixed: !best.exact,     // keep the agreed fee when it will not divide
+      // The fee is the agreed figure; the rate is printed at the precision
+      // that multiplies back to it.
+      amount_is_fixed: true,
       breakup: best,
     };
   }
   const qty = Number(l.qty ?? 1), rate = Number(l.rate ?? 0);
   return {
     rate_id: l.rate_id ?? null, name: l.name, description: l.description || null,
-    qty, rate, amount: Math.round(qty * rate * 100) / 100, amount_is_fixed: false, breakup: null,
+    qty, rate, rate_text: null,
+    amount: Math.round(qty * rate * 100) / 100, amount_is_fixed: false, breakup: null,
   };
 }
 
@@ -120,7 +118,8 @@ export async function buildDocFor(a: Db, invoiceId: number): Promise<InvoiceDoc 
     subject: reimb ? null : inv.subject,
     groupHeader: reimb ? null : (child && inv.period_start ? `${child.name} | ${monthLabel(inv.period_start)}` : null),
     lines: (lines || []).map((l): InvoiceLine => ({
-      name: l.name, description: l.description, qty: Number(l.qty), rate: Number(l.rate), amount: Number(l.amount),
+      name: l.name, description: l.description, qty: Number(l.qty), rate: Number(l.rate),
+      rateText: l.rate_text, amount: Number(l.amount),
     })),
     subtotal: Number(inv.subtotal), total: Number(inv.total),
     paymentMade: Number(inv.payment_made), balanceDue: Number(inv.balance_due),
