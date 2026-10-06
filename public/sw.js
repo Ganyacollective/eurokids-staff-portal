@@ -5,10 +5,15 @@
    balances and receipts must never be stale, and Supabase calls carry auth
    headers that must not be replayed from a cache. */
 
-const VERSION = 'ek-v68';
+// One number, so the cache name and the asset stamps can never drift apart.
+// They had: the worker was on v68 while this list still pre-cached the v=42
+// stylesheet and script, which no page has asked for since. Every install
+// fetched two dead files and the stamp meant nothing here.
+const V = 68;
+const VERSION = `ek-v${V}`;
 const SHELL = [
   '/', '/hub.html', '/staff', '/portal.html', '/teacher', '/teacher.html',
-  '/brand/portal.css', '/brand/hub.css?v=42', '/brand/enquiries.js?v=42', '/brand/email-signature.png',
+  '/brand/portal.css', `/brand/hub.css?v=${V}`, `/brand/enquiries.js?v=${V}`, '/brand/email-signature.png',
   '/brand/icons/icon-192.png', '/brand/icons/icon-512.png',
   '/manifest.webmanifest',
 ];
