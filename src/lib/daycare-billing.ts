@@ -19,6 +19,16 @@ export const ORG_LINES = [
   "Shop Act : 102859369903",
 ];
 
+// Where a parent sends a bank transfer. Taken from the franchisor's own
+// invoice, which is the only place these had been written down. The account
+// number is not on that document and is NOT invented here — add it in this
+// one place and it appears on every invoice.
+export const BANK_LINES = [
+  "HDFC Bank — Tain Square, Shop No 22, Building A, Near Fatima Nagar, Pune 411013",
+  "IFSC: HDFC0000837",
+  "Account name: Veena Educational Services",
+];
+
 export const NOTES_REIMBURSEMENT = [
   "Please Note that VEENA EDUCATIONAL SERVICES is an authorised franchise owner of Eurokids International. Thank you for entrusting EuroKids with your child's early learning journey.",
   "We're delighted to have you as part of our family and appreciate your prompt payment. Should you have any questions about this invoice or need assistance, please reach out to your centre coordinator or email us at admin@eurokidsjmdenclave.org",
@@ -125,6 +135,7 @@ export async function buildDocFor(a: Db, invoiceId: number): Promise<InvoiceDoc 
     paymentMade: Number(inv.payment_made), balanceDue: Number(inv.balance_due),
     orgName: ORG_NAME, orgLines: ORG_LINES,
     notes: reimb ? NOTES_REIMBURSEMENT : NOTES_BILLING,
+    bankLines: BANK_LINES,
     terms: reimb ? null : TERMS,
     signedByName: "Neeta Saxena",
   };

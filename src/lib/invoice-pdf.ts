@@ -77,6 +77,9 @@ export type InvoiceDoc = {
   orgName: string;
   orgLines: string[];             // address, phone, email, website, registrations
   notes?: string[] | null;
+  // For a parent who pays by NEFT rather than the QR. Free text lines, not
+  // columns — the block differs by bank and nobody can predict its shape.
+  bankLines?: string[] | null;
   terms?: { heading: string; lines: string[] }[] | null;
   payQrPng?: string | null;
   signedByName: string;
@@ -167,9 +170,10 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
   label("Invoice Date :", d.invoiceDate);
   label("Terms :", d.termsLabel);
   label("Due Date :", d.dueDate);
-  // The reimbursement copy names the child here, as a field — it is what the
-  // employer's finance team looks for first.
-  if (d.kind === "reimbursement" && d.childName) label("Childs Name :", d.childName);
+  // Both kinds name the child here, as a field. The monthly bill carried it
+  // only inside the table's group row, which reads as a heading rather than
+  // as a fact somebody can quote.
+  if (d.childName) label("Childs Name :", d.childName);
 
   const billY = factTop - 48;
   page.drawText("Bill To", { x: L + 280, y: billY - 9, size: 9.5, font: reg, color: BRAND });
@@ -285,6 +289,16 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
     y -= 10;
     put("Notes", L, 9.5, reg, BRAND); y -= 14;
     for (const n of d.notes) { block(n, L, WIDTH, 7.8, reg, MUTE, 11); y -= 4; }
+  }
+
+  if (d.bankLines?.length) {
+    room(28 + d.bankLines.length * 12);
+    y -= 10;
+    put("Payable To", L, 9.5, reg, BRAND); y -= 14;
+    // One drawText per line. A block with newlines in it measures as a single
+    // line and runs off the bottom of the page.
+    for (const ln of d.bankLines) { block(ln, L, WIDTH, 8, reg, MUTE, 11.5); }
+    y -= 4;
   }
 
   if (d.payQrPng) {

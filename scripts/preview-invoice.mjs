@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import { renderInvoicePdf } from "../src/lib/invoice-pdf.ts";
 import { breakup } from "../src/lib/hours-breakup.ts";
+import { BANK_LINES } from "../src/lib/daycare-billing.ts";
 
 const ORG = "Eurokids JMD Enclave";
 const ORG_LINES = [
@@ -26,6 +27,7 @@ fs.writeFileSync(process.argv[2] || "inv59.pdf", await renderInvoicePdf({
     "Please Note that VEENA EDUCATIONAL SERVICES is an authorised franchise owner of Eurokids International. Thank you for entrusting EuroKids with your child's early learning journey.",
     "We're delighted to have you as part of our family and appreciate your prompt payment. Should you have any questions about this invoice or need assistance, please reach out to your centre coordinator or email us at admin@eurokidsjmdenclave.org",
   ],
+  bankLines: BANK_LINES,
   signedByName: "Neeta Saxena",
 }));
 
@@ -59,6 +61,7 @@ fs.writeFileSync(process.argv[3] || "inv802.pdf", await renderInvoicePdf({
       "Only parents or pre-approved guardians (with photo ID) will be allowed to pick up the child.",
       "In case of a new person coming for pick-up, prior written or WhatsApp intimation is mandatory." ] },
   ],
+  bankLines: BANK_LINES,
   signedByName: "Neeta Saxena",
 }));
 console.log("ok —", b.monthlyHours, "hours @", b.rateText, "=", b.computed, b.reconciles ? "ok" : "MISMATCH");
