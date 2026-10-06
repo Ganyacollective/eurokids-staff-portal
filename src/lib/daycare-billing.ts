@@ -19,14 +19,11 @@ export const ORG_LINES = [
   "Shop Act : 102859369903",
 ];
 
-// Where a parent sends a bank transfer. Taken from the franchisor's own
-// invoice, which is the only place these had been written down. The account
-// number is not on that document and is NOT invented here — add it in this
-// one place and it appears on every invoice.
+// Where a parent sends a bank transfer. One place; every invoice reads it.
 export const BANK_LINES = [
+  "Veena Educational Services",
   "HDFC Bank — Tain Square, Shop No 22, Building A, Near Fatima Nagar, Pune 411013",
-  "IFSC: HDFC0000837",
-  "Account name: Veena Educational Services",
+  "Account: 50200041664781      IFSC: HDFC0000837",
 ];
 
 export const NOTES_REIMBURSEMENT = [
