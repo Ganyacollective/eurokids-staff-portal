@@ -40,6 +40,12 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/sign") ||
     // A parent signing a declaration has no account here either.
     path.startsWith("/declare") ||
+    // A fee receipt a parent forwards to their employer's finance team. They
+    // have no login and never will, and a receipt that bounces to a sign-in
+    // screen fails silently from our side — the parent just reports that the
+    // school sent them a broken link.
+    path.startsWith("/receipt") ||
+    path.startsWith("/api/rcert") ||
     path.startsWith("/login") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/_next") ||
