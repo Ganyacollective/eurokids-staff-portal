@@ -26,6 +26,11 @@ const L = 56.7, R = W - 56.7, WIDTH = R - L;
 // Clear of the logo at the top and the address strip at the foot — the same
 // measurements every other document the school sends uses.
 const TOP = H - 104, BOTTOM = 96;
+// One right edge for everything on the page: the registration block, the
+// table, the totals. The logo in the artwork runs out to 20.8pt from the
+// page edge and overhangs it, exactly as it does on the letters and the
+// consents — chasing the logo instead left the registrations sticking out
+// past the table, which is two margins on one page and reads as a mistake.
 
 const INK: RGB = rgb(0.09, 0.10, 0.11);
 const BRAND: RGB = rgb(0.13, 0.25, 0.60);     // the EuroKids blue
@@ -182,26 +187,36 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
     num: L + 8, item: L + 30,
     // A rate at four decimals is wider than one at two, and the first
     // version let 92.3077 run into 12,000.00.
-    qtyEnd: L + 300, rateEnd: L + 400, amtEnd: R - 4,
+    // Inset from the bar's edge, and the totals below use the same edge so
+    // every figure on the page lines up in one column.
+    qtyEnd: L + 294, rateEnd: L + 394, amtEnd: R - 10,
     qtyHead: hourly ? ["Monthly", "Hours"] : ["Qty"],
     rateHead: hourly ? ["Rate Per", "Hour"] : ["Rate"],
   };
 
-  const headH = hourly ? 34 : 24;
+  // Every heading is centred on the bar, whether it is one line or two. The
+  // first version put the single-line headings level with the FIRST line of
+  // the two-line ones, so "Amount" sat high and "Hours" sat low in the same
+  // bar.
+  const HEAD = 9, HEAD_LEAD = 11, CAP_HALF = 3.2;
+  const headH = 30;
   room(headH + 40);
   page.drawRectangle({ x: L, y: y - headH, width: WIDTH, height: headH, color: BAR });
-  const hy = y - (hourly ? 14 : 16);
-  page.drawText("#", { x: cols.num, y: hy, size: 9, font: reg, color: rgb(1, 1, 1) });
-  page.drawText("Item & Description", { x: cols.item, y: hy, size: 9, font: reg, color: rgb(1, 1, 1) });
-  const headRight = (parts: string[], xEnd: number) => {
-    parts.forEach((p, i) => {
-      page.drawText(p, { x: xEnd - reg.widthOfTextAtSize(p, 9), y: hy - i * 11, size: 9, font: reg, color: rgb(1, 1, 1) });
-    });
-  };
+  const barMid = y - headH / 2;
+  const headAt = (parts: string[], i: number) =>
+    barMid + ((parts.length - 1) * HEAD_LEAD) / 2 - i * HEAD_LEAD - CAP_HALF;
+  const headLeft = (parts: string[], x: number) => parts.forEach((p, i) =>
+    page.drawText(p, { x, y: headAt(parts, i), size: HEAD, font: reg, color: rgb(1, 1, 1) }));
+  const headRight = (parts: string[], xEnd: number) => parts.forEach((p, i) =>
+    page.drawText(p, { x: xEnd - reg.widthOfTextAtSize(p, HEAD), y: headAt(parts, i),
+      size: HEAD, font: reg, color: rgb(1, 1, 1) }));
+
+  headLeft(["#"], cols.num);
+  headLeft(["Item & Description"], cols.item);
   headRight(cols.qtyHead, cols.qtyEnd);
   headRight(cols.rateHead, cols.rateEnd);
   headRight(["Amount"], cols.amtEnd);
-  y -= headH + 4;
+  y -= headH + 6;
 
   if (d.groupHeader) {
     room(20);
@@ -236,7 +251,7 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
   // across a page from each other.
   room(130);
   y -= 16;
-  const tLabelEnd = R - 150, tAmtEnd = R - 8;
+  const tLabelEnd = R - 160, tAmtEnd = R - 10;
   const totalRow = (k: string, v: string, f: PDFFont = reg, c: RGB = INK) => {
     right(k, tLabelEnd, 9, f, c);
     right(v, tAmtEnd, 9, f, c);
