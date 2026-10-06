@@ -33,12 +33,16 @@ const TOP = H - 104, BOTTOM = 96;
 // past the table, which is two margins on one page and reads as a mistake.
 
 const INK: RGB = rgb(0.09, 0.10, 0.11);
-const BRAND: RGB = rgb(0.13, 0.25, 0.60);     // the EuroKids blue
+// A quieter blue than the logo's. The logo earns its saturation because it
+// is two inches of artwork; the same value spread across a header bar, every
+// field label, the subject and three paragraphs of terms is a lot of shouting
+// on a page somebody reads for one number.
+const BRAND: RGB = rgb(0.24, 0.32, 0.47);     // muted steel, for labels
 const MUTE: RGB = rgb(0.45, 0.48, 0.52);
 // Rules sit behind the type, so they are faint. The first version used a
 // near-black bar and a grey heavy enough that figures looked smudged into it.
 const HAIR: RGB = rgb(0.89, 0.90, 0.92);
-const BAR: RGB = rgb(0.13, 0.25, 0.60);
+const BAR: RGB = rgb(0.20, 0.26, 0.37);       // slate navy, for the one solid block
 const PANEL: RGB = rgb(0.957, 0.965, 0.98);
 
 const asset = (...p: string[]) => path.join(process.cwd(), "public", "brand", ...p);
@@ -303,7 +307,9 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
     for (const t of d.terms) {
       room(28);
       put(t.heading, L, 7.8, reg, BRAND); y -= 11;
-      for (const ln of t.lines) block(ln, L, WIDTH, 7.8, reg, BRAND, 11);
+      // The headings carry the colour; the sentences under them are read, so
+      // they are grey like every other paragraph on the page.
+      for (const ln of t.lines) block(ln, L, WIDTH, 7.8, reg, MUTE, 11);
       y -= 6;
     }
   }
