@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=65">
-<link rel="prefetch" href="/brand/enquiries.js?v=65" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=66">
+<link rel="prefetch" href="/brand/enquiries.js?v=66" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -3291,27 +3291,26 @@ async function delReceipt(id){
 async function openPlanFrom(uin){ openPlan(uin); }
 
 /* ══ DAY CARE BILLING ═══════════════════════════════════════════════════
-   Fee receipts a parent hands to their employer.
+   Two documents off one engine.
 
-   Separate from everything in Fees & Children on purpose. EPMS invoices the
-   school fee and the Liabilities tab tracks what has been paid against it;
-   nothing here touches either, so there is no second opinion about what a
-   family owes. Day care is its own arrangement with its own families — most
-   of the children are also ours, but plenty of day care parents are not on
-   the roll and never will be, so they need somewhere to exist.
+   The reimbursement copy is what a parent claims against their employer:
+   hours, a rate per hour, the child named as a field, and always paid in
+   full — a claim with a balance on it is worth nothing. The monthly bill is
+   the ordinary one: quantities and rates, grouped under the child and the
+   month, terms on the back.
 
-   It is a receipt, not an invoice. The money is already in. No pay button,
-   no balance, no reminders — an "invoice" marked paid is what people reach
-   for when they have no concept of a receipt, and the one audience that
-   matters is an employer's finance team, who reject anything resembling a
-   bill.                                                                    */
-let _dc = { parties: [], children: [], due: [], certificates: [] };
+   Generating and sending are separate on purpose. The run on the 1st raises
+   drafts; sending is a decision, because a family behind on their own fees
+   should not be handed a claimable receipt until somebody says so.
+
+   Nothing here touches EPMS or the school fee ledger.                      */
+let _dc = { parties: [], children: [], rates: [], invoices: [], lines: [], recurring: [] };
 
 async function dcApi(path, body){
   const { data: { session: s } } = await getSb().auth.getSession();
   if (!s) return { ok: false, error: 'Your session has expired — please sign in again.' };
   try {
-    const r = await fetch(`/api/reimbursement${path}`, {
+    const r = await fetch(`/api/daycare${path}`, {
       method: body ? 'POST' : 'GET',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.access_token}` },
       body: body ? JSON.stringify(body) : undefined });
@@ -3319,8 +3318,11 @@ async function dcApi(path, body){
   } catch (e) { return { ok: false, error: 'Could not reach the server: ' + e.message }; }
 }
 
-const monthName = d => d ? new Date(String(d).slice(0,10) + 'T00:00:00Z')
+const dcMonth = d => d ? new Date(String(d).slice(0,10) + 'T00:00:00Z')
   .toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '—';
+const dcParty = id => (_dc.parties || []).find(p => p.id === id);
+const dcChild = id => (_dc.children || []).find(c => c.id === id);
+const dcLines = id => (_dc.lines || []).filter(l => l.invoice_id === id).sort((a,b)=>a.position-b.position);
 
 async function tabDaycare(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
@@ -3328,232 +3330,407 @@ async function tabDaycare(){
   if (!r.ok) return el('body').innerHTML = fail(r);
   _dc = r;
 
-  const thisMonth = todayHere().slice(0,7) + '-01';
-  const waiting = (_dc.due || []).filter(d => d.status === 'active' && !d.already_issued && d.next_month < thisMonth);
-  const live = (_dc.certificates || []).filter(c => !c.cancelled_at);
-  const unsent = live.filter(c => !c.emailed_at);
-  const thisYear = live.filter(c => String(c.period_start) >= todayHere().slice(0,4) + '-01-01')
-    .reduce((a, c) => a + Number(c.amount || 0), 0);
+  const drafts = (_dc.invoices || []).filter(i => i.status === 'draft');
+  const sent   = (_dc.invoices || []).filter(i => i.status === 'sent');
+  const held   = drafts.filter(i => i.kind === 'reimbursement' && dcParty(i.party_id)?.hold_reimbursement);
+  const thisYear = sent.filter(i => String(i.invoice_date) >= todayHere().slice(0,4) + '-01-01')
+    .reduce((a, i) => a + Number(i.total || 0), 0);
 
   el('body').innerHTML = head('Day care billing',
-      'Receipts for day care fees, for parents whose employers reimburse them. Nothing here touches the school fee.',
-      `<button class="btn line" id="dc-family">Add a family…</button><button class="btn" id="dc-issue">Issue a receipt…</button>`)
+      'The monthly bill, and the receipt a parent claims from their employer. Nothing here touches the school fee.',
+      `<button class="btn line" id="dc-family">Add a family…</button><button class="btn" id="dc-new">New invoice…</button>`)
     + `<div class="stats" style="margin-bottom:16px">
-        <div class="stat ${waiting.length ? 'warn' : ''}"><div class="k">Due to be issued</div><div class="v">${waiting.length}</div>
-          <div class="m">Months that have finished with no receipt yet</div></div>
-        <div class="stat"><div class="k">Issued this year</div><div class="v">${money(thisYear)}</div>
-          <div class="m">${live.length} receipt${live.length === 1 ? '' : 's'}</div></div>
-        <div class="stat ${unsent.length ? 'warn' : ''}"><div class="k">Not emailed</div><div class="v">${unsent.length}</div>
-          <div class="m">Issued but not yet sent to the family</div></div>
+        <div class="stat ${drafts.length ? 'warn' : ''}"><div class="k">Waiting to send</div><div class="v">${drafts.length}</div>
+          <div class="m">Raised, numbered only when you send them</div></div>
+        <div class="stat ${held.length ? 'crit' : ''}"><div class="k">On hold</div><div class="v">${held.length}</div>
+          <div class="m">Family behind on fees — never sent automatically</div></div>
+        <div class="stat"><div class="k">Sent this year</div><div class="v">${money(thisYear)}</div>
+          <div class="m">${sent.length} document${sent.length === 1 ? '' : 's'}</div></div>
       </div>
 
-      ${waiting.length ? `<div class="panel" style="margin-bottom:16px;border-color:var(--warn)">
-        <div class="ptop"><h2>${waiting.length} waiting</h2><span class="hint">The monthly run issues these on its own; this is to do one now</span></div>
-        ${waiting.map(d => `<div class="row" style="align-items:center">
-          <div class="l" style="flex:1"><strong style="color:var(--ink)">${esc(d.child_name)}</strong> —
-            ${monthName(d.next_month)}, ${money(d.monthly_amount)}
-            <span class="sub">${esc(d.party_name)}${d.employer_name ? ' · ' + esc(d.employer_name) : ''}</span></div>
-          <button class="btn line" onclick="issueNow(${d.child_id}, '${d.next_month}', this)" style="white-space:nowrap">Issue it</button>
-        </div>`).join('')}
-      </div>` : ''}
+      <div class="panel" style="margin-bottom:16px"><div class="ptop"><h2 id="dc-h">Invoices</h2>
+        <span class="hint">A sent invoice is frozen — duplicate it rather than editing it</span></div>
+        <div class="tools" style="padding:0 16px 10px">
+          <div class="search"><input class="in" id="dc-q" type="search" placeholder="Child, family or number"></div>
+          <select class="in" id="dc-f">
+            <option value="draft">Waiting to send</option>
+            <option value="">Everything</option>
+            <option value="reimbursement">Reimbursement copies</option>
+            <option value="billing">Monthly bills</option>
+            <option value="sent">Sent</option>
+          </select>
+        </div>
+        <div class="tw"><table><thead><tr><th>Number</th><th>Kind</th><th>Child</th><th>Family</th>
+          <th>Month</th><th class="r">Total</th><th>Status</th><th></th></tr></thead>
+        <tbody id="dc-rows"></tbody></table></div></div>
 
-      <div class="panel" style="margin-bottom:16px"><div class="ptop"><h2>Standing monthly receipts</h2>
-        <span class="hint">One per child. The run issues each month once it has finished.</span></div>
-        <div class="tw"><table><thead><tr><th>Child</th><th>Family</th><th>Employer</th>
-          <th class="r">Each month</th><th>Next</th><th>Last issued</th><th></th></tr></thead>
-        <tbody>${(_dc.due || []).map(d => `<tr>
-          <td><strong>${esc(d.child_name)}</strong>${d.uin ? '<div class="hint" style="font-size:10.5px">on the school roll</div>' : '<div class="hint" style="font-size:10.5px">day care only</div>'}</td>
-          <td class="hint">${esc(d.party_name)}</td>
-          <td class="hint">${esc(d.employer_name || '—')}</td>
-          <td class="r num">${money(d.monthly_amount)}</td>
-          <td class="hint">${d.status === 'active' ? monthName(d.next_month) : `<span class="chip c-mute">${esc(d.status)}</span>`}</td>
-          <td class="hint">${d.last_period ? monthName(d.last_period) : '—'}</td>
-          <td style="white-space:nowrap"><a style="cursor:pointer" onclick="issueNow(${d.child_id}, '${d.next_month}', this)">Issue</a></td>
-        </tr>`).join('') || `<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--muted)">
-          No standing receipts yet. Add a family, then set one up.</td></tr>`}</tbody></table></div></div>
-
-      <div class="panel"><div class="ptop"><h2>Receipts issued</h2>
-        <span class="hint">Each one is frozen — re-sending sends the same document, not a new one</span></div>
-        <div class="tw"><table><thead><tr><th>Reference</th><th>Child</th><th>Period</th>
-          <th class="r">Amount</th><th>Emailed</th><th></th></tr></thead>
-        <tbody>${live.slice(0, 200).map(c => {
-          const child = (_dc.children || []).find(k => k.id === c.child_id);
+      <div class="panel"><div class="ptop"><h2>Families</h2>
+        <span class="hint">Hold a family and their reimbursement copies stop going out on their own</span></div>
+        <div class="tw"><table><thead><tr><th>Family</th><th>Father</th><th>Children</th><th>Email</th>
+          <th>Phone</th><th>Reimbursement</th></tr></thead>
+        <tbody>${(_dc.parties || []).map(p => {
+          const kids = (_dc.children || []).filter(c => c.party_id === p.id);
           return `<tr>
-            <td><strong>${esc(c.reference)}</strong></td>
-            <td>${esc(child?.name || '—')}</td>
-            <td class="hint">${monthName(c.period_start)}</td>
-            <td class="r num">${money(c.amount)}</td>
-            <td class="hint">${c.emailed_at ? shortDate(c.emailed_at) + (c.email_to ? `<div style="font-size:10.5px">${esc(c.email_to)}</div>` : '')
-              : '<span style="color:var(--warn)">not sent</span>'}</td>
-            <td style="white-space:nowrap">
-              <a style="cursor:pointer" onclick="openCert(${c.id})">Open</a> ·
-              <a style="cursor:pointer" onclick="resendCert(${c.id}, this)">${c.emailed_at ? 'Send again' : 'Email it'}</a></td>
+            <td><strong>${esc(p.display_name)}</strong><div class="hint" style="font-size:10.5px">${esc(p.party_number || '')}</div></td>
+            <td class="hint">${esc(p.father_name || '—')}</td>
+            <td class="hint">${kids.map(k => esc(k.name) + (k.uin ? ' <span class="chip c-good">ours</span>' : '')).join('<br>') || '—'}</td>
+            <td class="hint">${esc(p.login_email || p.email || '—')}</td>
+            <td class="hint">${esc(p.mobile || '—')}</td>
+            <td><a style="cursor:pointer;color:${p.hold_reimbursement ? 'var(--crit)' : 'var(--good)'}"
+                   onclick="dcHold(${p.id}, ${!p.hold_reimbursement})">${p.hold_reimbursement ? 'On hold — release' : 'Sending — hold'}</a></td>
           </tr>`;
-        }).join('') || `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--muted)">Nothing issued yet.</td></tr>`}
+        }).join('') || `<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--muted)">No families yet.</td></tr>`}
         </tbody></table></div></div>`;
 
-  el('dc-family').onclick = addFamily;
-  el('dc-issue').onclick = () => issueDrawer();
+  const paint = () => {
+    const q = (el('dc-q').value || '').trim().toLowerCase();
+    const f = el('dc-f').value;
+    const rows = (_dc.invoices || []).filter(i => {
+      if (f === 'draft' && i.status !== 'draft') return false;
+      if (f === 'sent' && i.status !== 'sent') return false;
+      if ((f === 'reimbursement' || f === 'billing') && i.kind !== f) return false;
+      if (!q) return true;
+      const p = dcParty(i.party_id), c = dcChild(i.child_id);
+      return [i.number, p?.display_name, c?.name].some(v => String(v || '').toLowerCase().includes(q));
+    });
+    el('dc-h').textContent = `${rows.length} invoice${rows.length === 1 ? '' : 's'}`;
+    el('dc-rows').innerHTML = rows.map(i => {
+      const p = dcParty(i.party_id), c = dcChild(i.child_id);
+      const onHold = i.kind === 'reimbursement' && p?.hold_reimbursement;
+      return `<tr>
+        <td><strong>${esc(i.number || '—')}</strong></td>
+        <td><span class="chip ${i.kind === 'reimbursement' ? 'c-good' : 'c-mute'}">${i.kind === 'reimbursement' ? 'Reimbursement' : 'Bill'}</span></td>
+        <td>${esc(c?.name || '—')}</td>
+        <td class="hint">${esc(p?.display_name || '—')}</td>
+        <td class="hint">${dcMonth(i.period_start)}</td>
+        <td class="r num">${money(i.total)}</td>
+        <td>${i.status === 'sent'
+          ? `<span class="chip c-good">Sent</span><div class="hint" style="font-size:10.5px">${shortDate(i.sent_at)}</div>`
+          : onHold ? '<span class="chip c-crit">On hold</span>'
+          : '<span class="chip c-warn">Draft</span>'}</td>
+        <td style="white-space:nowrap">
+          <a style="cursor:pointer" onclick="dcPreview(${i.id})">Open</a> ·
+          ${i.status === 'draft' ? `<a style="cursor:pointer" onclick="dcEdit(${i.id})">Edit</a> · <a style="cursor:pointer" onclick="dcSend(${i.id}, this)">Send</a> · ` : ''}
+          <a style="cursor:pointer" onclick="dcDuplicate(${i.id}, this)">Duplicate</a></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
+  };
+  paint();
+  el('dc-q').oninput = debounce(paint, 160);
+  el('dc-f').onchange = paint;
+  el('dc-family').onclick = () => dcFamilyDrawer();
+  el('dc-new').onclick = () => dcInvoiceDrawer();
 }
 
-async function openCert(id){
+async function dcPreview(id){
   const { data: { session: s } } = await getSb().auth.getSession();
-  const r = await fetch(`/api/reimbursement/pdf?id=${id}`, { headers: { Authorization: `Bearer ${s.access_token}` } });
-  if (!r.ok) { const j = await r.json().catch(() => ({})); return alert(j.error || 'That receipt could not be opened.'); }
+  const r = await fetch(`/api/daycare/pdf?id=${id}`, { headers: { Authorization: `Bearer ${s.access_token}` } });
+  if (!r.ok) { const j = await r.json().catch(() => ({})); return alert(j.error || 'That invoice could not be opened.'); }
   const url = URL.createObjectURL(await r.blob());
   window.open(url, '_blank', 'noopener');
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-async function issueNow(childId, period, btn){
-  btn.disabled = true; const was = btn.textContent; btn.textContent = 'Issuing…';
-  const r = await dcApi('/issue', { child_id: childId, period });
-  btn.disabled = false; btn.textContent = was;
-  if (!r.ok) return alert(r.error);
-  if (r.alreadyThere) alert(`There was already one for that month — ${r.reference}.`);
-  else if (r.emailed === false && r.emailError) alert(`Issued as ${r.reference}, but the email did not go: ${r.emailError}`);
+async function dcSend(id, a){
+  const inv = (_dc.invoices || []).find(x => x.id === id);
+  const p = dcParty(inv?.party_id);
+  if (inv?.kind === 'reimbursement' && p?.hold_reimbursement
+      && !confirm(`${p.display_name} is on hold — they are behind on fees.\n\nSend this reimbursement copy anyway?`)) return;
+  if (!confirm(`Send this to ${p?.email || 'the family'}?\n\nIt takes its invoice number now and is frozen afterwards.`)) return;
+  const was = a.textContent; a.textContent = 'sending…'; a.style.pointerEvents = 'none';
+  const r = await dcApi('/send', { id });
+  a.style.pointerEvents = '';
+  if (!r.ok) { a.textContent = was; return alert(r.error); }
   tabDaycare();
 }
 
-async function resendCert(id, a){
-  const was = a.textContent;
-  a.textContent = 'sending…'; a.style.pointerEvents = 'none';
-  const r = await dcApi('/resend', { id });
-  a.style.pointerEvents = '';
-  if (!r.ok) { a.textContent = was; return alert(r.error); }
-  a.textContent = 'sent ✓';
-  setTimeout(() => tabDaycare(), 900);
+async function dcDuplicate(id, a){
+  const was = a.textContent; a.textContent = 'copying…';
+  const r = await dcApi('/duplicate', { id });
+  a.textContent = was;
+  if (!r.ok) return alert(r.error);
+  tabDaycare();
 }
 
-/* ── a family, and the children it pays for ───────────────────────────── */
-async function addFamily(){
-  const body = openDrawer('Add a day care family', 'Whoever pays, and the children the receipts are about');
+async function dcHold(partyId, hold){
+  const p = dcParty(partyId);
+  if (hold && !confirm(`Hold ${p.display_name}'s reimbursement copies?\n\nThey will still be raised each month, but never sent until you release them.`)) return;
+  const { error } = await getSb().schema('eurokids').from('billing_party')
+    .update({ hold_reimbursement: hold }).eq('id', partyId);
+  if (error) return alert(error.message);
+  tabDaycare();
+}
+
+/* ── a family ─────────────────────────────────────────────────────────── */
+async function dcFamilyDrawer(){
+  const body = openDrawer('Add a day care family', 'Who pays, and the child the invoices are about');
   body.innerHTML = `
     <div class="grp"><h3>Who pays</h3><div class="box">
-      <div class="row"><div class="l">Name</div><input class="in wide" id="df-name" placeholder="e.g. Mrs Sneha Deshmukh"></div>
-      <div class="row"><div class="l">Email<span class="sub">Where the receipt goes</span></div><input class="in wide" id="df-email" type="email"></div>
-      <div class="row"><div class="l">Mobile</div><input class="in wide" id="df-mobile"></div>
-      <div class="row"><div class="l">Employer<span class="sub">Who will be asking for the receipt</span></div><input class="in wide" id="df-employer"></div>
-      <div class="rowx"><input class="in" id="df-address" placeholder="Address, if the employer asks for one" style="width:100%"></div>
+      <div class="row"><div class="l">Name on the invoice</div><input class="in wide" id="dfp-name" placeholder="e.g. Ms. Shikha Singh"></div>
+      <div class="row"><div class="l">Father's name</div><input class="in wide" id="dfp-father"></div>
+      <div class="row"><div class="l">Email<span class="sub">Where invoices and receipts go — and their login</span></div><input class="in wide" id="dfp-email" type="email"></div>
+      <div class="row"><div class="l">Phone</div><input class="in wide" id="dfp-phone"></div>
+      <div class="row"><div class="l">Employer<span class="sub">Who asks for the reimbursement copy</span></div><input class="in wide" id="dfp-employer"></div>
     </div></div>
-
     <div class="grp"><h3>The child</h3><div class="box">
-      <div class="row"><div class="l">Child's name</div><input class="in wide" id="df-child"></div>
-      <div class="row"><div class="l">On the school roll?<span class="sub">Leave blank for a day-care-only child</span></div>
-        <input class="in wide" id="df-uin" list="df-kids" placeholder="start typing their name" autocomplete="off">
-        <datalist id="df-kids"></datalist></div>
-      <div class="row"><div class="l">Class / group</div><input class="in wide" id="df-class" placeholder="e.g. Nursery · Day care"></div>
-      <div class="row"><div class="l">Day care from</div><input class="in" id="df-from" type="date" value="${todayHere()}"></div>
-    </div><div class="foot">A day care child who is also one of ours keeps their admission number on the receipt, which is what an employer's finance team looks for.</div></div>
+      <div class="row"><div class="l">Child's name</div><input class="in wide" id="dfp-child"></div>
+      <div class="row"><div class="l">Also on our roll?<span class="sub">Leave blank for a day-care-only child</span></div>
+        <input class="in wide" id="dfp-uin" list="dfp-kids" placeholder="start typing their name" autocomplete="off">
+        <datalist id="dfp-kids"></datalist></div>
+      <div class="row"><div class="l">Class / group</div><input class="in wide" id="dfp-class" placeholder="e.g. Nursery · Day care"></div>
+    </div><div class="foot">A day care child who is also ours keeps their admission number on the invoice, which is what an employer's finance team looks for.</div></div>
+    <div id="dfp-msg"></div>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="dfp-cancel">Cancel</button><button class="btn" id="dfp-save">Add</button>`;
+  el('dfp-cancel').onclick = closeDrawer;
 
-    <div class="grp"><h3>Monthly receipt</h3><div class="box">
-      <div class="row"><div class="l">Fee each month</div><input class="in num" id="df-amt" type="number" min="1" placeholder="₹"></div>
-      <div class="row"><div class="l">What to call it</div><input class="in wide" id="df-desc" value="Day care fee"></div>
-      <div class="row"><div class="l">Receipts from</div><input class="in" id="df-start" type="month" value="${todayHere().slice(0,7)}"></div>
-      <label class="row" style="cursor:pointer"><span class="l">Issue it automatically each month<span class="sub">Once the month has finished</span></span>
-        <input type="checkbox" class="sw" id="df-auto" checked></label>
-    </div><div class="foot">Leave the fee blank if you would rather issue each one by hand.</div></div>
-    <div id="df-msg"></div>`;
-  el('drawer-foot').innerHTML = `<button class="btn line" id="df-cancel">Cancel</button><button class="btn" id="df-save">Add the family</button>`;
-  el('df-cancel').onclick = closeDrawer;
-
-  // Offer the school roster, so a child who is ours is linked rather than retyped.
   const kids = await schedule().catch(() => []);
   const byLabel = {};
-  el('df-kids').innerHTML = kids.map(k => {
+  el('dfp-kids').innerHTML = kids.map(k => {
     const label = `${k.student_name} — ${k.program_name || 'class ?'}`;
     byLabel[label.toLowerCase()] = k;
     return `<option value="${esc(label)}">`;
   }).join('');
-  el('df-uin').oninput = () => {
-    const k = byLabel[(el('df-uin').value || '').trim().toLowerCase()];
-    if (k) {
-      if (!el('df-child').value.trim()) el('df-child').value = k.student_name;
-      if (!el('df-class').value.trim()) el('df-class').value = `${k.program_name || ''} · Day care`.trim();
-    }
+  el('dfp-uin').oninput = () => {
+    const k = byLabel[(el('dfp-uin').value || '').trim().toLowerCase()];
+    if (!k) return;
+    if (!el('dfp-child').value.trim()) el('dfp-child').value = k.student_name;
+    if (!el('dfp-class').value.trim()) el('dfp-class').value = `${k.program_name || ''} · Day care`.trim();
   };
 
-  el('df-save').onclick = async () => {
-    const name = (el('df-name').value || '').trim();
-    const child = (el('df-child').value || '').trim();
-    if (!name) return el('df-msg').innerHTML = `<div class="err">Who pays?</div>`;
-    if (!child) return el('df-msg').innerHTML = `<div class="err">What is the child's name?</div>`;
-    const b = el('df-save'); b.disabled = true; b.textContent = 'Saving…';
+  el('dfp-save').onclick = async () => {
+    const name = (el('dfp-name').value || '').trim();
+    const child = (el('dfp-child').value || '').trim();
+    if (!name) return el('dfp-msg').innerHTML = `<div class="err">Who pays?</div>`;
+    if (!child) return el('dfp-msg').innerHTML = `<div class="err">What is the child's name?</div>`;
+    const b = el('dfp-save'); b.disabled = true; b.textContent = 'Saving…';
     const sb = getSb().schema('eurokids');
-    const k = byLabel[(el('df-uin').value || '').trim().toLowerCase()];
-
-    const { data: party, error: e1 } = await sb.from('billing_party').insert({
-      display_name: name,
-      email: (el('df-email').value || '').trim().toLowerCase() || null,
-      mobile: (el('df-mobile').value || '').trim() || null,
-      employer_name: (el('df-employer').value || '').trim() || null,
-      address: (el('df-address').value || '').trim() || null,
-      created_by: who(),
+    const email = (el('dfp-email').value || '').trim().toLowerCase() || null;
+    const k = byLabel[(el('dfp-uin').value || '').trim().toLowerCase()];
+    const { data: party, error } = await sb.from('billing_party').insert({
+      display_name: name, father_name: (el('dfp-father').value || '').trim() || null,
+      email, login_email: email, mobile: (el('dfp-phone').value || '').trim() || null,
+      employer_name: (el('dfp-employer').value || '').trim() || null, created_by: who(),
     }).select('id').single();
-    if (e1) { b.disabled = false; b.textContent = 'Add the family';
-      return el('df-msg').innerHTML = `<div class="err">${esc(e1.message)}</div>`; }
-
-    const { data: kid, error: e2 } = await sb.from('billing_child').insert({
-      party_id: party.id, name, uin: k?.uin || null,
-      class_label: (el('df-class').value || '').trim() || null,
-      daycare_from: el('df-from').value || null,
-    }).select('id').single();
-    // the child's own name, not the payer's
-    if (!e2) await sb.from('billing_child').update({ name: child }).eq('id', kid.id);
-    if (e2) { b.disabled = false; b.textContent = 'Add the family';
-      return el('df-msg').innerHTML = `<div class="err">${esc(e2.message)}</div>`; }
-
-    const amt = Number(el('df-amt').value) || 0;
-    if (amt > 0) {
-      const start = (el('df-start').value || todayHere().slice(0,7)) + '-01';
-      await sb.from('reimbursement_profile').insert({
-        child_id: kid.id, party_id: party.id, monthly_amount: amt,
-        fee_description: (el('df-desc').value || 'Day care fee').trim(),
-        start_month: start, next_month: start,
-        auto_issue: !!el('df-auto').checked, created_by: who(),
-      });
-    }
+    if (error) { b.disabled = false; b.textContent = 'Add';
+      return el('dfp-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; }
+    await sb.from('billing_child').insert({ party_id: party.id, name: child, uin: k?.uin || null,
+      class_label: (el('dfp-class').value || '').trim() || null });
     closeDrawer(true); tabDaycare();
   };
 }
 
-/* ── one receipt, by hand ─────────────────────────────────────────────── */
-function issueDrawer(){
-  const kids = _dc.children || [];
-  if (!kids.length) return alert('Add a family first.');
-  const body = openDrawer('Issue a receipt', 'One child, one month');
+/* ── an invoice ───────────────────────────────────────────────────────── */
+function dcEdit(id){ dcInvoiceDrawer(id); }
+
+function dcInvoiceDrawer(editId){
+  const existing = editId ? (_dc.invoices || []).find(i => i.id === editId) : null;
+  const exLines = editId ? dcLines(editId) : [];
+  if (!(_dc.parties || []).length) return alert('Add a family first.');
+
+  const body = openDrawer(existing ? `Edit draft` : 'New invoice', 'It is numbered and frozen only when you send it');
   body.innerHTML = `
     <div class="grp"><div class="box">
+      <div class="row"><div class="l">Kind</div>
+        <select class="in wide" id="di-kind">
+          <option value="billing" ${existing?.kind === 'billing' ? 'selected' : ''}>Monthly bill — what the family pays</option>
+          <option value="reimbursement" ${existing?.kind === 'reimbursement' ? 'selected' : ''}>Reimbursement copy — for their employer</option>
+        </select></div>
       <div class="row"><div class="l">Child</div>
-        <select class="in wide" id="di-child">${kids.map(k => {
-          const p = (_dc.parties || []).find(x => x.id === k.party_id);
-          return `<option value="${k.id}">${esc(k.name)}${p ? ' — ' + esc(p.display_name) : ''}</option>`;
+        <select class="in wide" id="di-child">${(_dc.children || []).map(c => {
+          const p = dcParty(c.party_id);
+          return `<option value="${c.id}" ${existing?.child_id === c.id ? 'selected' : ''}>${esc(c.name)}${p ? ' — ' + esc(p.display_name) : ''}</option>`;
         }).join('')}</select></div>
-      <div class="row"><div class="l">Month</div><input class="in" id="di-month" type="month" value="${todayHere().slice(0,7)}"></div>
-      <div class="row"><div class="l">Amount<span class="sub">Blank uses the standing amount</span></div><input class="in num" id="di-amt" type="number" min="1" placeholder="₹"></div>
-      <div class="row"><div class="l">Money received on<span class="sub">Optional, but employers like it</span></div><input class="in" id="di-paid" type="date"></div>
-      <div class="row"><div class="l">How it was paid</div><select class="in" id="di-mode"><option value="">—</option><option>Cash</option><option>UPI</option><option>Cheque</option><option>Bank transfer</option></select></div>
-      <label class="row" style="cursor:pointer"><span class="l">Email it to the family now</span><input type="checkbox" class="sw" id="di-email" checked></label>
-    </div><div class="foot">A receipt for a month that has not finished says money was received that may not have been. The monthly run waits; you do not have to.</div></div>
+      <div class="row"><div class="l">From month</div><input class="in" id="di-month" type="month" value="${(existing?.period_start || todayHere()).slice(0,7)}"></div>
+      <div class="row"><div class="l">How many months<span class="sub">A parent asking in October for April to June</span></div>
+        <select class="in" id="di-count">${[1,2,3,4,6,12].map(n =>
+          `<option value="${n}">${n} month${n === 1 ? '' : 's'}</option>`).join('')}</select></div>
+      <div class="row" id="di-split-row" style="display:none"><div class="l">Show it as</div>
+        <select class="in wide" id="di-split">
+          <option value="per_month">A line for each month — easier for an employer to check</option>
+          <option value="combined">One line for the whole period</option>
+        </select></div>
+      <div class="row"><div class="l">Invoice date<span class="sub">Backdate it if the period has passed</span></div>
+        <input class="in" id="di-date" type="date" value="${(existing?.invoice_date || todayHere()).slice(0,10)}"></div>
+    </div></div>
+
+    <div class="grp"><h3>What is on it</h3><div class="box" id="di-lines"></div>
+      <div class="box"><button class="linkrow" id="di-add">Add another line</button></div>
+      <div class="foot" id="di-sum"></div></div>
     <div id="di-msg"></div>`;
-  el('drawer-foot').innerHTML = `<button class="btn line" id="di-cancel">Cancel</button><button class="btn" id="di-save">Issue</button>`;
+  el('drawer-foot').innerHTML = `<button class="btn line" id="di-cancel">Cancel</button><button class="btn" id="di-save">${existing ? 'Save the draft' : 'Create the draft'}</button>`;
   el('di-cancel').onclick = closeDrawer;
-  el('di-save').onclick = async () => {
-    const b = el('di-save'); b.disabled = true; b.textContent = 'Issuing…';
-    const r = await dcApi('/issue', {
-      child_id: Number(el('di-child').value),
-      period: (el('di-month').value || todayHere().slice(0,7)) + '-01',
-      amount: Number(el('di-amt').value) || null,
-      paid_on: el('di-paid').value || null,
-      mode: el('di-mode').value || null,
-      email: !!el('di-email').checked,
+
+  let rows = exLines.length
+    ? exLines.map(l => ({ name: l.name, description: l.description, qty: Number(l.qty), rate: Number(l.rate),
+        amount: Number(l.amount), hourly: Number(l.qty) > 40 }))
+    : [{ name: '', description: '', qty: 1, rate: 0, amount: 0, hourly: false }];
+
+  const rateOpts = (sel) => (_dc.rates || []).map(r =>
+    `<option value="${r.id}" ${sel === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('');
+
+  const paintLines = () => {
+    el('di-lines').innerHTML = rows.map((r, i) => `
+      <div class="rowx" style="border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:10px">
+        <div class="row"><div class="l">Line ${i + 1}${rows.length > 1 ? ` <a style="cursor:pointer;color:var(--crit);font-size:11px" onclick="dcDropLine(${i})">remove</a>` : ''}</div>
+          <select class="in wide" data-pick="${i}"><option value="">— pick a rate —</option>${rateOpts()}</select></div>
+        <div class="row"><div class="l">What it says</div><input class="in wide" data-name="${i}" value="${esc(r.name)}"></div>
+        <div class="row"><div class="l">Charged by</div>
+          <select class="in" data-mode="${i}">
+            <option value="flat" ${!r.hourly ? 'selected' : ''}>A flat monthly amount</option>
+            <option value="hourly" ${r.hourly ? 'selected' : ''}>Hours × a rate per hour</option>
+          </select></div>
+        <div data-flat="${i}" style="display:${r.hourly ? 'none' : ''}">
+          <div class="row"><div class="l">Quantity</div><input class="in num" data-qty="${i}" type="number" step="any" value="${r.qty}"></div>
+          <div class="row"><div class="l">Rate</div><input class="in num" data-rate="${i}" type="number" step="any" value="${r.rate}"></div>
+        </div>
+        <div data-hourly="${i}" style="display:${r.hourly ? '' : 'none'}">
+          <div class="row"><div class="l">Fee for the month<span class="sub">The agreed figure</span></div><input class="in num" data-amt="${i}" type="number" step="any" value="${r.amount || ''}"></div>
+          <div class="row"><div class="l">Hours a day</div><input class="in num" data-hpd="${i}" type="number" step="any" value="${r.hoursPerDay || 5}"></div>
+          <div class="hint" data-breakup="${i}" style="padding:4px 0 0"></div>
+        </div>
+      </div>`).join('');
+
+    rows.forEach((r, i) => {
+      const q = sel => body.querySelector(`[${sel}="${i}"]`);
+      q('data-pick').onchange = e => {
+        const rate = (_dc.rates || []).find(x => String(x.id) === e.target.value);
+        if (!rate) return;
+        rows[i].name = rate.name;
+        rows[i].description = rate.description || '';
+        if (rate.is_hourly) { rows[i].hourly = true; rows[i].hoursPerDay = Number(rate.hours_per_day) || 5; }
+        else { rows[i].hourly = false; rows[i].qty = 1; rows[i].rate = Number(rate.rate) || 0; }
+        paintLines(); recap();
+      };
+      q('data-name').oninput = e => { rows[i].name = e.target.value; };
+      q('data-mode').onchange = e => { rows[i].hourly = e.target.value === 'hourly'; paintLines(); recap(); };
+      ['data-qty','data-rate','data-amt','data-hpd'].forEach(k => {
+        const n = q(k); if (!n) return;
+        n.oninput = () => {
+          rows[i].qty  = Number(q('data-qty')?.value) || rows[i].qty;
+          rows[i].rate = Number(q('data-rate')?.value) || rows[i].rate;
+          rows[i].amount = Number(q('data-amt')?.value) || 0;
+          rows[i].hoursPerDay = Number(q('data-hpd')?.value) || 0;
+          recap();
+        };
+      });
     });
-    b.disabled = false; b.textContent = 'Issue';
+    recap();
+  };
+
+  // The breakup, worked out in front of the person entering it. The whole
+  // point is that the employer can multiply the numbers and get the fee.
+  const recap = () => {
+    let total = 0;
+    rows.forEach((r, i) => {
+      const box = body.querySelector(`[data-breakup="${i}"]`);
+      if (r.hourly) {
+        const amt = Number(r.amount) || 0, hpd = Number(r.hoursPerDay) || 0;
+        const b = (amt > 0 && hpd > 0) ? dcSolve(amt, hpd) : null;
+        if (box) box.innerHTML = !b ? 'Enter the monthly fee and the hours a day.'
+          : b.best.exact
+            ? `<span style="color:var(--good)">${b.best.monthlyHours} hours × ${money(b.best.ratePerHour)} = ${money(b.best.amount)} exactly</span> — “${esc(b.best.description)}”`
+            : `<span style="color:var(--crit)">${b.best.monthlyHours} × ${money(b.best.ratePerHour)} comes to ${money(b.best.amount)}, not ${money(amt)}.</span>
+               ${b.alternatives.length ? 'Try ' + b.alternatives.map(x => `${x.hoursPerDay} hours a day (${money(x.ratePerHour)}/hr)`).join(', ') + '.' : ''}`;
+        total += b ? b.best.amount : 0;
+      } else {
+        total += (Number(r.qty) || 0) * (Number(r.rate) || 0);
+      }
+    });
+    const n = Number(el('di-count')?.value) || 1;
+    el('di-sum').innerHTML = n > 1
+      ? `${money(total)} a month × ${n} months = <strong>${money(total * n)}</strong> — shown as paid in full, with nothing due.`
+      : `Total <strong>${money(total)}</strong> — shown as paid in full, with nothing due.`;
+  };
+
+  const addMonths = (ym, n) => {
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + n, 1));
+    return d.toISOString().slice(0, 7);
+  };
+  const syncMonths = () => {
+    const n = Number(el('di-count').value) || 1;
+    el('di-split-row').style.display = n > 1 ? '' : 'none';
+    // Dating it to the first month it covers is almost always what is meant
+    // when somebody asks in October for April.
+    const from = el('di-month').value || todayHere().slice(0,7);
+    if (n > 1 || from < todayHere().slice(0,7)) el('di-date').value = from + '-01';
+    recap();
+  };
+  el('di-count').onchange = syncMonths;
+  el('di-month').onchange = syncMonths;
+
+  window.dcDropLine = i => { rows.splice(i, 1); paintLines(); };
+  el('di-add').onclick = () => { rows.push({ name: '', qty: 1, rate: 0, amount: 0, hourly: false }); paintLines(); };
+  paintLines();
+
+  el('di-save').onclick = async () => {
+    const b = el('di-save'); b.disabled = true; b.textContent = 'Saving…';
+    const childId = Number(el('di-child').value);
+    const kid = dcChild(childId);
+    const month = el('di-month').value || todayHere().slice(0,7);
+    const count = Number(el('di-count')?.value) || 1;
+    const lastMonth = addMonths(month, count - 1);
+    const payload = {
+      id: editId || undefined,
+      kind: el('di-kind').value,
+      party_id: kid?.party_id,
+      child_id: childId,
+      period: month + '-01',
+      period_end: lastMonth + '-01',
+      split: el('di-split')?.value || 'per_month',
+      invoice_date: el('di-date').value || todayHere(),
+      subject: el('di-kind').value === 'billing'
+        ? (count > 1
+            ? `Your Daycare Invoice for ${dcMonth(month + '-01')} to ${dcMonth(lastMonth + '-01')}`
+            : `Your Daycare Invoice is ready for ${dcMonth(month + '-01')}`)
+        : null,
+      lines: rows.filter(r => (r.name || '').trim()).map(r => r.hourly
+        ? { name: r.name, description: r.description || null, monthly_amount: Number(r.amount) || 0, hours_per_day: Number(r.hoursPerDay) || 0 }
+        : { name: r.name, description: r.description || null, qty: Number(r.qty) || 1, rate: Number(r.rate) || 0 }),
+    };
+    if (!payload.lines.length) { b.disabled = false; b.textContent = 'Create the draft';
+      return el('di-msg').innerHTML = `<div class="err">Give at least one line a name.</div>`; }
+    const r = await dcApi('/save', payload);
+    b.disabled = false; b.textContent = existing ? 'Save the draft' : 'Create the draft';
     if (!r.ok) return el('di-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`;
-    if (r.alreadyThere) return el('di-msg').innerHTML = `<div class="err">There is already a receipt for that month — ${esc(r.reference)}.</div>`;
     closeDrawer(true); tabDaycare();
   };
 }
+
+// The same arithmetic the server uses, so the screen and the document agree.
+function dcSolve(amount, hoursPerDay){
+  const DAYS = [20,21,22,23,24,25,26,27,28,29,30], PREFER = 26;
+  const build = (d) => {
+    const monthlyHours = Math.round(hoursPerDay * d * 100) / 100;
+    const paise = Math.round(amount * 100);
+    const exact = monthlyHours > 0 && Number.isInteger(paise / monthlyHours);
+    const ratePerHour = monthlyHours > 0 ? Math.round((amount / monthlyHours) * 100) / 100 : 0;
+    const total = Math.round(ratePerHour * monthlyHours * 100) / 100;
+    const hrs = hoursPerDay === 1 ? '1 hour daily' : `${hoursPerDay} hours daily`;
+    return { hoursPerDay, daysPerMonth: d, monthlyHours, ratePerHour,
+      amount: exact ? amount : total, exact, shortBy: exact ? 0 : Math.round((total - amount) * 100) / 100,
+      description: `${hrs} | ${d} daycare days in a month.` };
+  };
+  const exacts = DAYS.map(build).filter(x => x.exact)
+    .sort((a, b) => Math.abs(a.daysPerMonth - PREFER) - Math.abs(b.daysPerMonth - PREFER) || b.daysPerMonth - a.daysPerMonth);
+  if (exacts.length) return { best: exacts[0], alternatives: exacts.slice(1, 4) };
+  const alts = [];
+  for (let dh = 1; dh <= 4 && alts.length < 4; dh++) {
+    for (const h of [hoursPerDay - dh, hoursPerDay + dh]) {
+      if (h <= 0) continue;
+      const e = DAYS.map(d => {
+        const mh = Math.round(h * d * 100) / 100, p = Math.round(amount * 100);
+        if (!(mh > 0 && Number.isInteger(p / mh))) return null;
+        return { hoursPerDay: h, daysPerMonth: d, monthlyHours: mh,
+          ratePerHour: Math.round((amount / mh) * 100) / 100, amount, exact: true };
+      }).filter(Boolean).sort((a, b) => Math.abs(a.daysPerMonth - PREFER) - Math.abs(b.daysPerMonth - PREFER))[0];
+      if (e) alts.push(e);
+    }
+  }
+  const nearest = DAYS.map(build).sort((a, b) => Math.abs(a.shortBy) - Math.abs(b.shortBy))[0];
+  return { best: nearest, alternatives: alts.slice(0, 4) };
+}
+
 
 /* ══ INVENTORY ══════════════════════════════════════════════════════════
    Two tabs, because the two halves of "inventory" want opposite things.
@@ -5090,7 +5267,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=65"></script>
+<script src="/brand/enquiries.js?v=66"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
