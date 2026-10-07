@@ -10,6 +10,23 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   const a = admin();
 
+  // What kind of document is being raised decides which permission is needed.
+  // Taken from the body, so somebody holding only Reimbursements cannot post
+  // a day care bill past a screen that never offered them one.
+  const wantKind = b.kind === "reimbursement" ? "reimbursement" : "billing";
+  if (!(wantKind === "billing" ? who.canBill : who.canCertify)) {
+    return NextResponse.json({ ok: false, error: wantKind === "billing"
+      ? "You do not have Day care billing." : "You do not have Reimbursements." }, { status: 403 });
+  }
+  // And an existing draft cannot be flipped into the other kind by someone who
+  // only holds one of them.
+  if (b.id) {
+    const { data: was } = await a.from("daycare_invoice").select("kind").eq("id", Number(b.id)).maybeSingle();
+    if (was && !(was.kind === "billing" ? who.canBill : who.canCertify)) {
+      return NextResponse.json({ ok: false, error: "That draft is not yours to edit." }, { status: 403 });
+    }
+  }
+
   if (!b.party_id) return NextResponse.json({ ok: false, error: "Which family?" }, { status: 400 });
   const lines = (b.lines || []) as LineInput[];
   if (!lines.length) return NextResponse.json({ ok: false, error: "An invoice needs at least one line." }, { status: 400 });

@@ -9,9 +9,14 @@ const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 // deliberately NOT something HR/admin roles can hand out — see access model.
 const OWNER_EMAILS = new Set(["abhinav@ganya.in"]);
 
+// Every value of the app_module enum, and it must stay that way. A module
+// missing from here is not rejected — it was quietly filtered out of the save,
+// so the switch appeared in Users & Access, could be turned on, reported
+// success, and granted nothing. "inventory" sat in that state from the day it
+// was built. Anything added to the enum belongs here in the same change.
 const VALID_MODULES = new Set([
   "staff_portal", "epms_admin", "pulse", "payroll", "fees", "kits", "admission", "receipts", "finance", "salary",
-  "letters",
+  "letters", "inventory", "daycare_billing", "reimbursements",
 ]);
 
 async function requireOwner(req: NextRequest): Promise<{ ok: true; userId: string } | { ok: false; status: number; message: string }> {
@@ -80,7 +85,13 @@ export async function POST(req: NextRequest) {
     const email = (body.email || "").trim().toLowerCase();
     const password = body.password || "";
     const full_name = (body.full_name || "").trim();
-    const modules = (body.modules || []).filter(mod => VALID_MODULES.has(mod));
+    const asked = body.modules || [];
+    // Say so rather than dropping it. A silent filter is how a switch ends up
+    // reporting success and granting nothing.
+    const unknown = asked.filter(mod => !VALID_MODULES.has(mod));
+    if (unknown.length) return NextResponse.json({ ok: false,
+      error: `This server does not know the permission${unknown.length > 1 ? "s" : ""}: ${unknown.join(", ")}. It may need deploying.` }, { status: 400 });
+    const modules = asked;
     if (!email || !full_name) return NextResponse.json({ error: "email and full_name required" }, { status: 400 });
     if (password.length < 8) return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
 
@@ -116,7 +127,13 @@ export async function POST(req: NextRequest) {
 
   if (action === "set_modules") {
     const uid = body.user_id || "";
-    const modules = (body.modules || []).filter(mod => VALID_MODULES.has(mod));
+    const asked = body.modules || [];
+    // Say so rather than dropping it. A silent filter is how a switch ends up
+    // reporting success and granting nothing.
+    const unknown = asked.filter(mod => !VALID_MODULES.has(mod));
+    if (unknown.length) return NextResponse.json({ ok: false,
+      error: `This server does not know the permission${unknown.length > 1 ? "s" : ""}: ${unknown.join(", ")}. It may need deploying.` }, { status: 400 });
+    const modules = asked;
     if (!uid) return NextResponse.json({ error: "user_id required" }, { status: 400 });
     // Granting the same module twice — a double click, a checkbox counted
     // twice, or a retry after a slow reply — used to collide with the

@@ -14,7 +14,8 @@ import { cancelPaymentLink } from "@/lib/razorpay";
 const MODES = ["cash", "upi", "bank", "cheque", "adjustment"] as const;
 
 export async function POST(req: Request) {
-  const who = await requireBilling(req);
+  // Everything here is about a balance, and only a day care bill has one.
+  const who = await requireBilling(req, "billing");
   if (!who.ok) return NextResponse.json({ ok: false, error: who.error }, { status: who.status });
 
   const b = await req.json().catch(() => ({}));

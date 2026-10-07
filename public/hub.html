@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=69">
-<link rel="prefetch" href="/brand/enquiries.js?v=69" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=70">
+<link rel="prefetch" href="/brand/enquiries.js?v=70" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -154,18 +154,22 @@ const TABS = {
   // They share a table and almost nothing else — different customers,
   // different question when you open them ("who owes me" vs "who still needs
   // one"), so they stopped sharing a screen.
+  // Each half has a permission of its own. They used to ride on finance,
+  // receipts and admission, which meant the only way to let somebody raise a
+  // day care invoice was to hand them the school's books or the cash desk —
+  // and neither half could be switched on or off in Users & Access at all.
   bill_home:    { app: 'billing', label: 'Invoices',  icon: 'rupee',  sect: 'Billing',
-                  need: () => has('finance') || has('receipts') },
+                  need: () => has('daycare_billing') },
   bill_customers:{app: 'billing', label: 'Customers', icon: 'people', sect: 'Billing',
-                  need: () => has('finance') || has('receipts') },
+                  need: () => has('daycare_billing') },
   bill_recurring:{app: 'billing', label: 'Recurring', icon: 'list',   sect: 'Billing',
-                  need: () => has('finance') || has('receipts') },
+                  need: () => has('daycare_billing') },
   rb_home:      { app: 'reimb', label: 'Reimbursements', icon: 'rupee', sect: 'Reimbursements',
-                  need: () => has('finance') || has('receipts') || has('admission') },
+                  need: () => has('reimbursements') },
   rb_customers: { app: 'reimb', label: 'Customers',      icon: 'people', sect: 'Reimbursements',
-                  need: () => has('finance') || has('receipts') || has('admission') },
+                  need: () => has('reimbursements') },
   rb_recurring: { app: 'reimb', label: 'Recurring',      icon: 'list',  sect: 'Reimbursements',
-                  need: () => has('finance') || has('receipts') || has('admission') },
+                  need: () => has('reimbursements') },
   assets:     { label: 'Equipment',     icon: 'box',    sect: 'School',        need: () => has('inventory') || isOwner() },
   supplies:   { label: 'Supplies',      icon: 'tray',   sect: 'School',        need: () => has('inventory') || isOwner() },
   kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
@@ -308,10 +312,10 @@ function renderChooser(){
       desc:'Roster, fees, payment schedules, statements and kits.', ok:canAdmissions, href:null },
     { key:'billing', name:'Day care billing',
       desc:'Invoices to day care families, what is owed, what has been paid, and the schedules that raise them.',
-      ok:(has('finance') || has('receipts')), href:null },
+      ok:has('daycare_billing'), href:null },
     { key:'reimb', name:'Reimbursements',
       desc:'The receipts parents claim back from their employers, and who is due one each month.',
-      ok:(has('finance') || has('receipts') || has('admission')), href:null },
+      ok:has('reimbursements'), href:null },
     { key:'staff', name:'Staff Portal',
       desc:'Leave, attendance and payroll.', ok:canStaff, href:'/staff' },
     { key:'enquiries', name:'Enquiries & Admissions',
@@ -361,10 +365,13 @@ function renderChooser(){
 }
 
 /* ── users & access (owner only) ─────────────────────── */
-const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts','finance','salary','letters','inventory'];
+const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts',
+  'daycare_billing','reimbursements','finance','salary','letters','inventory'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
   payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
   receipts:'Receipts & cash', finance:'Finance (money)',
+  daycare_billing:'Day care billing',
+  reimbursements:'Reimbursements',
   salary:'Salaries (staff pay)',
   letters:'Appointment letters (shows salary)',
   inventory:'Inventory (equipment & supplies)' };
@@ -387,7 +394,9 @@ function modRows(prefix, selected){
       m==='finance' ? '<span class="sub">The school\u2019s books \u2014 totals, discounts, the fee grid. Most people do not need this.</span>'
       : m==='receipts' ? '<span class="sub">Record cash and cheques taken at the desk, and see what a family has paid. Without the school-wide totals.</span>'
       : m==='salary' ? '<span class="sub">What every member of staff earns, and their increments. Give this to almost nobody.</span>'
-      : m==='inventory' ? '<span class="sub">Equipment, where it is and who has it, and the running list of supplies to buy. No money or family data.</span>' : ''}</span>
+      : m==='inventory' ? '<span class="sub">Equipment, where it is and who has it, and the running list of supplies to buy. No money or family data.</span>'
+      : m==='daycare_billing' ? '<span class="sub">Invoice day care families, take payments, write off and void. Money owed to the school — but not the school-wide books.</span>'
+      : m==='reimbursements' ? '<span class="sub">Issue the fee receipts parents claim back from their employers. No balances and no payments to record.</span>' : ''}</span>
       <input type="checkbox" class="sw ${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}></label>`).join('');
 }
 
@@ -6005,7 +6014,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=69"></script>
+<script src="/brand/enquiries.js?v=70"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

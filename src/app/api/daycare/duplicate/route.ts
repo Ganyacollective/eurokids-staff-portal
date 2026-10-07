@@ -5,6 +5,8 @@ import { requireBilling, admin, nextMonth } from "@/lib/billing-auth";
 // The copy is never a copy of the number: a reference somebody quoted on the
 // phone must point at one document.
 export async function POST(req: Request) {
+  // Allowed in at all; which half is decided below, once we know what
+  // kind of document this id actually is.
   const who = await requireBilling(req);
   if (!who.ok) return NextResponse.json({ ok: false, error: who.error }, { status: who.status });
   const b = await req.json().catch(() => ({}));
@@ -12,6 +14,13 @@ export async function POST(req: Request) {
 
   const { data: src } = await a.from("daycare_invoice").select("*").eq("id", Number(b.id)).maybeSingle();
   if (!src) return NextResponse.json({ ok: false, error: "No such invoice." }, { status: 404 });
+  // The person may hold one half and not the other, so the check is against
+  // this document's own kind. Coming through a door that showed the button
+  // is not the same as being allowed to press it.
+  if (!(src.kind === "billing" ? who.canBill : who.canCertify)) {
+    return NextResponse.json({ ok: false, error: src.kind === "billing"
+      ? "You do not have Day care billing." : "You do not have Reimbursements." }, { status: 403 });
+  }
   const period = b.period ? String(b.period).slice(0, 7) + "-01"
     : (src.period_start ? nextMonth(src.period_start) : null);
 

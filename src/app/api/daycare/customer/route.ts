@@ -19,7 +19,11 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   const a = admin();
 
-  if (String(b.action || "save") === "welcome") return welcome(a, Number(b.id), who.name);
+  // The welcome letter is about joining day care, so it belongs to that half.
+  if (String(b.action || "save") === "welcome") {
+    if (!who.canBill) return NextResponse.json({ ok: false, error: "You do not have Day care billing." }, { status: 403 });
+    return welcome(a, Number(b.id), who.name);
+  }
 
   const name = String(b.display_name || "").trim();
   if (!name) return NextResponse.json({ ok: false, error: "A customer needs a name." }, { status: 400 });
@@ -30,6 +34,21 @@ export async function POST(req: Request) {
   const inReimb = b.in_reimbursement === true;
   if (!inBilling && !inReimb) {
     return NextResponse.json({ ok: false, error: "Say whether this is a billing or a reimbursement customer." }, { status: 400 });
+  }
+  const id = Number(b.id) || 0;
+  const { data: was } = id
+    ? await a.from("billing_party").select("in_billing, in_reimbursement").eq("id", id).maybeSingle()
+    : { data: null };
+
+  // You may only *change* a book you hold — not merely be in one. A family can
+  // be in both, so somebody with billing alone has to be able to fix a shared
+  // family's phone number without that counting as touching reimbursements.
+  // What is refused is adding or removing a book they do not have.
+  if (inBilling !== Boolean(was?.in_billing) && !who.canBill) {
+    return NextResponse.json({ ok: false, error: "You do not have Day care billing, so you cannot change that." }, { status: 403 });
+  }
+  if (inReimb !== Boolean(was?.in_reimbursement) && !who.canCertify) {
+    return NextResponse.json({ ok: false, error: "You do not have Reimbursements, so you cannot change that." }, { status: 403 });
   }
 
   const row = {
@@ -50,7 +69,6 @@ export async function POST(req: Request) {
     updated_at: new Date().toISOString(),
   };
 
-  const id = Number(b.id) || 0;
   if (id) {
     const { error } = await a.from("billing_party").update(row).eq("id", id);
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

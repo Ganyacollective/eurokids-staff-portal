@@ -17,10 +17,26 @@ export async function GET(req: Request) {
     // The trail: what was sent, to whom, for how much, and whether it arrived.
     a.from("billing_message").select("*").order("sent_at", { ascending: false }).limit(600),
   ]);
+  // One read serves both apps, so it must not hand over the half this person
+  // does not hold. Filtering on the screen alone would mean the data was in
+  // the browser all along, which is not a permission at all.
+  const kinds = [who.canBill ? "billing" : null, who.canCertify ? "reimbursement" : null].filter(Boolean);
+  const invoiceRows = (invoices.data || []).filter((i) => kinds.includes(i.kind));
+  const keptIds = new Set(invoiceRows.map((i) => i.id));
+  const partyRows = (parties.data || [])
+    .filter((p) => (who.canBill && p.in_billing) || (who.canCertify && p.in_reimbursement));
+  const partyIds = new Set(partyRows.map((p) => p.id));
+
   return NextResponse.json({ ok: true, is_admin: who.isAdmin,
-    parties: parties.data || [], children: children.data || [], rates: rates.data || [],
-    invoices: invoices.data || [], lines: lines.data || [], recurring: recurring.data || [],
-    payments: payments.data || [], messages: messages.data || [],
+    can_bill: who.canBill, can_certify: who.canCertify,
+    parties: partyRows,
+    children: (children.data || []).filter((c) => partyIds.has(c.party_id)),
+    rates: rates.data || [],
+    invoices: invoiceRows,
+    lines: (lines.data || []).filter((l) => keptIds.has(l.invoice_id)),
+    recurring: (recurring.data || []).filter((r) => kinds.includes(r.kind)),
+    payments: (payments.data || []).filter((p) => keptIds.has(p.invoice_id)),
+    messages: (messages.data || []).filter((m) => partyIds.has(m.party_id)),
     // So the screen can say plainly whether a Pay now button will appear and
     // whether a WhatsApp will actually go, instead of the coordinator finding
     // out from a parent that neither happened.
