@@ -80,6 +80,10 @@ export type InvoiceDoc = {
   // For a parent who pays by NEFT rather than the QR. Free text lines, not
   // columns — the block differs by bank and nobody can predict its shape.
   bankLines?: string[] | null;
+  // A Razorpay pay link, when the invoice is a bill and one was made. Printed
+  // as well as emailed, because a parent who saved the PDF and came back to it
+  // a week later should not have to find the email again.
+  payUrl?: string | null;
   terms?: { heading: string; lines: string[] }[] | null;
   payQrPng?: string | null;
   signedByName: string;
@@ -289,6 +293,17 @@ export async function renderInvoicePdf(d: InvoiceDoc): Promise<Uint8Array> {
     y -= 10;
     put("Notes", L, 9.5, reg, BRAND); y -= 14;
     for (const n of d.notes) { block(n, L, WIDTH, 7.8, reg, MUTE, 11); y -= 4; }
+  }
+
+  if (d.payUrl) {
+    room(34);
+    y -= 10;
+    put("Pay online", L, 9.5, reg, BRAND); y -= 14;
+    block("Open this link to pay by card, UPI or net banking:", L, WIDTH, 8, reg, MUTE, 11.5);
+    // The URL itself, in full. A short rzp.io link is typed out by hand often
+    // enough that it has to be readable off paper, not just clickable.
+    block(d.payUrl, L, WIDTH, 8, reg, BRAND, 11.5);
+    y -= 4;
   }
 
   if (d.bankLines?.length) {

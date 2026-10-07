@@ -181,6 +181,14 @@ input[type=checkbox]:not(.sw){width:16px;height:16px;accent-color:var(--accent);
 .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:var(--fill);font-size:var(--fs-co);font-weight:500}
 .pill.big{background:var(--label);color:#fff;font-weight:600}
 .pill.warn{background:var(--orange-wash);color:#8A4B00}
+/* A row of pills used as a filter: one is pressed, the rest are not. The
+   pressed one has to be obvious at a glance, because the count beside the
+   heading is read as the whole list unless it is clear a filter is on. */
+.pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pills .pill{border:0;cursor:pointer;font-family:inherit;line-height:1.5;padding:5px 12px;
+  color:var(--muted);transition:background .12s,color .12s}
+.pills .pill:hover{background:var(--line)}
+.pills .pill.on{background:var(--label);color:#fff;font-weight:600}
 .err,.ok{padding:9px 12px;border-radius:var(--r-ctl);font-size:var(--fs-body);margin-bottom:12px;line-height:1.45}
 .err{background:var(--red-wash);color:#B3232A} .ok{background:var(--green-wash);color:#157A3A}
 .money-due{color:var(--red);font-weight:600} .money-ok{color:#157A3A;font-weight:600} .money-disc{color:#157A3A}

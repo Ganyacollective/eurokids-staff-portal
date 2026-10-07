@@ -26,6 +26,10 @@ export async function POST(req: Request) {
     period_end: b.period_end ? monthStart(String(b.period_end))
               : (b.period ? monthStart(String(b.period)) : null),
     note: b.note || null,
+    // A bill offers online payment unless somebody turns it off — the whole
+    // point of wiring Razorpay was that nobody has to remember to tick it.
+    // A reimbursement certificate never does: it is already paid.
+    online_payment: b.kind === "reimbursement" ? false : b.online_payment !== false,
   };
 
   let id = Number(b.id) || 0;

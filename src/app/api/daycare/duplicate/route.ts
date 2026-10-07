@@ -22,7 +22,23 @@ export async function POST(req: Request) {
     subject: src.subject && period
       ? src.subject.replace(/for .*$/, `for ${new Date(period + "T00:00:00Z").toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })}`)
       : src.subject,
-    period_start: period, note: src.note, created_by: who.name,
+    period_start: period,
+    // The copy must cover the same span as the original. Dropping period_end
+    // collapsed a quarterly invoice to a single month, and — because NULLs
+    // are distinct in the uniqueness index — quietly took the copy out of the
+    // guard that stops two invoices for one child and period.
+    period_end: period && src.period_start && src.period_end
+      ? (() => {               // shift the end by the same distance the start moved
+          const d = new Date(src.period_end + "T00:00:00Z"), s = new Date(src.period_start + "T00:00:00Z");
+          const span = (d.getUTCFullYear() - s.getUTCFullYear()) * 12 + (d.getUTCMonth() - s.getUTCMonth());
+          let m = period; for (let k = 0; k < span; k++) m = nextMonth(m); return m;
+        })()
+      : period,
+    // "Duplicate last month's and send it" is the most ordinary monthly act
+    // there is. Leaving this to its false default sent every copy out with no
+    // Pay now button, and nothing on the screen said so.
+    online_payment: src.online_payment,
+    note: src.note, created_by: who.name,
   }).select("id").single();
   if (error || !copy) {
     const dupe = /duplicate key|unique/i.test(error?.message || "");
