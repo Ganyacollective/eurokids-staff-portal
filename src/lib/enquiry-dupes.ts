@@ -53,7 +53,11 @@ export async function findCandidates(admin: SupabaseClient, limit = 40): Promise
 // Called through plain fetch rather than the SDK: one request, one shape, and
 // no dependency to keep patched for the sake of it.
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
+// Sonnet rather than Haiku: the judgement that matters here is the one that
+// says no — two different Shivanshes, different fathers, different societies —
+// and that is worth more than the fraction of a paisa saved. Overridable, so a
+// model change does not need a code change.
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 
 const describe = (e: EnqLite) => [
   `  id: ${e.id}`,
