@@ -8,13 +8,49 @@ import { useEffect, useRef, useState } from "react";
 // carries ?kiosk=<key> in its address. That key is what the server checks
 // before it will record a walk-in or accept a photograph, so the public web
 // can never claim to be the tablet by setting a flag in its own JavaScript.
+// The key is remembered on the device once seen, and this is not a nicety.
+//
+// The tablet is set up by opening the kiosk link and choosing Add to Home
+// Screen. But the manifest sets start_url to "/", so the icon launches the
+// bare address with no query string — the key is dropped on the very first
+// launch. Without remembering it, the home-screen app silently stops being the
+// kiosk: no photograph, and every family recorded as a website enquiry rather
+// than a walk-in. Nothing breaks visibly; the photos simply never arrive, and
+// you find out weeks later.
+//
+// Remembering it is safe. The key is a secret shared only with the tablet, so
+// a browser that has seen it legitimately is the tablet. It stays on that
+// device, and clearing the browser's storage undoes it.
+const REMEMBERED = "ek-kiosk-key";
+
 export function useKiosk() {
   const [key, setKey] = useState<string | null>(null);
   useEffect(() => {
-    const k = new URLSearchParams(window.location.search).get("kiosk");
-    if (k) setKey(k);
+    const fromUrl = new URLSearchParams(window.location.search).get("kiosk");
+
+    // ?kiosk=off takes a device out of reception duty. There has to be a way
+    // back that is not "clear the browser's site data".
+    if (fromUrl === "off" || fromUrl === "") {
+      forgetKiosk();
+      return;
+    }
+    if (fromUrl) {
+      setKey(fromUrl);
+      try { localStorage.setItem(REMEMBERED, fromUrl); } catch { /* private mode */ }
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(REMEMBERED);
+      if (saved) setKey(saved);
+    } catch { /* storage unavailable; the form still works, without a photo */ }
   }, []);
   return key;
+}
+
+// Taking a device out of reception duty — run from the address bar on that
+// tablet. Without this there is no way back except clearing site data.
+export function forgetKiosk() {
+  try { localStorage.removeItem(REMEMBERED); } catch { /* nothing to do */ }
 }
 
 // The camera on the tablet, held open for the day.
