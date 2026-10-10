@@ -138,17 +138,44 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
     }
   }
   // ── heads-up to the office ─────────────────────────────────────────────
-  if (input.notifySchool) await notifySchool(row, input.source, created);
+  // `admin` is passed on so the recipients come from the table rather than
+  // the old environment variable.
+  if (input.notifySchool) await notifySchool(row, input.source, created, admin);
   return { enquiry: row, created, welcome };
 }
 
 // "A walk-in just arrived": email to the office and a WhatsApp to the owner's
 // phone (CallMeBot, the same self-notification the leave form uses).
-export async function notifySchool(e: EnquiryRow, source: Source, created: boolean) {
+// Who should hear about this one.
+//
+// This used to be an environment variable: one list of addresses, the same for
+// every source, changeable only by a deploy. It is now the people who already
+// have accounts here, each having said which sources they want — so the person
+// who needs to know a family is standing at reception is not the person
+// drowning in Instagram messages.
+//
+// If nobody has chosen anything yet, the old address still gets it. An empty
+// table means the feature has not been set up, not that the office should stop
+// being told.
+export async function notifyRecipients(admin: SupabaseClient, source: Source): Promise<string[]> {
+  const { data, error } = await admin.schema("eurokids").from("enquiry_notify").select("user_id, sources");
+  if (error || !data?.length) {
+    return (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
+  }
+  const wants = new Set(data.filter(r => (r.sources || []).includes(source)).map(r => r.user_id));
+  if (!wants.size) return [];
+  // Addresses live on the auth record, not on profiles.
+  const { data: list } = await admin.auth.admin.listUsers({ perPage: 200 });
+  return (list?.users || []).filter(u => wants.has(u.id) && u.email).map(u => u.email!) as string[];
+}
+
+export async function notifySchool(e: EnquiryRow, source: Source, created: boolean, admin?: SupabaseClient) {
   const site = process.env.NEXT_PUBLIC_SITE_URL || "https://admin.eurokidsjmdenclave.org";
   const who = e.child_name || e.father_name || e.father_phone || "someone";
   const line = `${source === "Walk In" ? "Walk-in" : source} · ${who}${e.programs?.length ? " · " + e.programs.join(", ") : ""}${e.father_phone ? " · " + e.father_phone : ""}${created ? "" : " (known family)"}`;
-  const to = (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
+  const to = admin
+    ? await notifyRecipients(admin, source)
+    : (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
   if (mailReady() && to.length) {
     const html = renderEmail({
       title: source === "Walk In" ? "A family just walked in" : `New enquiry — ${source}`, subtitle: who, theme: "celebration",
@@ -157,7 +184,7 @@ export async function notifySchool(e: EnquiryRow, source: Source, created: boole
            ["Mother", e.mother_name], ["Mother's phone", e.mother_phone], ["Area", e.address], ["Sex", e.sex], ["Date of birth", e.dob]]
           .filter(([, v]) => v).map(([k, v]) => `<tr><td style="padding:4px 14px 4px 0;color:#4B5563">${k}</td><td style="padding:4px 0"><strong>${esc(v)}</strong></td></tr>`).join("")}
         </table>
-        <p style="margin-top:16px"><a href="${site}/?open=enq_list" style="background:#0A7AFF;color:#fff;padding:9px 14px;border-radius:8px;text-decoration:none;font-weight:600">Open in the hub</a></p>
+        <p style="margin-top:16px"><a href="${site}/hub.html?open=enquiry&id=${e.id}" style="background:#0A7AFF;color:#fff;padding:9px 14px;border-radius:8px;text-decoration:none;font-weight:600">Open ${esc(who)}</a></p>
         ${created ? "" : "<p style='color:#4B5563;font-size:13px'>This family was already on record; this contact has been added to their card.</p>"}`,
     });
     await sendMail({ to, subject: `${source === "Walk In" ? "Walk-in" : "New enquiry"}: ${who}`, html, text: line }).catch(() => {});

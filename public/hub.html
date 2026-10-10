@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=74">
-<link rel="prefetch" href="/brand/enquiries.js?v=74" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=75">
+<link rel="prefetch" href="/brand/enquiries.js?v=75" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -194,6 +194,15 @@ async function boot(){
   const want = new URLSearchParams(location.search).get('open');
   if (want && TABS[want]) { app = TABS[want].app || 'admissions'; tab = want; }
   if (want === 'enq_new') { app = 'enquiries'; tab = 'enq_today'; window._openNewEnquiry = true; }
+  // ?open=enquiry&id=123 — the link in the "a family just walked in" email.
+  // It opens that family's card, not the list: the point of being told is to
+  // see who it was, and hunting for them in two hundred rows is not that.
+  // Held until after sign-in, because the recipient is usually signed out on
+  // their phone when the email arrives.
+  if (want === 'enquiry') {
+    const id = Number(new URLSearchParams(location.search).get('id'));
+    if (id) { app = 'enquiries'; tab = 'enq_list'; window._openEnquiryId = id; }
+  }
   readUrl();                       // a reload should land where you left off
   const { data } = await getSb().auth.getSession();
   session = data.session;
@@ -365,10 +374,11 @@ function renderChooser(){
 }
 
 /* ── users & access (owner only) ─────────────────────── */
-const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','receipts',
+const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','enquiry_photos','receipts',
   'daycare_billing','reimbursements','finance','salary','letters','inventory'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
   payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
+  enquiry_photos:'Enquiry photos (sees families’ faces)',
   receipts:'Receipts & cash', finance:'Finance (money)',
   daycare_billing:'Day care billing',
   reimbursements:'Reimbursements',
@@ -6014,7 +6024,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=74"></script>
+<script src="/brand/enquiries.js?v=75"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

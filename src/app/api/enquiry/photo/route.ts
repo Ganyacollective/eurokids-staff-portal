@@ -29,15 +29,22 @@ export async function GET(req: NextRequest) {
     auth: { persistSession: false },
   });
 
-  // The same permission that lets somebody open the enquiry list. Anybody who
-  // can read the family's phone number can see who filled their form in.
+  // A permission of its own.
+  //
+  // This used to accept Admission or Finance — the same tick that lets someone
+  // work the enquiry list. But reading a family's phone number and looking at
+  // a photograph of them are not the same act, and most of the people who need
+  // the first have no reason for the second. So "Enquiry photos" is granted
+  // deliberately, to named people, and is checked here rather than merely
+  // hidden in the page: a hidden button is not a permission, and this URL is
+  // guessable.
   const [{ data: mods }, { data: prof }] = await Promise.all([
     admin.from("module_access").select("module").eq("user_id", who.user.id)
-      .in("module", ["admission", "finance"]),
+      .eq("module", "enquiry_photos"),
     admin.from("profiles").select("role").eq("id", who.user.id).maybeSingle(),
   ]);
   if (!((mods && mods.length) || prof?.role === "admin")) {
-    return NextResponse.json({ ok: false, error: "You need Admission or Finance." }, { status: 403 });
+    return NextResponse.json({ ok: false, error: "You do not have access to enquiry photos." }, { status: 403 });
   }
 
   const id = Number(new URL(req.url).searchParams.get("id"));

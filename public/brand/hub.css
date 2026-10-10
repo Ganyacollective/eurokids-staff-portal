@@ -419,6 +419,34 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 #eq-table td{vertical-align:top}
 #eq-table .chip{margin:1px 2px 1px 0}
 
+/* The child's name stays put.
+   Thirteen columns fit on no screen, so the table scrolls sideways — and four
+   columns along you are reading a row with no idea whose it is. The first
+   column pins to the left edge, because the name is the one part of a row
+   that answers "who is this?". A sticky cell is transparent by default and
+   the scrolling columns slide visibly underneath it, so it needs its own
+   background; the shadow on its right edge is what makes it read as pinned
+   rather than as a rendering fault.
+
+   The status stripe lives on this same cell as an inset box-shadow, and this
+   rule carries a higher specificity than the stripe's (an id beats two
+   classes), so the stripe has to be repeated here per status or pinning the
+   column would silently delete the colour coding. */
+#eq-table th:first-child,
+#eq-table td:first-child{
+  position:sticky;left:0;z-index:2;
+  background:var(--bg-card);
+  box-shadow:1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18);
+  min-width:168px;max-width:230px}
+#eq-table thead th:first-child{z-index:3;background:var(--bg-grouped)}
+/* The washes are deliberately translucent, which a pinned cell cannot be —
+   the scrolling columns would show straight through it. Painting the wash as
+   a flat gradient layer on top of the solid card colour keeps the exact tint
+   while leaving the cell opaque. */
+#eq-table tr.t-crit td:first-child{box-shadow:inset 3px 0 0 var(--red),    1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--red-wash),var(--red-wash)) ,var(--bg-card)}
+#eq-table tr.t-warn td:first-child{box-shadow:inset 3px 0 0 var(--orange), 1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--orange-wash),var(--orange-wash)),var(--bg-card)}
+#eq-table tr.t-good td:first-child{box-shadow:inset 3px 0 0 var(--green),  1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--green-wash),var(--green-wash)) ,var(--bg-card)}
+
 /* the sheet can take the whole screen when a record needs room */
 .drawer.wide{width:min(1100px,100vw)}
 .drawer.narrow{width:min(400px,100vw)}

@@ -189,6 +189,7 @@ async function tabEnqList(){
     + `<div class="tools"><div class="search"><input class="in" id="eq-q" type="search" placeholder="Search child, parent, phone or note" value="${esc(_eq.q)}"></div>
         <span class="hint" id="eq-meta"></span></div>
       <div class="fdesc" id="eq-fdesc"></div>
+      <div id="dupe-bar"></div>
       <div class="panel"><div class="tw"><table id="eq-table"><thead><tr>
         <th>Child</th><th>Sentiment</th><th>Program</th><th>Status</th><th>Stage</th><th>Source</th>
         <th>Father</th><th>Phone</th><th>Visit</th><th>Call</th><th>Follow-up</th><th>Notes</th><th>Last worked</th></tr></thead>
@@ -212,6 +213,11 @@ async function tabEnqList(){
   };
   el('eq-q').oninput = debounce(() => { _eq.q = el('eq-q').value; eqRun(); }, 160);
   eqRun();
+  // Arrived from the "a family just walked in" email. The card is opened over
+  // the list rather than instead of it, so closing it leaves you somewhere
+  // useful instead of on a blank screen.
+  if (window._openEnquiryId) { const id = window._openEnquiryId; window._openEnquiryId = 0; openEnquiry(id); }
+  renderDupeBanner();
 }
 
 function eqRun(){
@@ -367,11 +373,112 @@ window.addEventListener('message',function(e){if(e.data&&e.data.ekEnquireHeight)
 
     <div class="grp"><h3>Messages</h3><div class="box">
       <div class="row"><div class="l">Welcome email<span class="sub">Sent to every website and tablet enquiry with an email address.</span></div><div class="v">${ok(j.email_configured)}</div></div>
-      <div class="row"><div class="l">Walk-in alert<span class="sub">The office is emailed the moment a family submits; set <code>ENQUIRY_NOTIFY_EMAIL</code> to change who.</span></div><div class="v">${ok(j.email_configured)}</div></div>
+      <div class="row"><div class="l">Who hears about a new enquiry<span class="sub">Chosen below, per person and per source.</span></div><div class="v">${ok(j.email_configured)}</div></div>
       <div class="row"><div class="l">Visit reminder<span class="sub">The morning before a booked visit, automatically.</span></div><div class="v">${ok(j.email_configured)}</div></div>
       <div class="row"><div class="l">WhatsApp<span class="sub">${j.whatsapp_configured ? `Template “${esc(j.whatsapp_template)}” sends itself.` : 'Not connected — every enquiry has a one-tap WhatsApp button instead.'}</span></div><div class="v">${j.whatsapp_configured ? ok(true) : '<span class="chip c-mute">manual</span>'}</div></div>
     </div></div>
+
+    <div class="grp"><h3>Who gets told</h3><div class="box" id="nt-box"><div class="rowx hint">Loading the people…</div></div>
+      <div class="foot">The email names the family and opens their card directly. Nobody is emailed a source they have not ticked.</div></div>
   </div>`;
+  renderNotify();
+}
+
+/* ── who hears about a new enquiry ─────────────────────────────
+   Not a box you type addresses into. Addresses typed into settings go stale
+   the day somebody leaves; an account is closed when they go and the emails
+   stop with it. So these are the hub's own users, each choosing their sources. */
+async function renderNotify(){
+  const box = el('nt-box'); if (!box) return;
+  const j = await enqApi('/api/enquiry/notify');
+  if (!j.ok) return box.innerHTML = `<div class="rowx"><div class="err">${esc(j.error)}</div></div>`;
+  if (!j.people.length) return box.innerHTML = '<div class="rowx hint">No accounts with an email address yet.</div>';
+
+  const nobody = j.people.every(p => !p.sources.length);
+  box.innerHTML =
+    (nobody ? `<div class="rowx hint">Nobody has been chosen yet, so new enquiries still go to the old office address. Tick somebody and that stops.</div>` : '') +
+    j.people.map(p => `<div class="row" style="align-items:flex-start">
+      <div class="l">${esc(p.name)}<span class="sub">${esc(p.email)}${p.role === 'admin' ? ' · admin' : ''}</span></div>
+      <div class="v" style="flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:62%">
+        ${j.sources.map(s => `<button class="chip nt-src ${p.sources.includes(s) ? 'on c-good' : 'c-mute'}"
+            data-u="${esc(p.id)}" data-s="${esc(s)}" ${j.canEdit ? '' : 'disabled'}
+            style="cursor:${j.canEdit ? 'pointer' : 'default'}">${esc(s)}</button>`).join('')}
+      </div></div>`).join('') +
+    (j.canEdit ? '' : '<div class="rowx hint">Only an admin can change this.</div>');
+
+  if (!j.canEdit) return;
+  box.querySelectorAll('.nt-src').forEach(btn => btn.onclick = async () => {
+    const u = btn.dataset.u;
+    btn.classList.toggle('on'); btn.classList.toggle('c-good'); btn.classList.toggle('c-mute');
+    const sources = [...box.querySelectorAll(`.nt-src[data-u="${u}"].on`)].map(x => x.dataset.s);
+    const r = await enqApi('/api/enquiry/notify', { user_id: u, sources });
+    if (!r.ok) {
+      // Put the chip back rather than leaving the screen claiming something
+      // that was never saved.
+      btn.classList.toggle('on'); btn.classList.toggle('c-good'); btn.classList.toggle('c-mute');
+      alert(r.error || 'That could not be saved.');
+    }
+  });
+}
+
+/* ── two records that might be one family ──────────────────────
+   A phone number already merges on its own when an enquiry is captured, so
+   everything here is a case a number cannot settle: the mother rang in
+   January, the father walked in in February, and the child is the same child.
+   Claude proposes; a person decides. Nothing merges itself, because mixing two
+   families' records together has no clean undo. */
+async function renderDupeBanner(){
+  const bar = el('dupe-bar'); if (!bar) return;
+  const j = await enqApi('/api/enquiry/duplicates');
+  if (!j.ok) return bar.innerHTML = '';
+
+  if (!j.pairs.length) {
+    bar.innerHTML = `<div class="rowx hint" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <span>No possible duplicates waiting.</span>
+      <button class="btn line" id="dupe-scan" ${j.ready ? '' : 'disabled title="ANTHROPIC_API_KEY is not set on this deployment."'}>Look for duplicates</button></div>`;
+  } else {
+    const nm = e => esc(e.child_name || e.father_name || e.father_phone || ('#' + e.id));
+    const side = (e, pid, other) => `<div style="flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:10px">
+        <div style="font-weight:600">${nm(e)}</div>
+        <div class="hint">#${e.id} · ${esc((e.sources || []).join(', '))} · ${String(e.first_contact_at || '').slice(0, 10)}</div>
+        <div class="hint">${esc(e.father_name || e.mother_name || '—')} · ${esc(e.father_phone || e.mother_phone || 'no number')}</div>
+        <div class="hint">${esc(e.address || '')}</div>
+        <button class="btn line dupe-keep" data-p="${pid}" data-keep="${e.id}" style="margin-top:8px;width:100%">Keep this one, fold in #${other}</button>
+      </div>`;
+    bar.innerHTML = `<div class="grp" style="margin:12px 0"><h3>Possibly the same family (${j.pairs.length})</h3>
+      ${j.pairs.map(p => `<div class="box" style="margin-bottom:8px"><div class="rowx">
+        <div style="margin-bottom:8px"><span class="chip ${p.confidence >= 85 ? 'c-crit' : p.confidence >= 65 ? 'c-warn' : 'c-mute'}">${p.confidence}% sure</span>
+          <span style="margin-left:8px">${esc(p.reason)}</span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">${side(p.a, p.id, p.b.id)}${side(p.b, p.id, p.a.id)}</div>
+        <div style="margin-top:8px"><button class="btn line dupe-no" data-p="${p.id}">They are different families</button></div>
+      </div></div>`).join('')}
+      <div class="foot"><button class="btn line" id="dupe-scan" ${j.ready ? '' : 'disabled'}>Look again</button></div></div>`;
+  }
+
+  const scan = el('dupe-scan');
+  if (scan) scan.onclick = async () => {
+    scan.disabled = true; scan.textContent = 'Looking…';
+    const r = await enqApi('/api/enquiry/duplicates', { action: 'scan' });
+    if (!r.ok) { scan.disabled = false; scan.textContent = 'Look for duplicates'; return alert(r.error); }
+    renderDupeBanner();
+  };
+
+  bar.querySelectorAll('.dupe-no').forEach(b2 => b2.onclick = async () => {
+    b2.disabled = true;
+    const r = await enqApi('/api/enquiry/duplicates', { action: 'not_same', id: Number(b2.dataset.p) });
+    if (!r.ok) { b2.disabled = false; return alert(r.error); }
+    renderDupeBanner();
+  });
+
+  bar.querySelectorAll('.dupe-keep').forEach(b2 => b2.onclick = async () => {
+    const keep = Number(b2.dataset.keep);
+    // Named, and spelled out, because this one cannot be undone.
+    if (!confirm(`Keep enquiry #${keep} and fold the other into it?\n\nAnything the other record knows that this one does not — a name, a date of birth, an address — is copied across. Its calls, notes and history move too, and then it is deleted. This cannot be undone.`)) return;
+    b2.disabled = true; b2.textContent = 'Merging…';
+    const r = await enqApi('/api/enquiry/duplicates', { action: 'merge', id: Number(b2.dataset.p), keep });
+    if (!r.ok) { b2.disabled = false; b2.textContent = 'Keep this one'; return alert(r.error); }
+    enqRefresh(); tabEnqList();
+  });
 }
 
 /* ── the enquiry sheet ───────────────────────────────────────── */
@@ -478,10 +585,17 @@ async function openEnquiry(id){
         if (!img) return;                       // the drawer was closed meanwhile
         img.src = URL.createObjectURL(await r.blob());
         img.onload = () => URL.revokeObjectURL(img.src);
-      } catch {
+      } catch (err) {
         const img = el('en-photo');
+        // 403 is not a failure, it is the answer: this person is not one of
+        // the people allowed to see faces. Saying "could not be loaded" would
+        // invite them to retry something that will never work.
+        const denied = String(err && err.message) === '403';
         if (img) img.replaceWith(Object.assign(document.createElement('div'), {
-          className: 'rowx hint', textContent: 'The photo could not be loaded.' }));
+          className: 'rowx hint',
+          textContent: denied
+            ? 'A photo was taken at reception. You do not have access to enquiry photos.'
+            : 'The photo could not be loaded.' }));
       }
     })();
   }
