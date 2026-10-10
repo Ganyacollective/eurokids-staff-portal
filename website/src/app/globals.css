@@ -1,0 +1,288 @@
+/* EuroKids JMD Enclave — the public site.
+   Three breakpoints, named after the things they are for: phone, iPad,
+   desktop. Everything below is written mobile-first, because most parents
+   find this school on a phone. */
+
+:root {
+  --ink: #111214;
+  --muted: #6B7280;
+  --line: #E7E7EA;
+  --paper: #FFFFFF;
+  --pink: #FBBFC4;          /* the enquiry band */
+  --brand: #FF2217;         /* EuroKids red */
+  --focus: #0A7AFF;
+
+  --nav-h: 64px;
+  --pad: 20px;
+  --maxw: 1240px;
+
+  --fs-hero: clamp(34px, 8vw, 72px);
+  --fs-h2:   clamp(26px, 5vw, 44px);
+  --fs-lead: clamp(17px, 2.4vw, 22px);
+  --fs-body: 16px;
+
+  --card-ratio: 562 / 866;  /* the Canva artboard, so nothing is ever cropped */
+  --card-w: 250px;
+}
+@media (min-width: 768px)  { :root { --pad: 32px; --card-w: 310px; --nav-h: 72px; } }
+@media (min-width: 1180px) { :root { --pad: 48px; --card-w: 360px; } }
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-inter-tight), var(--font-inter), system-ui, sans-serif;
+  letter-spacing: -0.022em;
+  line-height: 1.04;
+  margin: 0;
+}
+
+a { color: inherit; }
+img, video { max-width: 100%; display: block; }
+
+/* A visible focus ring, always. Half the parents filling the form in are
+   doing it one-handed on a phone; the other half are on a laptop with a
+   keyboard, and losing the caret is how a form gets abandoned. */
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--pad); }
+
+/* ── header ──────────────────────────────────────────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  height: var(--nav-h);
+  display: flex; align-items: center;
+  background: rgba(255,255,255,.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--line);
+}
+.nav-in { display: flex; align-items: center; gap: 28px; width: 100%; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -.02em;
+  text-decoration: none; white-space: nowrap; font-size: 15.5px; }
+.brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--brand); flex: none; }
+.nav-links { display: none; gap: 26px; margin-left: auto; align-items: center; }
+@media (min-width: 900px) { .nav-links { display: flex; } }
+.nav-links a {
+  text-decoration: none; font-size: 14.5px; color: var(--ink); opacity: .74;
+  position: relative; padding: 4px 0; transition: opacity .18s;
+}
+.nav-links a:hover { opacity: 1; }
+/* The current page is underlined, as on the site this replaces. */
+.nav-links a[aria-current="page"] { opacity: 1; font-weight: 550; }
+.nav-links a[aria-current="page"]::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1.5px; background: currentColor;
+}
+.nav-toggle {
+  margin-left: auto; display: grid; place-items: center;
+  width: 40px; height: 40px; border: 0; background: transparent; cursor: pointer; padding: 0;
+}
+@media (min-width: 900px) { .nav-toggle { display: none; } }
+.nav-sheet {
+  position: fixed; inset: var(--nav-h) 0 auto 0; background: var(--paper);
+  border-bottom: 1px solid var(--line); padding: 8px var(--pad) 20px;
+  display: grid; gap: 2px; z-index: 49;
+}
+.nav-sheet a { text-decoration: none; font-size: 17px; padding: 13px 2px; border-bottom: 1px solid var(--line); }
+.nav-sheet a:last-child { border-bottom: 0; }
+
+/* ── the drifting cards ──────────────────────────────────────────────── */
+.marquee { overflow: hidden; padding: clamp(28px, 6vw, 64px) 0; }
+.marquee-track {
+  display: flex; gap: 16px; width: max-content;
+  animation: drift var(--dur, 60s) linear infinite;
+}
+.marquee:hover .marquee-track,
+.marquee:focus-within .marquee-track { animation-play-state: paused; }
+@keyframes drift { to { transform: translate3d(calc(-50% - 8px), 0, 0); } }
+/* Somebody who has asked their machine to stop moving things has asked for a
+   reason. The cards become a row you can swipe instead. */
+@media (prefers-reduced-motion: reduce) {
+  .marquee { overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .marquee-track { animation: none; padding-inline: var(--pad); }
+  .card { scroll-snap-align: center; }
+}
+
+.card {
+  position: relative; flex: none;
+  width: var(--card-w); aspect-ratio: var(--card-ratio);
+  border-radius: 14px; overflow: hidden; background: #EFEFF2;
+  text-decoration: none; color: #fff;
+  transition: transform .34s cubic-bezier(.2,.7,.3,1), box-shadow .34s;
+}
+.card img { width: 100%; height: 100%; object-fit: cover; }
+.card:hover, .card:focus-visible { transform: translateY(-6px) scale(1.012); box-shadow: 0 18px 44px rgba(0,0,0,.17); }
+.card-watch {
+  position: absolute; right: 14px; bottom: 14px;
+  width: 62px; height: 62px; border-radius: 50%;
+  background: #fff; color: #111; display: grid; place-items: center; text-align: center;
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; line-height: 1.12;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  transition: transform .3s cubic-bezier(.2,.7,.3,1);
+}
+.card:hover .card-watch { transform: scale(1.11); }
+
+/* ── the enquiry band ────────────────────────────────────────────────── */
+/* ── the form, as a Typeform ─────────────────────────────────────────── */
+/* The question owns the screen. That is the whole idea: one thing asked,
+   large, with nothing else to deliberate over. */
+.tf-section { background: var(--pink); padding: clamp(40px, 7vw, 80px) 0 clamp(50px, 8vw, 90px); }
+.tf-wrap { max-width: 820px; margin: 0 auto; padding-inline: var(--pad); }
+.tf-kicker { margin: 0; font-size: 13px; letter-spacing: .09em; text-transform: uppercase; color: #8a5560; }
+.tf-title { font-size: clamp(32px, 6vw, 56px); margin: 10px 0 6px; }
+.tf-sub { font-size: var(--fs-lead); color: #6d4a4e; margin: 0 0 clamp(20px, 3vw, 34px); }
+
+.tf { position: relative; }
+.tf-bar { height: 4px; background: rgba(0,0,0,.10); border-radius: 3px; overflow: hidden; margin-bottom: clamp(18px, 3vw, 30px); }
+.tf-bar i { display: block; height: 100%; background: var(--ink); transition: width .4s cubic-bezier(.2,.7,.3,1); }
+
+/* Tall enough that the question sits in the middle of the viewport on a
+   laptop, without the page jumping as answers change height. */
+.tf-stage { position: relative; min-height: min(58vh, 460px); display: flex; align-items: flex-start; }
+.tf-panel { width: 100%; outline: none; }
+.tf-panel.in-up   { animation: tfUp   .42s cubic-bezier(.2,.7,.3,1) both; }
+.tf-panel.in-down { animation: tfDown .42s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes tfUp   { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+@keyframes tfDown { from { opacity: 0; transform: translateY(-26px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .tf-panel.in-up, .tf-panel.in-down { animation: none; }
+}
+
+.tf-num { display: flex; align-items: center; gap: 7px; margin: 0 0 10px;
+  font-size: 14px; font-weight: 600; color: #8a5560; }
+.tf-q { font-size: clamp(23px, 3.6vw, 36px); font-weight: 600; margin: 0 0 8px;
+  letter-spacing: -.02em; line-height: 1.18; }
+.tf-req { color: var(--brand); font-size: .5em; vertical-align: super; margin-left: 5px; }
+.tf-hint { font-size: 15.5px; color: #6d4a4e; margin: 0 0 22px; max-width: 54ch; }
+
+.tf-field {
+  width: 100%; font: inherit; font-size: clamp(18px, 2.4vw, 24px);
+  padding: 10px 2px; color: var(--ink);
+  background: transparent; border: 0; border-bottom: 2px solid rgba(0,0,0,.26);
+  border-radius: 0; transition: border-color .2s;
+}
+.tf-field::placeholder { color: rgba(0,0,0,.3); }
+.tf-field:focus { outline: none; border-bottom-color: var(--ink); }
+.tf-area { resize: vertical; line-height: 1.45; }
+
+.tf-phone { display: flex; gap: 10px; align-items: flex-end; }
+.tf-cc {
+  font: inherit; font-size: clamp(17px, 2.2vw, 22px); padding: 10px 6px 10px 2px;
+  background: transparent; border: 0; border-bottom: 2px solid rgba(0,0,0,.26);
+  color: var(--ink); cursor: pointer; flex: none;
+}
+.tf-cc:focus { outline: none; border-bottom-color: var(--ink); }
+
+.tf-dob { display: flex; gap: 10px; flex-wrap: wrap; }
+.tf-sel {
+  font: inherit; font-size: clamp(16px, 2vw, 20px); padding: 12px 14px;
+  background: #fff; border: 1px solid rgba(0,0,0,.16); border-radius: 10px;
+  color: var(--ink); cursor: pointer; min-width: 118px;
+}
+.tf-sel:focus { outline: 3px solid var(--focus); outline-offset: 1px; }
+
+.tf-opts { display: grid; gap: 9px; max-width: 540px; }
+.tf-opt {
+  display: flex; align-items: center; gap: 13px; width: 100%; text-align: left;
+  font: inherit; font-size: clamp(16px, 2vw, 19px); padding: 14px 16px; cursor: pointer;
+  background: rgba(255,255,255,.72); color: var(--ink);
+  border: 1.5px solid rgba(0,0,0,.18); border-radius: 10px;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.tf-opt:hover { background: #fff; border-color: var(--ink); transform: translateX(3px); }
+.tf-opt[aria-pressed="true"] { background: #fff; border-color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.tf-opt kbd {
+  font: inherit; font-size: 12px; font-weight: 700; width: 25px; height: 25px; flex: none;
+  display: grid; place-items: center; border-radius: 5px;
+  background: rgba(0,0,0,.07); color: #5a4347; border: 1px solid rgba(0,0,0,.08);
+}
+.tf-opt[aria-pressed="true"] kbd { background: var(--ink); color: #fff; border-color: var(--ink); }
+.tf-opt span:not(.tf-check) { flex: 1; }
+.tf-check { font-weight: 700; }
+.tf-multi-note { font-size: 14px; color: #6d4a4e; margin: 12px 0 0; }
+
+.tf-actions { display: flex; align-items: center; gap: 15px; margin-top: 26px; flex-wrap: wrap; }
+.tf-ok {
+  display: inline-flex; align-items: center; gap: 9px;
+  font: inherit; font-weight: 650; font-size: 16px;
+  padding: 12px 24px; border-radius: 9px; border: 0; cursor: pointer;
+  background: var(--ink); color: #fff;
+  transition: transform .18s cubic-bezier(.2,.7,.3,1), opacity .18s;
+}
+.tf-ok:hover { transform: translateY(-1px); }
+.tf-ok:disabled { opacity: .55; cursor: default; transform: none; }
+.tf-enter { font-size: 13px; color: #7b545c; }
+.tf-enter strong { font-weight: 650; }
+@media (max-width: 600px) { .tf-enter { display: none; } }
+
+/* The two small arrows, bottom right, exactly where Typeform puts them. */
+.tf-steps { position: absolute; right: 0; bottom: -6px; display: flex; gap: 6px; }
+.tf-steps button {
+  width: 36px; height: 34px; border: 0; border-radius: 7px; cursor: pointer;
+  background: rgba(0,0,0,.72); color: #fff; font-size: 14px; line-height: 1;
+  transition: background .15s, opacity .15s;
+}
+.tf-steps button:hover:not(:disabled) { background: var(--ink); }
+.tf-steps button:disabled { opacity: .3; cursor: default; }
+
+.tf-err { color: #8d1414; font-size: 15px; margin: 16px 0 0; font-weight: 500; }
+
+.tf-done { text-align: center; padding: clamp(24px, 5vw, 54px) 0; }
+.tf-tick {
+  width: 62px; height: 62px; margin: 0 auto 20px; border-radius: 50%;
+  background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 29px;
+}
+.tf-done h2 { font-size: clamp(25px, 3.6vw, 36px); margin: 0 0 12px; }
+.tf-done p { margin: 0 auto; max-width: 48ch; color: #5f4146; font-size: 16.5px; }
+.tf-done a { font-weight: 600; }
+.tf-cta {
+  display: inline-flex; align-items: center; gap: 10px; margin-top: 30px;
+  font-weight: 650; font-size: 16.5px; text-decoration: none;
+  padding: 15px 28px; border-radius: 999px; background: var(--brand); color: #fff;
+  transition: transform .2s cubic-bezier(.2,.7,.3,1), box-shadow .2s;
+}
+.tf-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(255,34,23,.33); }
+.tf-cta .arr { transition: transform .25s cubic-bezier(.2,.7,.3,1); }
+.tf-cta:hover .arr { transform: translateX(5px); }
+
+.card-page { padding: clamp(26px, 5vw, 56px) 0 clamp(50px, 9vw, 96px); }
+.card-title { font-size: var(--fs-hero); text-align: center; margin-bottom: clamp(20px, 4vw, 40px); }
+.player { border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
+.player iframe, .player video { width: 100%; height: 100%; border: 0; display: block; }
+.gallery { display: grid; gap: 14px; margin-top: clamp(22px, 4vw, 44px);
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.gallery figure { margin: 0; border-radius: 10px; overflow: hidden; background: #F1F1F4; }
+.gallery img, .gallery video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.gallery figcaption { font-size: 13px; color: var(--muted); padding: 8px 10px 10px; }
+.back { display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+  font-size: 14.5px; color: var(--muted); margin-bottom: 20px; }
+.back:hover { color: var(--ink); }
+
+/* ── footer ──────────────────────────────────────────────────────────── */
+.foot { background: var(--brand); color: rgba(255,255,255,.88); padding: clamp(38px,6vw,60px) 0 36px;
+  font-size: 14px; }
+.foot-top { display: grid; gap: 26px; align-items: start; }
+@media (min-width: 768px) { .foot-top { grid-template-columns: 1.3fr 1fr 1fr; gap: 44px; } }
+.foot-logo { background: #fff; border-radius: 12px; padding: 14px 16px; display: inline-block; }
+.foot-logo img { height: 52px; width: auto; }
+.foot strong { color: #fff; }
+.foot a { color: rgba(255,255,255,.88); text-decoration: none; display: block; padding: 4px 0; }
+.foot a:hover { color: #fff; text-decoration: underline; }
+.foot h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .09em; color: #fff;
+  margin: 0 0 10px; font-family: inherit; font-weight: 700; }
+.foot-rule { height: 1px; background: rgba(255,255,255,.26); margin: 30px 0 18px; }
+.foot-fine { font-size: 12.5px; color: rgba(255,255,255,.78); display: flex; gap: 18px;
+  flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.foot-fine nav { display: flex; gap: 18px; flex-wrap: wrap; }
+.foot-fine nav a { display: inline; padding: 0; }

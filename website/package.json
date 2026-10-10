@@ -1,0 +1,24 @@
+{
+  "name": "eurokids-website",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The public website for EuroKids JMD Enclave. Separate from the staff app on purpose: a change here can never take payroll down.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "next": "15.5.27",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}
