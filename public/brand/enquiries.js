@@ -454,6 +454,8 @@ async function openEnquiry(id){
         <button data-a="form_taken">Form taken · fee pending</button>
         <button data-a="won">Mark won</button>
         <button data-a="lost" style="color:var(--red)">Mark lost…</button>
+        <div class="msep"></div>
+        <button data-a="delete" style="color:var(--red)">Delete this enquiry…</button>
       </div></div>
     <button class="btn" id="en-save">Save</button>`;
 
@@ -558,6 +560,18 @@ async function openEnquiry(id){
     if (a === 'won') { if (!confirm(`Mark ${enqName(e)} as won?`)) return; el('en-status').value = 'won'; el('en-save').click(); }
     if (a === 'lost') { const why = prompt('Why did we lose them? (fees, distance, joined elsewhere, no response…)', e.lost_reason || ''); if (why === null) return;
       el('en-status').value = 'lost'; if (await save({ lost_reason: why || null })) openEnquiry(id); }
+    if (a === 'delete') {
+      // Named in the question, because "Are you sure?" on a list of similar
+      // rows is how the wrong family gets deleted.
+      const label = enqName(e) + (e.phone ? ` · ${e.phone}` : '');
+      if (!confirm(`Delete ${label}?\n\nEverything goes: the enquiry, its calls and notes,`
+        + `${e.has_intake_photo ? ' and the photo taken at the desk.' : ' and its history.'}`
+        + `\n\nThis cannot be undone.`)) return;
+      const j = await enqApi('/api/enquiry/delete', { id });
+      if (!j.ok) return el('pf-msg').innerHTML = `<div class="err">${esc(j.error)}</div>`;
+      closeDrawer(true);
+      enqRefresh();
+    }
   });
   el('drawer-body').scrollTop = 0;
 }
