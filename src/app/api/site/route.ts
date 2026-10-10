@@ -42,10 +42,19 @@ async function gate(req: NextRequest) {
   if (!who?.user) return { error: "Not signed in.", status: 401 as const };
 
   const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
-  const { data: prof } = await admin.from("profiles").select("role, full_name").eq("id", who.user.id).maybeSingle();
-  // The public website is not a thing to edit by accident, and a wrong card is
-  // visible to every parent who looks. Admin only.
-  if (prof?.role !== "admin") return { error: "Only an admin can edit the website.", status: 403 as const };
+  // Its own permission, not Admission's and not admin's.
+  //
+  // Working the enquiry book and changing what every prospective parent sees
+  // are different jobs, and the person with the Canva files is not
+  // necessarily an admin. Checked here and not only in the page, because a
+  // hidden tab is not a permission.
+  const [{ data: mods }, { data: prof }] = await Promise.all([
+    admin.from("module_access").select("module").eq("user_id", who.user.id).eq("module", "website"),
+    admin.from("profiles").select("role, full_name").eq("id", who.user.id).maybeSingle(),
+  ]);
+  if (!((mods && mods.length) || prof?.role === "admin")) {
+    return { error: "You need the Website permission.", status: 403 as const };
+  }
 
   return { admin, user: who.user, name: prof?.full_name || who.user.email || "someone" };
 }

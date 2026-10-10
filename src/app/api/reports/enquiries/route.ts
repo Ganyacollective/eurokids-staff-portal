@@ -1,13 +1,17 @@
-// What the enquiry book can honestly say.
+// What the books can honestly say.
 //
-// Deliberately only the enquiry half. The fee tables hold 418 instalments and
-// paid_on is set on none of them, because parents pay through EPMS and nothing
-// comes back — so the hub believes ₹1.24 crore of ₹1.28 crore is overdue. Any
-// money figure drawn from that is wrong by roughly a crore, and a wrong figure
-// on a page that looks official is worse than a blank space. The blank space
-// is in the screen, labelled, until EPMS writes back.
+// A correction lives in this file. I first built this with the money section
+// deliberately blank, on the grounds that eurokids.payment_plan_item has
+// paid_on set on none of its 418 rows and a figure drawn from it would claim
+// ₹1.24 crore overdue. That was true about those rows and wrong about the
+// school: the real, settled figures were in the epms schema the whole time,
+// pulled every morning — 227 invoices, ₹1.30 crore raised, ₹1.07 crore
+// collected. I had looked in one schema, found nothing, and announced the
+// data did not exist.
 //
-// Everything below is counted from records somebody actually entered.
+// So money is here, taken from epms.fee_invoices, which is what EuroKids
+// itself believes. eurokids.payment_plan is a plan nobody updates and is not
+// used for any figure below.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -138,6 +142,54 @@ export async function GET(req: NextRequest) {
   lags.sort((a, b) => a - b);
   const median = lags.length ? lags[Math.floor(lags.length / 2)] : null;
 
+  // ── the money, from what EuroKids itself believes ────────────────────────
+  //
+  // Paise in EPMS, rupees here, converted once so no screen has to remember.
+  const [{ data: inv }, { data: lastSync }, { data: payEvents }] = await Promise.all([
+    admin.schema("epms").from("fee_invoices")
+      .select("uin, student_name, program_name, student_status, total_invoiced_paise, total_collected_paise, total_due_paise, payment_status"),
+    admin.schema("epms").from("sync_runs").select("finished_at, status")
+      .eq("status", "ok").order("finished_at", { ascending: false }).limit(1).maybeSingle(),
+    admin.schema("epms").from("payment_events").select("amount_paise, detected_at").order("detected_at", { ascending: false }).limit(400),
+  ]);
+
+  type Inv = { uin: string; student_name: string | null; program_name: string | null; student_status: string | null;
+    total_invoiced_paise: number | null; total_collected_paise: number | null; total_due_paise: number | null; payment_status: string | null };
+  const invoices = (inv || []) as Inv[];
+  const r = (p?: number | null) => Math.round((p || 0) / 100);
+
+  const byProgMoney = new Map<string, { programme: string; children: number; invoiced: number; collected: number; due: number }>();
+  for (const i of invoices) {
+    const k = i.program_name || "(not recorded)";
+    let x = byProgMoney.get(k);
+    if (!x) { x = { programme: k, children: 0, invoiced: 0, collected: 0, due: 0 }; byProgMoney.set(k, x); }
+    x.children++; x.invoiced += r(i.total_invoiced_paise); x.collected += r(i.total_collected_paise); x.due += r(i.total_due_paise);
+  }
+
+  // Who still owes, worst first — the list somebody can act on this morning.
+  const owing = invoices.filter(i => (i.total_due_paise || 0) > 0)
+    .map(i => ({ uin: i.uin, name: i.student_name, programme: i.program_name, due: r(i.total_due_paise), collected: r(i.total_collected_paise), invoiced: r(i.total_invoiced_paise) }))
+    .sort((a, b) => b.due - a.due);
+
+  // Money actually seen arriving, by month, from the sync's own change log.
+  const payByMonth = new Map<string, number>();
+  for (const p of (payEvents || []) as { amount_paise: number | null; detected_at: string }[]) {
+    const k = String(p.detected_at).slice(0, 7);
+    payByMonth.set(k, (payByMonth.get(k) || 0) + r(p.amount_paise));
+  }
+
+  const money = {
+    as_of: lastSync?.finished_at ?? null,
+    children: invoices.length,
+    invoiced: invoices.reduce((a, i) => a + r(i.total_invoiced_paise), 0),
+    collected: invoices.reduce((a, i) => a + r(i.total_collected_paise), 0),
+    due: invoices.reduce((a, i) => a + r(i.total_due_paise), 0),
+    families_owing: owing.length,
+    top_owing: owing.slice(0, 15),
+    by_programme: [...byProgMoney.values()].sort((a, b) => b.invoiced - a.invoiced),
+    collected_by_month: [...payByMonth.entries()].map(([month, amount]) => ({ month, amount })).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 8),
+  };
+
   // ── what the book cannot answer, and why ─────────────────────────────────
   const neverWon = enq.every(e => e.status !== "won");
   const neverLost = enq.every(e => e.status !== "lost");
@@ -148,14 +200,16 @@ export async function GET(req: NextRequest) {
     total: enq.length,
     visited: enq.filter(e => e.first_visit_at).length,
     open: enq.filter(e => e.status === "in_progress" || e.status === "form_taken").length,
-    months, sources, programmes, staff,
+    months, sources, programmes, staff, money,
     median_days_to_first_note: median,
     untouched,
     caveats: {
       never_won: neverWon,
       never_lost: neverLost,
-      // Said plainly rather than shown as a number, because the number is wrong.
-      money: "Fee collection is not shown. Parents pay through EPMS and nothing is written back, so every one of the 418 instalments still reads as unpaid and the hub would report about ₹1.24 crore overdue. That figure would be wrong, so it is not here.",
+      // The hub's own fee plan is still unmaintained; the figures above come
+      // from EPMS instead. Worth saying, so nobody reconciles the two and
+      // thinks the hub has lost a crore.
+      plan_unmaintained: "The hub's own fee plan (418 instalments) has never been marked paid and is ignored here. Every figure above comes from EPMS, which is what EuroKids itself bills and banks.",
     },
   });
 }

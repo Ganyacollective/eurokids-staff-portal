@@ -1181,6 +1181,7 @@ async function tabEnqReports(){
         ${j.caveats.never_won ? 'Not one enquiry has ever been marked <em>won</em>' : ''}${j.caveats.never_won && j.caveats.never_lost ? ' and none marked <em>lost</em>' : ''}, yet there are children on the roll who started as enquiries here. Until somebody closes an enquiry when a family joins or walks away, these columns stay empty and nobody can say which source is worth the money.</div>
       </div></div></div>` : '')
 
+    + '<div id="adm-box"></div>'
     + `<div class="grp"><h3>Month by month</h3><div class="panel"><div class="tw"><table>
         <thead><tr><th>Month</th><th>Enquiries</th><th>Visited</th><th>Visit rate</th><th>Form taken</th><th>Won</th><th>Lost</th><th>Still open</th><th>Avg keenness</th></tr></thead>
         <tbody>${j.months.map(r => `<tr>
@@ -1211,7 +1212,74 @@ async function tabEnqReports(){
           || '<tr><td colspan="6" class="hint">Nobody has written a note yet.</td></tr>'}</tbody></table></div></div>
       <div class="foot">Counted from notes and calls, which are the things people actually record. Conversions per person are not here because no enquiry is ever marked won.${j.untouched ? ` <strong>${j.untouched}</strong> enquir${j.untouched === 1 ? 'y has' : 'ies have'} no note from anyone.` : ''}</div></div>`
 
-    + `<div class="grp"><h3>Fee collection</h3><div class="box"><div class="rowx">
-        <div class="foot warn" style="margin:0">${esc(j.caveats.money)}</div>
-      </div></div><div class="foot">This section fills itself in once EPMS payments are written back.</div></div>`;
+    + (() => {
+      // Money, from EPMS — which is what EuroKids itself bills and banks. The
+      // hub's own payment_plan has never been marked paid and is ignored.
+      const m = j.money; if (!m) return '';
+      const rate = m.invoiced ? Math.round(100 * m.collected / m.invoiced) : 0;
+      const maxP = Math.max(1, ...m.by_programme.map(x => x.invoiced));
+      const maxM = Math.max(1, ...m.collected_by_month.map(x => x.amount));
+      return `<div class="grp"><h3>Fees</h3>
+        <div class="stats">
+          <div class="stat"><div class="k">Invoiced</div><div class="v">${inr(m.invoiced)}</div><div class="m">${m.children} children</div></div>
+          <div class="stat good"><div class="k">Collected</div><div class="v">${inr(m.collected)}</div><div class="m">${rate}% of what was raised</div></div>
+          <div class="stat ${m.due > 0 ? 'warn' : ''}"><div class="k">Still due</div><div class="v">${inr(m.due)}</div><div class="m">${m.families_owing} famil${m.families_owing === 1 ? 'y' : 'ies'}</div></div>
+        </div>
+        <div class="panel"><div class="tw"><table>
+          <thead><tr><th>Programme</th><th>Children</th><th>Invoiced</th><th>Collected</th><th>Still due</th><th>Collected</th></tr></thead>
+          <tbody>${m.by_programme.map(x => `<tr>
+            <td class="font-medium">${esc(x.programme)}</td><td>${x.children}</td>
+            <td>${inr(x.invoiced)}</td><td>${inr(x.collected)}</td>
+            <td class="${x.due > 0 ? 'text-amber-700' : ''}">${x.due ? inr(x.due) : '—'}</td>
+            <td>${bar(x.invoiced, maxP)} <span class="hint" style="margin-left:6px">${x.invoiced ? Math.round(100 * x.collected / x.invoiced) : 0}%</span></td>
+          </tr>`).join('')}</tbody></table></div></div>
+        <div class="foot">${m.as_of ? 'As EPMS had it on ' + dtLocal(m.as_of) + '.' : ''} ${esc(j.caveats.plan_unmaintained || '')}</div></div>
+
+      ${m.collected_by_month.length ? `<div class="grp"><h3>Money arriving</h3><div class="box">
+        ${m.collected_by_month.map(x => `<div class="row"><div class="l">${esc(x.month)}</div>
+          <div class="v" style="gap:10px">${bar(x.amount, maxM)} <b>${inr(x.amount)}</b></div></div>`).join('')}
+      </div><div class="foot">Payments the morning sync noticed arriving, by the month it saw them.</div></div>` : ''}
+
+      ${m.top_owing.length ? `<div class="grp"><h3>Who still owes</h3><div class="panel"><div class="tw"><table>
+        <thead><tr><th>Child</th><th>Programme</th><th>Invoiced</th><th>Paid</th><th>Still due</th></tr></thead>
+        <tbody>${m.top_owing.map(x => `<tr>
+          <td class="font-medium">${esc(x.name || x.uin)}</td><td class="hint">${esc(x.programme || '')}</td>
+          <td class="hint">${inr(x.invoiced)}</td><td class="hint">${inr(x.collected)}</td>
+          <td><b>${inr(x.due)}</b></td></tr>`).join('')}</tbody></table></div></div>
+        <div class="foot">The fifteen largest. ${m.families_owing} famil${m.families_owing === 1 ? 'y owes' : 'ies owe'} something.</div></div>` : ''}`;
+    })();
+  renderAdmitted();
+}
+
+/* Enquiries whose child now appears on the EuroKids roll.
+   The daily sync closes the confident ones on its own; this is for the few it
+   will not touch, and for seeing what it did. */
+async function renderAdmitted(){
+  const box = el('adm-box'); if (!box) return;
+  const j = await enqApi('/api/enquiry/admitted');
+  if (!j.ok) return box.innerHTML = '';
+  if (!j.confident.length && !j.unsure.length) {
+    return box.innerHTML = `<div class="grp"><div class="box"><div class="rowx hint">Every open enquiry has been checked against the ${j.roll} children on the EuroKids roll. None of them have joined yet.</div></div></div>`;
+  }
+  box.innerHTML = `<div class="grp"><h3>Now on the roll (${j.confident.length + j.unsure.length})</h3><div class="box">
+      ${j.confident.length ? `<div class="rowx hint">${j.confident.length} will be closed as won by the next morning sync. <button class="lnk" id="adm-now">Do it now</button></div>` : ''}
+      ${j.unsure.map(m => `<div class="row"><div class="l">${esc(m.child)}<span class="sub">${esc(m.why)}</span></div>
+        <div class="v" style="gap:6px">
+          <button class="btn line sm" onclick="openEnquiry(${m.enquiry_id})">Open</button>
+          <button class="btn line sm adm-yes" data-id="${m.enquiry_id}" data-uin="${esc(m.uin)}">Yes, they joined</button>
+        </div></div>`).join('')}
+    </div><div class="foot">Matched on the child's and father's names — EPMS gives us no phone numbers, so a name is all there is.</div></div>`;
+
+  const now = el('adm-now');
+  if (now) now.onclick = async () => {
+    now.disabled = true; now.textContent = 'Closing…';
+    const r = await enqApi('/api/enquiry/admitted', { all: true });
+    if (!r.ok) { now.disabled = false; return alert(r.error); }
+    enqRefresh(); tabEnqReports();
+  };
+  box.querySelectorAll('.adm-yes').forEach(b2 => b2.onclick = async () => {
+    const r = await enqApi('/api/enquiry/admitted', { id: Number(b2.dataset.id), uin: b2.dataset.uin });
+    if (!r.ok) return alert(r.error);
+    enqRefresh(); tabEnqReports();
+  });
 }

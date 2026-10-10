@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=79">
-<link rel="prefetch" href="/brand/enquiries.js?v=79" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=80">
+<link rel="prefetch" href="/brand/enquiries.js?v=80" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -142,9 +142,10 @@ const TABS = {
   enq_calls:  { app: 'enquiries', label: 'Calls',       icon: 'phone',  sect: 'Enquiries', need: () => has('admission') || has('finance') },
   enq_reports:{ app: 'enquiries', label: 'Reports',     icon: 'list',   sect: 'Enquiries', need: () => has('admission') || has('finance') },
   enq_setup:  { app: 'enquiries', label: 'Setup',       icon: 'gear',   sect: 'Setup',     need: () => isOwner() || has('finance') },
-  // The public website. Admin only: a wrong card here is visible to every
-  // parent who looks, which is a different kind of mistake from a wrong row.
-  website:    { app: 'enquiries', label: 'Website',     icon: 'globe',  sect: 'Setup',     need: () => isOwner() },
+  // The public website, behind its own permission rather than Admission: a
+  // wrong card here is seen by every parent who looks, and somebody can be
+  // trusted with the enquiry book without being trusted with that.
+  website:    { app: 'enquiries', label: 'Website',     icon: 'globe',  sect: 'Setup',     need: () => has('website') || isOwner() },
   // ── Fees ──
   overview:   { label: 'Overview',      icon: 'house',  sect: 'Fees',          need: () => has('admission') || has('finance') },
   children:   { label: 'Children',      icon: 'people', sect: 'Fees',          need: () => has('finance') || has('admission') },
@@ -380,7 +381,7 @@ function renderChooser(){
 
 /* ── users & access (owner only) ─────────────────────── */
 const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','enquiry_photos','receipts',
-  'daycare_billing','reimbursements','finance','salary','letters','inventory'];
+  'daycare_billing','reimbursements','finance','salary','letters','inventory','website'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
   payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
   enquiry_photos:'Enquiry photos (sees families’ faces)',
@@ -389,7 +390,8 @@ const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pul
   reimbursements:'Reimbursements',
   salary:'Salaries (staff pay)',
   letters:'Appointment letters (shows salary)',
-  inventory:'Inventory (equipment & supplies)' };
+  inventory:'Inventory (equipment & supplies)',
+  website:'Website (the public site)' };
 
 async function hubUsersApi(method, body){
   const { data: { session: s } } = await getSb().auth.getSession();
@@ -411,7 +413,9 @@ function modRows(prefix, selected){
       : m==='salary' ? '<span class="sub">What every member of staff earns, and their increments. Give this to almost nobody.</span>'
       : m==='inventory' ? '<span class="sub">Equipment, where it is and who has it, and the running list of supplies to buy. No money or family data.</span>'
       : m==='daycare_billing' ? '<span class="sub">Invoice day care families, take payments, write off and void. Money owed to the school — but not the school-wide books.</span>'
-      : m==='reimbursements' ? '<span class="sub">Issue the fee receipts parents claim back from their employers. No balances and no payments to record.</span>' : ''}</span>
+      : m==='reimbursements' ? '<span class="sub">Issue the fee receipts parents claim back from their employers. No balances and no payments to record.</span>'
+      : m==='enquiry_photos' ? '<span class="sub">The photograph the reception tablet takes of whoever filled the form in. Separate from Admission on purpose \u2014 working the enquiry book does not require seeing faces.</span>'
+      : m==='website' ? '<span class="sub">Edit the public site: the cards, their artwork, photos and videos. Changes are visible to every parent who looks, and this has nothing to do with Admission.</span>' : ''}</span>
       <input type="checkbox" class="sw ${prefix}-mod" value="${m}" ${selected?.includes(m)?'checked':''}></label>`).join('');
 }
 
@@ -6029,7 +6033,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=79"></script>
+<script src="/brand/enquiries.js?v=80"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

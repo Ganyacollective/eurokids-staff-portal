@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, esc, SCHOOL_NAME, plainFooter, SITE } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
+import { findAdmitted, closeAdmitted } from "@/lib/enquiry-epms";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -84,7 +85,24 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (ok) return NextResponse.json({ ok: true, ...detail });
+  if (ok) {
+    // The roll has just been refreshed, so this is the moment to close any
+    // enquiry whose child now appears on it. Doing it here rather than on a
+    // screen is the point: the person who knows a family joined is the person
+    // entering them into EPMS, and they never open the enquiry book. Left to
+    // somebody remembering, 195 of 198 enquiries stayed open for a year.
+    //
+    // Only the confident ones close. Anything the matcher is unsure of waits
+    // for a person, and a failure here must not make a good sync look bad.
+    let admitted: unknown = null;
+    try {
+      const closed = await closeAdmitted(admin, (await findAdmitted(admin)).matches, "EPMS sync");
+      admitted = { closed };
+    } catch (e) {
+      admitted = { error: e instanceof Error ? e.message : String(e) };
+    }
+    return NextResponse.json({ ok: true, ...detail, admitted });
+  }
 
   // The pull may have failed before it could open its own log row — when the
   // function is unreachable, for instance. Look for the row it would have
