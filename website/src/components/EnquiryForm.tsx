@@ -54,7 +54,7 @@ const QUESTIONS: Q[] = [
   { key: "sex",          label: "Boy or girl?", kind: "choice", required: true, options: [["Boy", "Boy"], ["Girl", "Girl"]] },
   { key: "programs",     label: "Which programmes interest you?", hint: "Choose as many as you like.", kind: "multi", required: true, options: PROGRAMMES },
   { key: "father_name",  label: "Father's name", kind: "text", required: true },
-  { key: "father_phone", label: "Father's mobile number", hint: "So we can call you back about a visit.", kind: "phone", required: true },
+  { key: "father_phone", label: "Father's mobile number", kind: "phone", required: true },
   { key: "father_email", label: "Father's email", hint: "Optional. We send the brochure and the fee note here.", kind: "email" },
   { key: "mother_name",  label: "Mother's name", hint: "Optional.", kind: "text" },
   { key: "mother_phone", label: "Mother's mobile number", hint: "Optional.", kind: "phone" },
@@ -139,8 +139,18 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
   };
 
   async function submit() {
+    // Up, and submitted, the instant the button is pressed.
+    //
+    // The request takes a second or two and the family is standing at the
+    // counter — making them watch a spinner for it is the thing that felt
+    // broken. So the page moves first and the save happens behind it. If it
+    // fails we come back and say so, which is the only case where the delay
+    // was ever worth waiting for.
     setBusy(true);
     setErr(null);
+    setDone(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
     const dob = get("dob_y") && get("dob_m") && get("dob_d")
       ? `${get("dob_y")}-${String(get("dob_m")).padStart(2, "0")}-${String(get("dob_d")).padStart(2, "0")}`
       : "";
@@ -148,6 +158,7 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
     // Already in hand: the camera keeps a recent frame warm, so Submit does
     // not stop to draw a canvas and encode a JPEG while somebody waits.
     const photo = kiosk ? cam.latest() : null;
+
     try {
       const r = await fetch(API, {
         method: "POST",
@@ -168,46 +179,47 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
           kiosk_key: kioskKey || undefined,
           photo: photo || undefined,
           page: typeof window !== "undefined" ? window.location.pathname : "",
-          company: get("company"),       // the honeypot; a human never sees it
+          company: get("company"),
         }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || "We could not send that just now.");
-      setDone(true);
       onDone?.();
-      // The tablet is handed to the next family, so it must not still be
-      // showing the last one's details. Long enough to read the thank-you.
-      if (kiosk) {
-        window.setTimeout(() => {
-          setA({ father_cc: "+91", mother_cc: "+91" });
-          setStep(0);
-          setDone(false);
-          started.current = false;
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        }, 12000);
-      }
     } catch (e) {
-      // Never swallowed. A parent who believes they have enquired and has not
-      // is worse off than one who knows to ring us.
-      setErr(`${(e as Error).message} Please call us on 020 6962 2686 and we will take the details down.`);
+      // It did not save. Put them back on the last question with every answer
+      // still in place, so it can be sent again rather than typed again.
+      setDone(false);
+      setErr(`${(e as Error).message} Please tell the coordinator.`);
+      document.getElementById("enquire")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } finally {
       setBusy(false);
     }
   }
 
+  // A clean form for the next family. The tablet is handed over all morning,
+  // so it also resets itself if it is simply left sitting there.
+  const startAgain = () => {
+    setA({ father_cc: "+91", mother_cc: "+91" });
+    setStep(0);
+    setDone(false);
+    setErr(null);
+    started.current = false;
+  };
+  useEffect(() => {
+    if (!done || !kiosk) return;
+    const id = window.setTimeout(startAgain, 4 * 60 * 1000);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done, kiosk]);
+
   if (done) {
     return (
-      <div className="tf-done">
-        <div className="tf-tick" aria-hidden>✓</div>
-        <h2>Thank you — that is everything we need.</h2>
-        <p>
-          Someone from the centre will call you shortly to arrange a visit. If it is urgent,
-          ring us on <a href="tel:+912069622686">020 6962 2686</a>.
-        </p>
-        <a className="tf-cta" href="#cards">
-          Now watch our beautiful videos
-          <span className="arr" aria-hidden>→</span>
-        </a>
+      <div className="tf">
+        <div className="tf-done">
+          <div className="tf-tick" aria-hidden>&#10003;</div>
+          <h2>Submitted</h2>
+          <button className="tf-again" onClick={startAgain}>Start a new form</button>
+        </div>
       </div>
     );
   }

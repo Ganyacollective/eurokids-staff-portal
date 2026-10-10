@@ -256,7 +256,7 @@
     <form onsubmit="return submitLeave(event)" class="space-y-4">
       <div>
         <label class="text-sm font-medium text-gray-700 block mb-1">Type</label>
-        <select id="lr-type" class="input">
+        <select id="lr-type" class="input" onchange="updateLeaveCost()">
           <option value="CL">Casual Leave (CL)</option>
           <option value="EL">Earned Leave (EL)</option>
           <option value="LWP">Leave Without Pay (LWP)</option>
@@ -265,17 +265,22 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-sm font-medium text-gray-700 block mb-1">From</label>
-          <input id="lr-start" type="date" required class="input" />
+          <input id="lr-start" type="date" required class="input" onchange="updateLeaveCost()" />
         </div>
         <div>
           <label class="text-sm font-medium text-gray-700 block mb-1">To</label>
-          <input id="lr-end" type="date" required class="input" />
+          <input id="lr-end" type="date" required class="input" onchange="updateLeaveCost()" />
         </div>
       </div>
       <label class="flex items-center gap-2 text-sm">
-        <input id="lr-half" type="checkbox" onchange="if(this.checked){document.getElementById('lr-end').value=document.getElementById('lr-start').value;}" />
+        <input id="lr-half" type="checkbox" onchange="if(this.checked){document.getElementById('lr-end').value=document.getElementById('lr-start').value;} updateLeaveCost();" />
         <span>Half-day leave <span class="text-xs text-gray-500">(only half the day off — counts as 0.5 from your balance)</span></span>
       </label>
+      <!-- What this application will actually cost, worked out as the dates
+           are picked. Nobody is stopped from applying: the school still needs
+           to know who is away. They are simply told, before they send it,
+           which days are paid and which are not. -->
+      <div id="lr-balance" class="hidden text-sm rounded-lg px-3 py-2 border"></div>
       <div>
         <label class="text-sm font-medium text-gray-700 block mb-1">Reason</label>
         <textarea id="lr-reason" rows="3" required class="input" placeholder="A short reason HR can read at a glance."></textarea>
@@ -799,6 +804,49 @@ function renderBalance(){
   document.getElementById('el-total').textContent = elTotal;
   document.getElementById('cl-left').textContent  = Math.max(0, clTotal - usedCL);
   document.getElementById('el-left').textContent  = Math.max(0, elTotal - usedEL);
+  // Kept for the application form, so it can say what a request will cost
+  // before it is sent rather than after HR has approved it.
+  myLeft = { CL: clTotal - usedCL, EL: elTotal - usedEL };
+}
+
+// How many days are left, by type. LWP has no balance — it is unpaid by
+// definition, so there is nothing to run out of.
+let myLeft = { CL: 0, EL: 0 };
+
+function updateLeaveCost(){
+  const box = document.getElementById('lr-balance');
+  if (!box) return;
+  const type  = document.getElementById('lr-type')?.value;
+  const start = document.getElementById('lr-start')?.value;
+  const end   = document.getElementById('lr-end')?.value;
+  const half  = document.getElementById('lr-half')?.checked;
+
+  if (!type || !start || !end || end < start) { box.className = 'hidden'; return; }
+  if (type === 'LWP') {
+    box.className = 'text-sm rounded-lg px-3 py-2 border bg-gray-50 border-gray-200 text-gray-700';
+    box.textContent = 'Leave without pay — none of these days are paid.';
+    return;
+  }
+
+  const asked = half ? 0.5 : daysBetween(start, end);
+  const left  = Math.max(0, myLeft[type] ?? 0);
+  const paid  = Math.min(asked, left);
+  const unpaid = Math.round((asked - paid) * 10) / 10;
+  const d = n => `${n} day${n === 1 ? '' : 's'}`;
+
+  if (unpaid <= 0) {
+    box.className = 'text-sm rounded-lg px-3 py-2 border bg-green-50 border-green-200 text-green-800';
+    box.textContent = `${d(asked)} — you have ${d(left)} of ${type} left, so all of it is paid.`;
+  } else if (paid > 0) {
+    box.className = 'text-sm rounded-lg px-3 py-2 border bg-amber-50 border-amber-300 text-amber-900';
+    box.innerHTML = `You are asking for ${d(asked)} but have only <strong>${d(left)}</strong> of ${type} left.
+      <strong>${d(paid)} will be paid and ${d(unpaid)} will not.</strong>
+      You can still send it — we need to know you are away.`;
+  } else {
+    box.className = 'text-sm rounded-lg px-3 py-2 border bg-amber-50 border-amber-300 text-amber-900';
+    box.innerHTML = `You have <strong>no ${type} left</strong>, so all ${d(asked)} would be unpaid.
+      You can still send it — we need to know you are away.`;
+  }
 }
 
 function fmtDate(iso){
@@ -843,6 +891,7 @@ function openLeaveModal(){
   document.getElementById('lr-end').value = '';
   document.getElementById('lr-reason').value = '';
   if (document.getElementById('lr-half')) document.getElementById('lr-half').checked = false;
+  if (document.getElementById('lr-balance')) document.getElementById('lr-balance').className = 'hidden';
   document.getElementById('lr-error').classList.add('hidden');
   document.getElementById('leave-modal').classList.add('show');
 }

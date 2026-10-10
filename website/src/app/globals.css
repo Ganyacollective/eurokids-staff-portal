@@ -271,18 +271,15 @@ img, video { max-width: 100%; display: block; }
   width: 56px; height: 56px; margin: 0 0 24px; border-radius: 50%;
   background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 26px;
 }
-.tf-done h2 { font-size: clamp(27px, 3.8vw, 40px); margin: 0 0 14px; letter-spacing: -.03em; }
-.tf-done p { margin: 0; color: #7E635F; font-size: 17.5px; line-height: 1.55; }
-.tf-cta {
-  display: inline-flex; align-items: center; gap: 11px; margin-top: 34px;
-  font-weight: 600; font-size: 17px; text-decoration: none;
-  padding: 15px 30px; border-radius: 8px; background: var(--ink); color: #fff;
-  transition: background .15s;
+.tf-done h2 { font-size: clamp(27px, 3.8vw, 40px); margin: 0; letter-spacing: -.03em; }
+/* Quiet, and out of the way. The coordinator presses it when the next family
+   arrives; it is not something a parent needs to notice. */
+.tf-again {
+  margin-top: 22px; font: inherit; font-size: 15px; color: #8A6A64;
+  background: none; border: 0; border-bottom: 1px solid rgba(60,20,14,.28);
+  padding: 2px 0; cursor: pointer; transition: color .14s, border-color .14s;
 }
-.tf-cta:hover { background: #2B2D31; }
-.tf-cta .arr { transition: transform .25s cubic-bezier(.2,.7,.3,1); }
-.tf-cta:hover .arr { transform: translateX(5px); }
-
+.tf-again:hover { color: var(--brand); border-color: var(--brand); }
 
 .card-page { padding: clamp(26px, 5vw, 56px) 0 clamp(50px, 9vw, 96px); }
 .card-title { font-size: var(--fs-hero); text-align: center; margin-bottom: clamp(20px, 4vw, 40px); }
