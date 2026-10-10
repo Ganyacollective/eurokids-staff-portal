@@ -470,6 +470,15 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 .ecard .ec-next.due{color:var(--red)}
 .ecard .ec-m{font-size:var(--fs-co);color:var(--label-2)}
 
+/* The story in one line. Italic and set apart, because it is the only thing on
+   this card nobody typed — it is assembled from the notes, and should not be
+   mistaken for something a colleague wrote by hand. */
+.ecard .ec-story{margin-top:8px;padding-top:8px;border-top:1px solid var(--sep);
+  font-size:var(--fs-co);line-height:var(--lh-co);color:var(--label);font-style:italic}
+.lnk{background:none;border:0;padding:0;font:inherit;font-style:normal;color:var(--accent);
+  font-weight:600;cursor:pointer}
+.lnk:hover{text-decoration:underline;text-underline-offset:3px}
+
 /* How keen, as something you can read at a glance instead of a number out of
    ten. Cold is blue and warm is orange because a 3 and an 8 should not be the
    same colour in the corner of your eye. */

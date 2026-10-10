@@ -13,6 +13,7 @@
 // clean way back, so the model is allowed to raise its hand and nothing more.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { askJson, MODELS } from "@/lib/claude";
 
 export type Candidate = {
   a: EnqLite; b: EnqLite;
@@ -50,14 +51,11 @@ export async function findCandidates(admin: SupabaseClient, limit = 40): Promise
 
 // ── asking Claude ───────────────────────────────────────────────────────────
 //
-// Called through plain fetch rather than the SDK: one request, one shape, and
-// no dependency to keep patched for the sake of it.
-
-// Sonnet rather than Haiku: the judgement that matters here is the one that
-// says no — two different Shivanshes, different fathers, different societies —
-// and that is worth more than the fraction of a paisa saved. Overridable, so a
-// model change does not need a code change.
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+// Through the shared client in lib/claude, so the key, the timeout and the
+// call log are the same here as everywhere else. This one uses the judge
+// model rather than the writing model: the answer that earns its keep is the
+// refusal — two different boys called Shivansh, different fathers, different
+// societies — and that is worth more than the fraction of a paisa saved.
 
 const describe = (e: EnqLite) => [
   `  id: ${e.id}`,
@@ -88,44 +86,71 @@ For each pair, answer with your confidence that they are the same family:
 
 Reply with JSON only: {"results":[{"a":<id>,"b":<id>,"confidence":<0-100>,"reason":"<one short sentence a receptionist would understand>"}]}
 
-The reason must say what actually matched, naming it — "same child and both in Undri", not "high similarity". If they are siblings, say so.`;
+About the reason, which somebody will read and act on:
+
+Say what actually matched, naming it — "same child's name, both in Undri" rather than "high similarity". If they are siblings, say so.
+
+Do not write any phone number, and do not compare, transform or reason about digits. You cannot reliably tell whether two numbers are a typo of each other, and a wrong claim about numbers is worse than no claim because it reads as evidence. The system already knows whether the numbers match; say "the numbers differ" if it matters and leave it there.
+
+Every fact in the reason must be one you were given above. Never state a date of birth, an area, a parent's name or a programme that is not written in the record in front of you. If what you have is thin, say that instead of filling the gap — "same child's name and nothing else to go on" is an honest and useful reason.`;
 
 export type Judgement = { a: number; b: number; confidence: number; reason: string };
 
-export async function judge(cands: Candidate[]): Promise<Judgement[]> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error("ANTHROPIC_API_KEY is not set, so pairs cannot be judged.");
+export async function judge(cands: Candidate[], log?: SupabaseClient, actor?: string | null): Promise<Judgement[]> {
   if (!cands.length) return [];
 
   const body = cands.map((c, i) =>
     `Pair ${i + 1} (the database noticed: ${c.signal})\nA:\n${describe(c.a)}\nB:\n${describe(c.b)}`
   ).join("\n\n");
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: MODEL, max_tokens: 2000, system: PROMPT,
-      messages: [{ role: "user", content: body }],
-    }),
+  const parsed = await askJson<{ results?: Judgement[] }>({
+    feature: "duplicate_judge", model: MODELS.judge, maxTokens: 2000,
+    system: PROMPT, user: body, log, actor,
+    entityId: cands.map(c => `${c.a.id}/${c.b.id}`).join(","),
   });
-
-  if (!res.ok) throw new Error(`Claude said ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const json = await res.json();
-  const text: string = (json.content || []).map((c: { text?: string }) => c.text || "").join("");
-
-  // The model is told to return JSON and does, but a stray sentence either
-  // side would otherwise throw away a whole batch of real answers.
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("Claude's answer was not JSON.");
-  const parsed = JSON.parse(m[0]) as { results?: Judgement[] };
 
   const valid = new Set(cands.map(c => `${c.a.id}|${c.b.id}`));
   return (parsed.results || [])
-    .map(r => ({ a: Number(r.a), b: Number(r.b), confidence: Math.max(0, Math.min(100, Number(r.confidence) || 0)), reason: String(r.reason || "").slice(0, 300) }))
+    .map(r => ({
+      a: Number(r.a), b: Number(r.b),
+      confidence: Math.max(0, Math.min(100, Number(r.confidence) || 0)),
+      reason: scrubReason(String(r.reason || "")),
+    }))
     // Only pairs we actually asked about: a hallucinated id would otherwise
     // become a suggestion to merge two families nobody compared.
     .filter(r => valid.has(`${Math.min(r.a, r.b)}|${Math.max(r.a, r.b)}`));
+}
+
+// The reason is the part a person reads and acts on, so it is the part that
+// has to be true.
+//
+// Asked about Noyan Ashraf, the model reached the right answer — same child,
+// probably one family — and then explained it by saying the two numbers
+// "differ by only one digit (8789761799 vs 8789731799)". The second number
+// does not exist in the record or anywhere else. The verdict was sound and
+// the evidence was invented, which is the worse half: a coordinator reads a
+// specific-sounding justification and merges two families on it.
+//
+// The prompt now forbids writing numbers at all. This is the part that does
+// not depend on the model having listened. Any run of digits long enough to
+// be a phone number is cut out, and a reason that was mostly such a claim is
+// replaced rather than left as a sentence with a hole in it.
+function scrubReason(raw: string): string {
+  const reason = raw.trim().slice(0, 300);
+  if (!/\d{5,}/.test(reason)) return reason;
+
+  const cleaned = reason
+    .replace(/\(?\s*\+?\d[\d\s-]{4,}\d\s*(vs\.?|and|versus)?\s*\+?[\d\s-]*\)?/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.])/g, "$1")
+    .trim();
+
+  // If stripping the invented digits left nothing that still argues anything,
+  // say plainly that the reason was discarded. Silence is better than a
+  // confident fragment.
+  return cleaned.length < 25
+    ? "The model's explanation mentioned phone numbers it could not have known, so it was discarded. Compare the two records yourself."
+    : cleaned;
 }
 
 // ── joining two records ─────────────────────────────────────────────────────

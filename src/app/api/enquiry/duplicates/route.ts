@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { findCandidates, judge, mergeEnquiries } from "@/lib/enquiry-dupes";
+import { claudeReady } from "@/lib/claude";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,14 +49,14 @@ export async function GET(req: NextRequest) {
     .select("id, a_id, b_id, confidence, reason, found_at")
     .eq("status", "suggested").order("confidence", { ascending: false });
 
-  if (!pairs?.length) return NextResponse.json({ ok: true, pairs: [], ready: !!process.env.ANTHROPIC_API_KEY });
+  if (!pairs?.length) return NextResponse.json({ ok: true, pairs: [], ready: claudeReady() });
 
   const ids = [...new Set(pairs.flatMap(p => [p.a_id, p.b_id]))];
   const { data: enq } = await tbl.from("enquiry").select(FIELDS).in("id", ids);
   const by = new Map((enq || []).map(e => [e.id, e]));
 
   return NextResponse.json({
-    ok: true, ready: !!process.env.ANTHROPIC_API_KEY,
+    ok: true, ready: claudeReady(),
     pairs: pairs.map(p => ({ ...p, a: by.get(p.a_id) || null, b: by.get(p.b_id) || null }))
       // A pair whose records have since gone is not a question any more.
       .filter(p => p.a && p.b),
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
   const action = String(b.action || "");
 
   if (action === "scan") {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!claudeReady()) {
       return NextResponse.json({ ok: false, error: "ANTHROPIC_API_KEY is not set on this deployment, so pairs cannot be judged." }, { status: 400 });
     }
     let found: Awaited<ReturnType<typeof findCandidates>>;
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
     if (!found.length) return NextResponse.json({ ok: true, looked: 0, kept: 0, note: "Nothing new to look at." });
 
     let verdicts;
-    try { verdicts = await judge(found); }
+    try { verdicts = await judge(found, admin, user.id); }
     catch (e) { return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 502 }); }
 
     // Below forty it is not a lead, it is noise — but it is still recorded, as

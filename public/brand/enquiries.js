@@ -95,6 +95,7 @@ async function tabEnqToday(){
         <div class="stat"><div class="k">Visited</div><div class="v">${visitedMonth.length}</div><div class="m">this month</div></div>
         <div class="stat good"><div class="k">Won</div><div class="v">${wonMonth.length}</div><div class="m">${thisMonth.length ? Math.round(100 * wonMonth.length / thisMonth.length) + '% of this month’s' : 'this month'}</div></div>
       </div>
+      <div class="grp"><h3>The morning</h3><div class="box" id="brief-box"></div></div>
       ${list('Follow-ups due', due, 'Nothing due today.', item)}
       ${list('Visits today', visits, 'No visits booked for today.', item)}
       ${list('Nobody has spoken to them yet', fresh, 'Every enquiry has been contacted.', item)}
@@ -104,6 +105,44 @@ async function tabEnqToday(){
   el('enq-new').onclick = () => openNewEnquiry();
   b.querySelectorAll('.enq-row').forEach(x => x.onclick = () => x.dataset.id && openEnquiry(Number(x.dataset.id)));
   if (window._openNewEnquiry) { window._openNewEnquiry = false; openNewEnquiry(); }
+  renderBrief();
+}
+
+/* ── the morning brief ─────────────────────────────────────────
+   Everything in it is already on a screen somewhere — follow-ups in the list,
+   money in Fees, absences in the portal. Nobody opens five screens before the
+   first parent arrives, so the thing that needed attention today gets found on
+   Thursday. Every figure is counted in SQL; Claude only decides how to say it.
+
+   Kept for the day in this browser, because the counts barely move between
+   nine and ten and nobody should pay for the same brief twice. */
+async function renderBrief(){
+  const box = el('brief-box'); if (!box) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const stash = `ek-brief-${today}`;
+  let cached = null;
+  try { cached = JSON.parse(sessionStorage.getItem(stash) || 'null'); } catch (_) {}
+  if (cached) return paintBrief(cached);
+
+  box.innerHTML = '<div class="rowx hint">Reading the morning…</div>';
+  const j = await enqApi('/api/brief');
+  if (!j.ok) return box.innerHTML = `<div class="rowx"><div class="err">${esc(j.error)}</div></div>`;
+  try { sessionStorage.setItem(stash, JSON.stringify(j)); } catch (_) {}
+  paintBrief(j);
+
+  function paintBrief(d){
+    // A deliberately small Markdown reader: headings, list items, bold. The
+    // model is told to use nothing else, and anything it sends beyond that is
+    // shown as the plain text it is rather than as raw symbols.
+    const md = s => esc(s)
+      .replace(/^## (.+)$/gm, '<h4 style="margin:14px 0 4px;font-size:var(--fs-hd)">$1</h4>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, '<ul style="margin:4px 0 0 18px">$1</ul>')
+      .replace(/\n{2,}/g, '<p style="margin:8px 0 0"></p>');
+    box.innerHTML = `<div class="rowx" style="padding-top:4px">${md(d.brief)}</div>`
+      + (d.written ? '' : `<div class="foot">${d.error ? esc(d.error) + ' — ' : ''}Showing the plain counts; Claude did not write this one.</div>`);
+  }
 }
 
 /* ── Enquiries: the editable table with stacking filters ─────── */
@@ -603,6 +642,9 @@ async function openEnquiry(id){
         </div>
         <div class="ec-next ${e.follow_up_due && !e.on_roster ? 'due' : ''}">${esc(next)}</div>
         <div class="ec-m">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
+        <div class="ec-story" id="en-story">${e.ai_summary
+          ? `<span id="en-storytext">${esc(e.ai_summary)}</span> <button class="lnk" id="en-restory" title="Write it again from the latest notes">↻</button>`
+          : `<button class="lnk" id="en-restory">Summarise this family</button>`}</div>
         <div class="keen"><span class="ec-m">How keen</span>
           <span class="bar" style="--k:${kcol}"><i style="width:${keen * 10}%"></i></span><b>${keen}/10</b></div>
         <div class="qa">
@@ -755,6 +797,25 @@ async function openEnquiry(id){
     enqRefresh(); return true;
   };
   el('en-save').onclick = async () => { if (await save()) { el('pf-msg').innerHTML = '<div class="ok">Saved.</div>'; _afterDrawerClose = () => renderApp(); setTimeout(() => openEnquiry(id), 400); } };
+
+  // The one-line story. Written on demand rather than on every save: it costs
+  // a model call, and most opens of a card change nothing worth re-reading.
+  // The button is rebound after each run rather than chained to the old one,
+  // which would have gone stale the moment the box was rewritten.
+  const bindStory = () => {
+    const btn = el('en-restory'); if (!btn) return;
+    btn.onclick = async () => {
+      const box = el('en-story');
+      box.innerHTML = '<span class="hint">Reading their history…</span>';
+      const j = await enqApi('/api/enquiry/summary', { id });
+      box.innerHTML = j.ok
+        ? `<span id="en-storytext">${esc(j.summary)}</span> <button class="lnk" id="en-restory" title="Write it again from the latest notes">↻</button>`
+        : `<span class="err">${esc(j.error)}</span> <button class="lnk" id="en-restory">Try again</button>`;
+      bindStory();
+      if (j.ok) enqRefresh();
+    };
+  };
+  bindStory();
 
   // The two commonest acts, lifted out of the Actions menu onto the card.
   const qaLog = el('qa-logcall');
