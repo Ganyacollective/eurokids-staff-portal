@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { captureEnquiry, phoneKey, isEmail, tooManyHits, type Source } from "@/lib/enquiry";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -7,6 +7,48 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Optional: the iPad at reception sends this so a walk-in is trusted as a
 // walk-in. Anything without it is treated as a website enquiry.
 const KIOSK_KEY = process.env.ENQUIRY_KIOSK_KEY;
+
+// Two megabytes of base64 is a generous 1.5 MB photo. Beyond that something
+// is wrong — the tablet sends a 720-wide JPEG, which lands around 60 KB — and
+// an unbounded data: URL on a public endpoint is a way to fill a bucket.
+const MAX_PHOTO_B64 = 2_000_000;
+
+// Stored, then linked to the enquiry. Never fatal: a family who filled the
+// form in must be recorded whether or not the camera worked, so every failure
+// here is swallowed after being written to the event trail.
+async function storeIntakePhoto(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: SupabaseClient<any>, enquiryId: number, dataUrl: string,
+) {
+  try {
+    if (dataUrl.length > MAX_PHOTO_B64) return;
+    const [head, b64] = dataUrl.split(",", 2);
+    if (!b64) return;
+    const type = head.includes("webp") ? "image/webp" : "image/jpeg";
+    const ext = type === "image/webp" ? "webp" : "jpg";
+    const bytes = Buffer.from(b64, "base64");
+    if (!bytes.length) return;
+
+    const now = new Date();
+    const path = `${now.toISOString().slice(0, 7)}/${enquiryId}-${now.getTime()}.${ext}`;
+    const { error } = await admin.storage.from("intake")
+      .upload(path, bytes, { contentType: type, upsert: false });
+    if (error) throw new Error(error.message);
+
+    const tbl = admin.schema("eurokids");
+    await tbl.from("enquiry")
+      .update({ intake_photo: path, intake_photo_at: now.toISOString() }).eq("id", enquiryId);
+    await tbl.from("enquiry_event").insert({
+      enquiry_id: enquiryId, kind: "note", actor: "reception tablet",
+      summary: "Photo taken at the tablet when the form was submitted",
+    });
+  } catch (e) {
+    await admin.schema("eurokids").from("enquiry_event").insert({
+      enquiry_id: enquiryId, kind: "note", actor: "reception tablet",
+      summary: `The tablet could not save a photo: ${(e as Error).message}`,
+    }).then(() => {}, () => {});
+  }
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -54,6 +96,16 @@ export async function POST(req: NextRequest) {
       message: str(b.message), sendWelcome: true, notifySchool: true,
       detail: { page: str(b.page) || req.headers.get("referer") || null, ua: req.headers.get("user-agent")?.slice(0, 160) || null, ip },
     });
+    // The reception tablet photographs whoever pressed Submit, because
+    // otherwise there is no way to tell a family who walked in from a member
+    // of staff filling the form to make the day's numbers look better.
+    //
+    // Only from the tablet. A photo arriving without the kiosk key is thrown
+    // away without comment: the public website must never be able to
+    // photograph a stranger at home, whatever it claims to be.
+    if (kiosk && typeof b.photo === "string" && b.photo.startsWith("data:image/")) {
+      await storeIntakePhoto(admin, r.enquiry.id, b.photo);
+    }
     return NextResponse.json({ ok: true, existing: !r.created, welcome: r.welcome }, { headers: CORS });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500, headers: CORS });

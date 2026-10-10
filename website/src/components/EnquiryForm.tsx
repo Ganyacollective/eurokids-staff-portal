@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useKiosk, useIntakeCamera } from "./useKiosk";
 
 // A Typeform, properly.
 //
@@ -64,6 +65,9 @@ const QUESTIONS: Q[] = [
 type Answers = Record<string, string | string[]>;
 
 export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
+  const kioskKey = useKiosk();
+  const kiosk = !!kioskKey;
+  const cam = useIntakeCamera(kiosk);
   const [step, setStep] = useState(0);
   const [a, setA] = useState<Answers>({ father_cc: "+91", mother_cc: "+91" });
   const [err, setErr] = useState<string | null>(null);
@@ -141,6 +145,9 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
       ? `${get("dob_y")}-${String(get("dob_m")).padStart(2, "0")}-${String(get("dob_d")).padStart(2, "0")}`
       : "";
     const withCode = (cc: string, n: string) => (n.trim() ? `${cc} ${n.trim()}` : "");
+    // Taken at the moment of submitting, not earlier, so the photograph is of
+    // whoever actually pressed the button.
+    const photo = kiosk ? await cam.capture() : null;
     try {
       const r = await fetch(API, {
         method: "POST",
@@ -157,7 +164,9 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
           mother_phone: withCode(get("mother_cc"), get("mother_phone")),
           mother_email: get("mother_email"),
           address: get("address"),
-          source: "Website",
+          source: kiosk ? "Walk In" : "Website",
+          kiosk_key: kioskKey || undefined,
+          photo: photo || undefined,
           page: typeof window !== "undefined" ? window.location.pathname : "",
           company: get("company"),       // the honeypot; a human never sees it
         }),
@@ -166,6 +175,17 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
       if (!r.ok || !j.ok) throw new Error(j.error || "We could not send that just now.");
       setDone(true);
       onDone?.();
+      // The tablet is handed to the next family, so it must not still be
+      // showing the last one's details. Long enough to read the thank-you.
+      if (kiosk) {
+        window.setTimeout(() => {
+          setA({ father_cc: "+91", mother_cc: "+91" });
+          setStep(0);
+          setDone(false);
+          started.current = false;
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }, 12000);
+      }
     } catch (e) {
       // Never swallowed. A parent who believes they have enquired and has not
       // is worse off than one who knows to ring us.
@@ -330,6 +350,21 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
             value={get("company")}
             onChange={(e) => set("company", e.target.value)}
           />
+
+          {/* Said plainly, on the question where the button actually submits.
+              A photograph taken without telling anyone would be worse at the
+              job as well as wrong: a member of staff who knows the camera is
+              coming does not invent the enquiry in the first place. */}
+          {kiosk && last && (
+            <p className="tf-cam" role="note">
+              <span className="tf-cam-dot" aria-hidden />
+              {cam.state === "ready"
+                ? "A photo is taken when you press Submit, so we know who filled this in."
+                : cam.state === "denied"
+                ? "The camera is not available on this tablet, so no photo will be taken."
+                : "Getting the camera ready\u2026"}
+            </p>
+          )}
 
           {err && <p className="tf-err" role="alert">{err}</p>}
 
