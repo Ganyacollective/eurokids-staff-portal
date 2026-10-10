@@ -334,12 +334,87 @@ async function tabEnqCalls(){
         <td class="hint" style="white-space:nowrap">${dtLocal(c.started_at)}</td>
         <td><strong>${esc(c.caller || '')}</strong>${c.direction === 'outbound' ? ' <span class="chip c-mute">outbound</span>' : ''}</td>
         <td>${e ? `${esc(enqName(e))} ${statusChip(e.status)}` : '<span class="hint">unknown</span>'}</td>
-        <td class="hint">${esc(c.agent || '—')}</td><td class="hint">${c.duration_s ? Math.floor(c.duration_s / 60) + 'm ' + (c.duration_s % 60) + 's' : '—'}</td>
+        <td class="hint">${esc(c.agent || '—')}${c.provider === 'manual' ? ' <span class="chip c-mute">logged by hand</span>' : ''}</td><td class="hint">${c.duration_s ? Math.floor(c.duration_s / 60) + 'm ' + (c.duration_s % 60) + 's' : '—'}</td>
         <td><span class="chip ${c.status === 'missed' ? 'c-crit' : c.status === 'answered' ? 'c-good' : 'c-mute'}">${esc(c.status || '')}</span></td>
         <td>${c.recording_url ? `<a href="${esc(c.recording_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">▶︎ Play</a>` : '<span class="hint">—</span>'}</td></tr>`; }).join('')}
       </tbody></table></div></div>`
-    : `<div class="panel"><div class="empty"><div class="ic">📞</div><h3>No calls yet</h3><div>Point the IVR at the webhook shown in Setup and every call lands here, matched to the family.</div></div></div>`);
-  el('enq-logcall').onclick = () => openNewEnquiry({ source: 'Call' });
+    : `<div class="panel"><div class="empty"><div class="ic">📞</div><h3>No calls yet</h3><div>Point the IVR at the webhook shown in Setup and every call lands here on its own, matched to the family by number. Until then, <strong>Log a Call</strong> puts one here by hand and on the family’s card.</div></div></div>`);
+  el('enq-logcall').onclick = () => openLogCall();
+}
+
+/* ── logging a call by hand ────────────────────────────────────
+   This button used to open the new-enquiry sheet, which created or merged a
+   family and then stopped. No call row was ever written, so a call somebody
+   took and wrote down never appeared among the calls — this screen was the
+   IVR's alone. A call logged here goes where an IVR call goes: the call log,
+   and the family's own history. */
+function openLogCall(preset = {}){
+  openDrawer('Log a call', 'Who rang, what was said, and when to call them back.');
+  const row = (l, c, sub) => `<div class="row"><div class="l">${l}${sub ? `<span class="sub">${sub}</span>` : ''}</div><div class="v">${c}</div></div>`;
+  el('drawer-body').innerHTML = `
+    <div class="grp" style="margin-top:0"><h3>The call</h3><div class="box">
+      ${row('Mobile', `<input class="in" id="lc-phone" inputmode="numeric" placeholder="10-digit mobile" value="${esc(preset.phone || '')}">`, 'Type it first — if we know them, their name appears.')}
+      <div class="rowx" id="lc-known" style="padding-top:0"></div>
+      ${row('Direction', `<select class="in" id="lc-dir"><option value="inbound">They called us</option><option value="outbound">We called them</option></select>`)}
+      ${row('Outcome', `<select class="in" id="lc-status"><option value="answered">Answered</option><option value="missed">Missed</option><option value="voicemail">Voicemail</option></select>`)}
+      ${row('Minutes', `<input class="in" id="lc-min" type="number" min="0" max="600" step="1" placeholder="0" style="width:90px">`)}
+      ${row('When', `<input class="in" id="lc-at" type="datetime-local" value="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}">`)}
+    </div></div>
+    <div class="grp"><h3>What they said</h3><div class="box">
+      <div class="rowx"><textarea class="in" id="lc-note" rows="3" placeholder="Asked about timings and the day care fee…" style="width:100%"></textarea></div>
+      ${row('Call back on', `<input class="in" id="lc-follow" type="date">`)}
+    </div></div>
+    <div class="grp" id="lc-newgrp" style="display:none"><h3>We do not know this number</h3><div class="box">
+      ${row('Child', `<input class="in" id="lc-child" placeholder="child’s name">`)}
+      ${row('Parent', `<input class="in" id="lc-parent" placeholder="who rang">`)}
+      <div class="rowx hint">Saving will start an enquiry for them.</div>
+    </div></div>`;
+  el('drawer-foot').innerHTML = `<div id="lc-msg"></div><button class="btn line" id="lc-cancel">Cancel</button><button class="btn" id="lc-save">Log the call</button>`;
+  el('lc-cancel').onclick = closeDrawer;
+
+  let foundId = 0;
+  el('lc-phone').oninput = debounce(async () => {
+    const d = el('lc-phone').value.replace(/\D/g, '').slice(-10);
+    foundId = 0;
+    if (d.length < 10) { el('lc-known').innerHTML = ''; el('lc-newgrp').style.display = 'none'; return; }
+    const { data } = await getSb().schema('eurokids').from('v_enquiry')
+      .select('id,child_name,father_name,status').eq('phone_key', d).limit(1).maybeSingle();
+    if (data) {
+      foundId = data.id;
+      el('lc-known').innerHTML = `<span class="chip c-good">known</span> <strong>${esc(enqName(data))}</strong> — the call goes on their card.`;
+      el('lc-newgrp').style.display = 'none';
+    } else {
+      el('lc-known').innerHTML = '<span class="chip c-warn">new number</span> Nobody on record with this number.';
+      el('lc-newgrp').style.display = '';
+    }
+  }, 250);
+  // Opened from a family's card: run the lookup straight away so it says
+  // whose call this is, rather than waiting for a keystroke that never comes.
+  if (preset.phone) el('lc-phone').dispatchEvent(new Event('input'));
+  setTimeout(() => el('lc-phone').focus(), 250);
+
+  el('lc-save').onclick = async ev => {
+    const btn = ev.currentTarget;
+    const phone = el('lc-phone').value.trim();
+    if (phone.replace(/\D/g, '').length < 10) return el('lc-msg').innerHTML = '<div class="err">A 10-digit mobile number is needed.</div>';
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const at = el('lc-at').value;
+    const j = await enqApi('/api/enquiry/call', {
+      phone, direction: el('lc-dir').value, status: el('lc-status').value,
+      minutes: Number(el('lc-min').value) || 0,
+      at: at ? new Date(at).toISOString() : null,
+      note: el('lc-note').value, follow_up_on: el('lc-follow').value || null,
+      child_name: el('lc-child') ? el('lc-child').value : '',
+      caller_name: el('lc-parent') ? el('lc-parent').value : '',
+      // Only ever true when the drawer has actually told them it is a new
+      // number, so an outbound call to a typo cannot invent a family.
+      createIfUnknown: !foundId,
+    });
+    if (!j.ok) { btn.disabled = false; btn.textContent = 'Log the call'; return el('lc-msg').innerHTML = `<div class="err">${esc(j.error)}</div>`; }
+    enqRefresh();
+    _afterDrawerClose = () => renderApp();
+    openEnquiry(j.enquiry_id);
+  };
 }
 
 /* ── Setup ───────────────────────────────────────────────────── */
@@ -508,9 +583,35 @@ async function openEnquiry(id){
       </div><div class="foot">Taken at the reception tablet when the form was sent${
         e.intake_photo_at ? ' · ' + dtLocal(e.intake_photo_at) : ''}</div></div>` : ''}
 
-    <div class="hero ${e.status === 'won' ? 'paid' : e.status === 'lost' ? 'due' : ''}"><div class="k">${ENQ_STATUS[e.status]?.l || e.status}</div>
-      <div class="v" style="font-size:26px">${e.on_roster ? 'On the roll 🎉' : e.follow_up_on ? (e.follow_up_due ? 'Follow up today' : 'Follow up ' + longDate(e.follow_up_on)) : 'No follow-up set'}</div>
-      <div class="m">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div></div>
+    ${(() => {
+      // Where are they, how keen are they, what happens next — before any
+      // form row. The colour is the status, not decoration.
+      const keen = e.sentiment ?? 5;
+      const tone = e.status === 'won' ? 'won' : e.status === 'lost' ? 'lost'
+        : e.follow_up_due ? 'warm' : 'open';
+      const kcol = keen >= 7 ? 'var(--orange)' : keen >= 4 ? 'var(--accent)' : 'var(--label-3)';
+      const next = e.on_roster ? 'On the roll 🎉'
+        : e.visit_at && new Date(e.visit_at) > new Date() ? 'Visiting ' + dtLocal(e.visit_at)
+        : e.follow_up_on ? (e.follow_up_due ? 'Call them back today' : 'Call back ' + longDate(e.follow_up_on))
+        : 'No follow-up set';
+      return `<div class="ecard ${tone}">
+        <div class="ec-top">
+          <span class="chip ${ENQ_STATUS[e.status]?.c || 'c-mute'}">${ENQ_STATUS[e.status]?.l || esc(e.status)}</span>
+          ${(e.stages || []).slice(-1).map(s => `<span class="chip c-mute">${esc(s)}</span>`).join('')}
+          ${e.on_roster ? '<span class="chip c-good">on roll</span>' : ''}
+          ${e.has_intake_photo ? '<span class="chip c-mute">photo</span>' : ''}
+        </div>
+        <div class="ec-next ${e.follow_up_due && !e.on_roster ? 'due' : ''}">${esc(next)}</div>
+        <div class="ec-m">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
+        <div class="keen"><span class="ec-m">How keen</span>
+          <span class="bar" style="--k:${kcol}"><i style="width:${keen * 10}%"></i></span><b>${keen}/10</b></div>
+        <div class="qa">
+          ${phone ? `<a class="pri" href="tel:${esc(phone)}">Call ${esc(e.father_name || e.mother_name || '')}</a>` : ''}
+          ${phone ? `<a href="${waHref(phone, waText)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+          <button id="qa-logcall">Log a call</button>
+          <button id="qa-visit">Visited just now</button>
+        </div></div>`;
+    })()}
 
     <div class="grp"><h3>Where they are</h3><div class="box">
       ${row('Inquiry status', `<select class="in" id="en-status">${ENQ_STATUSES.map(([k, l]) => `<option value="${k}" ${e.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
@@ -554,6 +655,8 @@ async function openEnquiry(id){
   el('drawer-foot').innerHTML = `<div id="pf-msg"></div>
     <div class="more"><button class="btn line" id="en-actbtn">Actions…</button>
       <div class="menu up" id="en-menu">
+        <button data-a="log_call">Log a call with them…</button>
+        <div class="msep"></div>
         <button data-a="welcome_email">Send welcome email${e.welcome_email_sent_at ? '<span class="sub">again</span>' : ''}</button>
         <button data-a="welcome_wa">Send welcome WhatsApp</button>
         <div class="msep"></div>
@@ -653,12 +756,26 @@ async function openEnquiry(id){
   };
   el('en-save').onclick = async () => { if (await save()) { el('pf-msg').innerHTML = '<div class="ok">Saved.</div>'; _afterDrawerClose = () => renderApp(); setTimeout(() => openEnquiry(id), 400); } };
 
+  // The two commonest acts, lifted out of the Actions menu onto the card.
+  const qaLog = el('qa-logcall');
+  if (qaLog) qaLog.onclick = () => openLogCall({ phone: e.father_phone || e.mother_phone || '' });
+  const qaVisit = el('qa-visit');
+  if (qaVisit) qaVisit.onclick = () => {
+    if (!el('en-visited').value) el('en-visited').value = toInputDT(new Date().toISOString());
+    if (!stages().includes('1st Premise Visit')) el('en-stages').querySelector('[data-v="1st Premise Visit"]')?.classList.add('on');
+    el('en-save').click();
+  };
+
   const menu = el('en-menu');
   el('en-actbtn').onclick = ev => { ev.stopPropagation(); menu.classList.toggle('open'); };
   menu.onclick = ev => ev.stopPropagation();
   if (!window._enMenuBound) { window._enMenuBound = true; document.addEventListener('click', () => el('en-menu')?.classList.remove('open')); }
   menu.querySelectorAll('button[data-a]').forEach(b2 => b2.onclick = async () => {
     menu.classList.remove('open'); const a = b2.dataset.a;
+    // Their number is already known, so the sheet opens with it filled in and
+    // the card recognised — logging a call about somebody you have open
+    // should not mean typing their number back in.
+    if (a === 'log_call') openLogCall({ phone: e.father_phone || e.mother_phone || '' });
     if (a === 'welcome_email' || a === 'welcome_wa') {
       if (!(await save())) return;
       const j = await enqApi('/api/enquiry/capture', { action: 'welcome', id, kind: a === 'welcome_email' ? 'email' : 'whatsapp', text: waText });

@@ -447,6 +447,48 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 #eq-table tr.t-warn td:first-child{box-shadow:inset 3px 0 0 var(--orange), 1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--orange-wash),var(--orange-wash)),var(--bg-card)}
 #eq-table tr.t-good td:first-child{box-shadow:inset 3px 0 0 var(--green),  1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--green-wash),var(--green-wash)) ,var(--bg-card)}
 
+/* ══ the enquiry card ══
+   The sheet opened as six identical grey boxes, every row the same weight:
+   label on the left, control on the right, from "Inquiry status" down to
+   "Academic year". Nothing told you whether this family was hot or cold, due a
+   call today or last touched in March, without reading all of it.
+
+   So the top of the sheet stops being a form and becomes an answer to three
+   questions — where are they, how keen are they, what happens next — and the
+   colour comes from the status rather than being decoration. The form is still
+   underneath; it is just no longer the first thing. */
+.ecard{border-radius:var(--r-card);padding:14px 16px;margin-bottom:4px;
+  background:linear-gradient(var(--ec-wash,var(--fill)),var(--ec-wash,var(--fill))),var(--bg-card);
+  box-shadow:inset 4px 0 0 var(--ec,var(--label-3)), var(--shadow-card)}
+.ecard.won{--ec:var(--green);  --ec-wash:var(--green-wash)}
+.ecard.lost{--ec:var(--red);   --ec-wash:var(--red-wash)}
+.ecard.warm{--ec:var(--orange);--ec-wash:var(--orange-wash)}
+.ecard.open{--ec:var(--accent);--ec-wash:var(--accent-wash)}
+
+.ecard .ec-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ecard .ec-next{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:8px 0 2px}
+.ecard .ec-next.due{color:var(--red)}
+.ecard .ec-m{font-size:var(--fs-co);color:var(--label-2)}
+
+/* How keen, as something you can read at a glance instead of a number out of
+   ten. Cold is blue and warm is orange because a 3 and an 8 should not be the
+   same colour in the corner of your eye. */
+.keen{display:flex;align-items:center;gap:8px;margin-top:10px}
+.keen .bar{flex:1;max-width:160px;height:6px;border-radius:3px;background:var(--fill-2);overflow:hidden}
+.keen .bar i{display:block;height:100%;border-radius:3px;background:var(--k,var(--accent))}
+.keen b{font-size:var(--fs-sub);color:var(--label-2);font-weight:600}
+
+/* The things you actually do, as buttons rather than three levels inside an
+   "Actions…" menu. Ringing a parent is the commonest act in this screen and
+   it was the most buried. */
+.qa{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.qa a,.qa button{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-co);font-weight:600;
+  padding:7px 12px;border-radius:999px;border:0;cursor:pointer;text-decoration:none;
+  background:var(--bg-card);color:var(--label);box-shadow:0 0 0 1px rgba(0,0,0,.09)}
+.qa a:hover,.qa button:hover{background:#F5F5F7}
+.qa .pri{background:var(--accent);color:#fff;box-shadow:none}
+.qa .pri:hover{background:var(--accent-dk)}
+
 /* the sheet can take the whole screen when a record needs room */
 .drawer.wide{width:min(1100px,100vw)}
 .drawer.narrow{width:min(400px,100vw)}
