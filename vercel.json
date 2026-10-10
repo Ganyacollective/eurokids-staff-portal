@@ -21,5 +21,8 @@
       "path": "/api/cron/daycare",
       "schedule": "0 4 * * *"
     }
+  ],
+  "regions": [
+    "sin1"
   ]
 }

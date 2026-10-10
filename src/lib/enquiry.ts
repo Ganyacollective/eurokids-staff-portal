@@ -106,11 +106,14 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
   }
 
   const summary = `${EVENT_LABEL[input.source]}${created ? "" : " again"}${input.message ? ` — “${String(input.message).trim().slice(0, 160)}”` : ""}`;
-  await tbl.from("enquiry_event").insert({
+  // Both events in one insert. They used to be two awaited calls, which on a
+  // database a continent away is a round trip spent to save nothing.
+  const events: Record<string, unknown>[] = [{
     enquiry_id: row.id, at, kind: created ? "created" : EVENT_KIND[input.source], summary, actor,
     detail: { ...(input.detail || {}), source: input.source, message: clean(input.message, 2000) },
-  });
-  if (created) await tbl.from("enquiry_event").insert({ enquiry_id: row.id, at, kind: EVENT_KIND[input.source], summary: EVENT_LABEL[input.source], actor });
+  }];
+  if (created) events.push({ enquiry_id: row.id, at, kind: EVENT_KIND[input.source], summary: EVENT_LABEL[input.source], actor });
+  await tbl.from("enquiry_event").insert(events);
 
   // ── hello to the family ────────────────────────────────────────────────
   const welcome: { email?: string; whatsapp?: string } = {};

@@ -76,11 +76,15 @@ export async function POST(req: NextRequest) {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
-  if (await tooManyHits(admin, "public_enquiry", ip, 30)) {
+  const kiosk = !!KIOSK_KEY && b.kiosk_key === KIOSK_KEY;
+
+  // The reception desk is not rate limited. It holds a shared secret, it is
+  // our own device, and a busy morning can genuinely produce a dozen families
+  // from one address — but mostly this is two more round trips to a database
+  // in Singapore while somebody stands at the counter waiting.
+  if (!kiosk && await tooManyHits(admin, "public_enquiry", ip, 30)) {
     return NextResponse.json({ ok: false, error: "Too many requests. Please call us instead." }, { status: 429, headers: CORS });
   }
-
-  const kiosk = !!KIOSK_KEY && b.kiosk_key === KIOSK_KEY;
   const wanted = String(b.source || "") as Source;
   const source: Source = kiosk ? "Walk In"
     : (["Website", "Instagram", "Referral", "Just Dial", "Others"].includes(wanted) ? wanted : "Website");
