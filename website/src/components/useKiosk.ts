@@ -23,12 +23,14 @@ export function useKiosk() {
 // make up, and the school has had enquiries entered that no family ever made.
 // A photograph taken at the moment of submission settles that question.
 //
-// Two rules it is built around. It only ever runs on the tablet — the hook is
-// handed a key or it does nothing at all, so the public website cannot open a
-// stranger's camera. And the person is told: the form says a photo will be
-// taken, in plain words, before they press the button. A hidden camera would
-// also be worse at the actual job, because a member of staff who knows the
-// photo is coming does not invent the enquiry in the first place.
+// It only ever runs on the tablet: the hook is handed a key or it does
+// nothing at all, so the public website can never open a stranger's camera.
+//
+// A frame is kept warm rather than taken on demand. Drawing a canvas and
+// encoding a JPEG is only a few milliseconds, but on an older iPad those
+// milliseconds land on the Submit tap, which is the one moment the thing has
+// to feel instant. So the camera refreshes a frame every couple of seconds in
+// the background and Submit simply reads the latest one.
 export function useIntakeCamera(enabled: boolean) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -69,10 +71,26 @@ export function useIntakeCamera(enabled: boolean) {
     };
   }, [enabled]);
 
+  const frameRef = useRef<string | null>(null);
+
+  // Refresh the held frame while the family is filling the form in. Cheap,
+  // and off the critical path.
+  useEffect(() => {
+    if (!enabled || state !== "ready") return;
+    const tick = () => { const f = grab(); if (f) frameRef.current = f; };
+    tick();
+    const id = window.setInterval(tick, 2000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, state]);
+
+  // Whatever the camera last saw. Null if it never started.
+  const latest = () => frameRef.current;
+
   // One frame, as a data URL. 720 wide is plenty to recognise a face and
   // lands around 60 KB, which matters when it rides along inside the form's
   // own request.
-  const capture = async (): Promise<string | null> => {
+  const grab = (): string | null => {
     const v = videoRef.current;
     if (!v || !v.videoWidth) return null;
     try {
@@ -89,5 +107,5 @@ export function useIntakeCamera(enabled: boolean) {
     }
   };
 
-  return { state, capture };
+  return { state, latest };
 }

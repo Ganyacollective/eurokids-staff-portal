@@ -24,10 +24,22 @@ export const metadata: Metadata = {
     description: "Preschool and day care in Undri, Pune. Admissions open for 26-27.",
   },
   robots: { index: true, follow: true },
+  // Without a manifest and an apple-touch-icon, Safari's "Add to Home Screen"
+  // has nothing to add and does nothing at all when you tap it — which is
+  // exactly what was happening on the reception iPad.
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "EuroKids", statusBarStyle: "default" },
+  icons: {
+    icon: [
+      { url: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#FFFFFF",
+  themeColor: "#FCF8F6",
   width: "device-width",
   initialScale: 1,
   // Not locked: a parent who needs to zoom in to read the fee line should be

@@ -1,0 +1,16 @@
+{
+  "name": "EuroKids JMD Enclave",
+  "short_name": "EuroKids",
+  "description": "Enquiry desk and website for EuroKids JMD Enclave, Undri.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FCF8F6",
+  "theme_color": "#FF2217",
+  "icons": [
+    { "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

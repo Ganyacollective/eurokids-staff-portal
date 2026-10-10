@@ -9,7 +9,7 @@
 // They had: the worker was on v68 while this list still pre-cached the v=42
 // stylesheet and script, which no page has asked for since. Every install
 // fetched two dead files and the stamp meant nothing here.
-const V = 70;
+const V = 71;
 const VERSION = `ek-v${V}`;
 const SHELL = [
   '/', '/hub.html', '/staff', '/portal.html', '/teacher', '/teacher.html',

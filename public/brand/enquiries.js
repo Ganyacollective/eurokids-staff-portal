@@ -395,6 +395,12 @@ async function openEnquiry(id){
   const multi = (i, chosen, opts) => `<div class="chips" id="${i}">${opts.map(o => `<span class="chip ${(chosen || []).includes(o) ? 'on' : ''}" data-v="${esc(o)}">${esc(o)}</span>`).join('')}</div>`;
 
   body.innerHTML = `
+    ${e.has_intake_photo ? `<div class="grp"><div class="box" style="padding:0;overflow:hidden">
+      <img id="en-photo" alt="Taken at the desk when this form was submitted"
+           style="width:100%;display:block;background:var(--fill);aspect-ratio:16/10;object-fit:cover">
+      </div><div class="foot">Taken at the reception tablet when the form was sent${
+        e.intake_photo_at ? ' · ' + dtLocal(e.intake_photo_at) : ''}</div></div>` : ''}
+
     <div class="hero ${e.status === 'won' ? 'paid' : e.status === 'lost' ? 'due' : ''}"><div class="k">${ENQ_STATUS[e.status]?.l || e.status}</div>
       <div class="v" style="font-size:26px">${e.on_roster ? 'On the roll 🎉' : e.follow_up_on ? (e.follow_up_due ? 'Follow up today' : 'Follow up ' + longDate(e.follow_up_on)) : 'No follow-up set'}</div>
       <div class="m">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div></div>
@@ -454,6 +460,30 @@ async function openEnquiry(id){
   const segOne = i => { const box = el(i); box.querySelectorAll('button').forEach(b2 => b2.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b2.classList.add('on'); }); return () => box.querySelector('.on')?.dataset.v ?? null; };
   const segMany = i => { const box = el(i); box.querySelectorAll('.chip').forEach(c => c.onclick = () => c.classList.toggle('on')); return () => [...box.querySelectorAll('.chip.on')].map(c => c.dataset.v); };
   const sex = segOne('en-sex'), progs = segMany('en-progs'), sources = segMany('en-sources'), stages = segMany('en-stages');
+  // The photo is behind a route that checks permission and streams the file,
+  // because the bucket it lives in has no read policy at all. So it cannot be
+  // an <img src> to storage; it is fetched with the session token and handed
+  // to the tag as a blob.
+  if (e.has_intake_photo) {
+    (async () => {
+      try {
+        const { data: { session: s } } = await getSb().auth.getSession();
+        const r = await fetch(`/api/enquiry/photo?id=${id}`, {
+          headers: { Authorization: `Bearer ${s.access_token}` },
+        });
+        if (!r.ok) throw new Error(String(r.status));
+        const img = el('en-photo');
+        if (!img) return;                       // the drawer was closed meanwhile
+        img.src = URL.createObjectURL(await r.blob());
+        img.onload = () => URL.revokeObjectURL(img.src);
+      } catch {
+        const img = el('en-photo');
+        if (img) img.replaceWith(Object.assign(document.createElement('div'), {
+          className: 'rowx hint', textContent: 'The photo could not be loaded.' }));
+      }
+    })();
+  }
+
   el('en-sent').oninput = () => { el('en-sentn').textContent = el('en-sent').value; };
   el('en-callst').onchange = () => { if (el('en-callst').value && !el('en-calldate').value) el('en-calldate').value = new Date().toISOString().slice(0, 10); };
   const ta = el('en-note'); ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };

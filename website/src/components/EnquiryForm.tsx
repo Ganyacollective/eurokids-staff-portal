@@ -145,9 +145,9 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
       ? `${get("dob_y")}-${String(get("dob_m")).padStart(2, "0")}-${String(get("dob_d")).padStart(2, "0")}`
       : "";
     const withCode = (cc: string, n: string) => (n.trim() ? `${cc} ${n.trim()}` : "");
-    // Taken at the moment of submitting, not earlier, so the photograph is of
-    // whoever actually pressed the button.
-    const photo = kiosk ? await cam.capture() : null;
+    // Already in hand: the camera keeps a recent frame warm, so Submit does
+    // not stop to draw a canvas and encode a JPEG while somebody waits.
+    const photo = kiosk ? cam.latest() : null;
     try {
       const r = await fetch(API, {
         method: "POST",
@@ -350,21 +350,6 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
             value={get("company")}
             onChange={(e) => set("company", e.target.value)}
           />
-
-          {/* Said plainly, on the question where the button actually submits.
-              A photograph taken without telling anyone would be worse at the
-              job as well as wrong: a member of staff who knows the camera is
-              coming does not invent the enquiry in the first place. */}
-          {kiosk && last && (
-            <p className="tf-cam" role="note">
-              <span className="tf-cam-dot" aria-hidden />
-              {cam.state === "ready"
-                ? "A photo is taken when you press Submit, so we know who filled this in."
-                : cam.state === "denied"
-                ? "The camera is not available on this tablet, so no photo will be taken."
-                : "Getting the camera ready\u2026"}
-            </p>
-          )}
 
           {err && <p className="tf-err" role="alert">{err}</p>}
 

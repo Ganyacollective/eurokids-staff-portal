@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { captureEnquiry, phoneKey, isEmail, tooManyHits, type Source } from "@/lib/enquiry";
+import { captureEnquiry, phoneKey, isEmail, tooManyHits, notifySchool, type Source } from "@/lib/enquiry";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -88,24 +88,40 @@ export async function POST(req: NextRequest) {
   const str = (v: string | string[] | undefined) => (Array.isArray(v) ? v.join(", ") : v) || null;
 
   try {
+    // Only the database write is awaited. The welcome email, the WhatsApp,
+    // the note to the office and the photograph used to happen before this
+    // route replied, which is why Submit sat there for several seconds with a
+    // family watching it — an SMTP handshake and two HTTP calls, none of
+    // which the person pressing the button has any reason to wait for.
     const r = await captureEnquiry(admin, {
       source, actor: kiosk ? "reception tablet" : "website",
       child_name: str(b.child_name), dob: str(b.dob), sex: b.sex === "Boy" || b.sex === "Girl" ? b.sex : null, programs,
       father_name: parent, father_phone: phone, father_email: str(b.email),
       mother_name: str(b.mother_name), mother_phone: str(b.mother_phone), mother_email: str(b.mother_email), address: str(b.address),
-      message: str(b.message), sendWelcome: true, notifySchool: true,
+      message: str(b.message), sendWelcome: false, notifySchool: false,
       detail: { page: str(b.page) || req.headers.get("referer") || null, ua: req.headers.get("user-agent")?.slice(0, 160) || null, ip },
     });
-    // The reception tablet photographs whoever pressed Submit, because
-    // otherwise there is no way to tell a family who walked in from a member
-    // of staff filling the form to make the day's numbers look better.
-    //
-    // Only from the tablet. A photo arriving without the kiosk key is thrown
-    // away without comment: the public website must never be able to
-    // photograph a stranger at home, whatever it claims to be.
-    if (kiosk && typeof b.photo === "string" && b.photo.startsWith("data:image/")) {
-      await storeIntakePhoto(admin, r.enquiry.id, b.photo);
-    }
+
+    // Everything else runs after the reply has gone. after() keeps the
+    // function alive to finish it, so this is deferred rather than abandoned.
+    after(async () => {
+      const row = r.enquiry;
+      try {
+        if (kiosk && typeof b.photo === "string" && b.photo.startsWith("data:image/")) {
+          await storeIntakePhoto(admin, row.id, b.photo);
+        }
+        // No welcome email to the family. They are standing at the desk, or
+        // they have just filled a form online and will be rung; an automatic
+        // "welcome" on top of that is noise, and it was the slowest thing
+        // here. Only the office is told, so somebody picks the enquiry up.
+        await notifySchool(row, source, r.created);
+      } catch (e) {
+        await admin.schema("eurokids").from("enquiry_event").insert({
+          enquiry_id: row.id, kind: "note", actor: "system",
+          summary: `Saved, but the follow-up afterwards failed: ${(e as Error).message}`,
+        }).then(() => {}, () => {});
+      }
+    });
     return NextResponse.json({ ok: true, existing: !r.created, welcome: r.welcome }, { headers: CORS });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500, headers: CORS });
