@@ -59,7 +59,7 @@ const QUESTIONS: Q[] = [
   { key: "mother_name",  label: "Mother's name", hint: "Optional.", kind: "text" },
   { key: "mother_phone", label: "Mother's mobile number", hint: "Optional.", kind: "phone" },
   { key: "mother_email", label: "Mother's email", hint: "Optional.", kind: "email" },
-  { key: "address",      label: "Where do you live?", hint: "Just the area and society is enough — it tells us how far you would be travelling.", kind: "address", required: true },
+  { key: "address",      label: "Where do you live?", kind: "address", required: true },
 ];
 
 type Answers = Record<string, string | string[]>;

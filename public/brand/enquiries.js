@@ -920,3 +920,228 @@ function openNewEnquiry(preset = {}){
     enqRefresh(); _afterDrawerClose = () => renderApp(); openEnquiry(j.id);
   };
 }
+
+/* ══ the website ══════════════════════════════════════════════
+   The cards on the front of eurokidsjmdenclave.org, editable by a person
+   rather than by me running SQL. Fourteen cards exist, all published, all
+   still showing the placeholder artwork I generated — this is the screen that
+   lets the real Canva exports replace them.
+
+   Files do not travel through our own API. A serverless function takes a few
+   megabytes and a video of the annual function is two hundred, so the browser
+   asks for a signed URL and puts the file straight into the bucket. */
+
+let _site = { cards: [], media: [], settings: [], base: '', site: '' };
+
+async function tabWebsite(){
+  const b = el('body');
+  b.innerHTML = head('Website', 'The cards on the front of the public site.') + '<div class="loading">Loading…</div>';
+  const j = await enqApi('/api/site');
+  if (!j.ok) return b.innerHTML = head('Website', '') + fail(j.error);
+  _site = j;
+  paintWebsite();
+}
+
+function paintWebsite(){
+  const b = el('body');
+  const { cards, media, base, site } = _site;
+  const speed = (_site.settings.find(s => s.key === 'marquee_seconds') || {}).value || '55';
+  const mediaOf = id => media.filter(m => m.card_id === id);
+  const placeholder = c => c.artwork_path && /placeholder/i.test(c.artwork_path);
+
+  const needArt = cards.filter(c => !c.artwork_path).length;
+  const needVid = cards.filter(c => !c.video_path && !c.video_url).length;
+
+  b.innerHTML = head('Website', `${cards.length} cards · ${cards.filter(c => c.published).length} live`,
+      `<a class="btn line" href="${esc(site)}" target="_blank" rel="noopener">Open the site</a><button class="btn" id="sw-new">New card…</button>`)
+    + `<div class="grp" style="margin-top:0"><div class="box">
+        <div class="row"><div class="l">How fast the cards travel<span class="sub">Seconds for the row to move its own length. Bigger is slower — 90 drifts, 40 is brisk.</span></div>
+          <div class="v" style="gap:10px"><input type="range" id="sw-speed" min="20" max="120" step="5" value="${esc(speed)}" style="max-width:200px"><b class="heatn" id="sw-speedn">${esc(speed)}s</b></div></div>
+      </div><div class="foot" id="sw-speedmsg">${needVid ? `${needVid} of ${cards.length} cards have no video yet — their WATCH NOW opens a page with only photos.` : 'Every card has a video.'}</div></div>`
+    + (needVid === cards.length || cards.some(placeholder) ? `<div class="grp"><div class="box"><div class="rowx">
+        <div class="foot warn" style="margin:0">The artwork on these cards is still the placeholder I generated, not your Canva designs. Open a card and drop the real export in.</div>
+      </div></div></div>` : '')
+    + `<div class="grp"><h3>Cards</h3><div class="box" id="sw-list">
+        ${cards.map((c, i) => {
+          const m = mediaOf(c.id);
+          return `<div class="row" data-id="${c.id}">
+            <div class="l" style="display:flex;gap:12px;align-items:center;min-width:0">
+              ${c.artwork_path
+                ? `<img src="${esc(base + c.artwork_path)}" alt="" style="width:46px;height:60px;object-fit:cover;border-radius:6px;background:var(--fill);flex:none">`
+                : `<div style="width:46px;height:60px;border-radius:6px;background:var(--fill);flex:none"></div>`}
+              <div style="min-width:0">
+                <div style="font-weight:600">${esc(c.title)}</div>
+                <span class="sub">/c/${esc(c.slug)} · ${m.length} photo${m.length === 1 ? '' : 's'}
+                  ${c.video_url ? '· video link' : c.video_path ? '· video file' : '· no video'}</span>
+              </div>
+            </div>
+            <div class="v" style="gap:6px">
+              <span class="chip ${c.published ? 'c-good' : 'c-mute'}">${c.published ? 'live' : 'hidden'}</span>
+              <button class="btn line sm sw-up"   data-i="${i}" ${i === 0 ? 'disabled' : ''} title="Move earlier">↑</button>
+              <button class="btn line sm sw-down" data-i="${i}" ${i === cards.length - 1 ? 'disabled' : ''} title="Move later">↓</button>
+              <button class="btn line sm sw-edit" data-id="${c.id}">Edit</button>
+            </div></div>`;
+        }).join('') || '<div class="rowx hint">No cards yet.</div>'}
+      </div><div class="foot">The order here is the order they travel in. ${needArt ? `${needArt} card${needArt === 1 ? ' has' : 's have'} no artwork at all.` : ''}</div></div>`;
+
+  el('sw-new').onclick = () => openCard(null);
+  b.querySelectorAll('.sw-edit').forEach(x => x.onclick = () => openCard(Number(x.dataset.id)));
+  b.querySelectorAll('.sw-up').forEach(x => x.onclick = () => moveCard(Number(x.dataset.i), -1));
+  b.querySelectorAll('.sw-down').forEach(x => x.onclick = () => moveCard(Number(x.dataset.i), 1));
+
+  const sp = el('sw-speed');
+  sp.oninput = () => { el('sw-speedn').textContent = sp.value + 's'; };
+  sp.onchange = async () => {
+    const r = await enqApi('/api/site', { action: 'set_setting', key: 'marquee_seconds', value: sp.value });
+    el('sw-speedmsg').textContent = r.ok
+      ? `Saved. The site picks this up on its next load.`
+      : r.error;
+  };
+}
+
+async function moveCard(i, by){
+  const ids = _site.cards.map(c => c.id);
+  const j = i + by;
+  if (j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  const r = await enqApi('/api/site', { action: 'reorder', ids });
+  if (!r.ok) return alert(r.error);
+  tabWebsite();
+}
+
+/* Uploading. The route issues a signed URL and the file goes straight to
+   storage — our own API never carries the bytes. */
+async function siteUpload(file, kind, slug, onProgress){
+  const j = await enqApi('/api/site', { action: 'upload_url', kind, slug, content_type: file.type });
+  if (!j.ok) throw new Error(j.error);
+  onProgress && onProgress('Uploading…');
+  const { error } = await getSb().storage.from(j.bucket).uploadToSignedUrl(j.path, j.token, file);
+  if (error) throw new Error(error.message);
+  return j.path;
+}
+
+function openCard(id){
+  const c = id ? _site.cards.find(x => x.id === id) : null;
+  const m = id ? _site.media.filter(x => x.card_id === id) : [];
+  const base = _site.base;
+  openDrawer(c ? c.title : 'New card', c ? `/c/${c.slug}` : 'It stays hidden until you publish it.');
+  const row = (l, ctl, sub) => `<div class="row"><div class="l">${l}${sub ? `<span class="sub">${sub}</span>` : ''}</div><div class="v">${ctl}</div></div>`;
+
+  el('drawer-body').innerHTML = `
+    <div class="grp" style="margin-top:0"><h3>The card</h3><div class="box">
+      ${row('Title', `<input class="in wide" id="sc-title" value="${esc(c?.title || '')}" placeholder="Sports Day">`)}
+      ${row('Address', `<input class="in wide" id="sc-slug" value="${esc(c?.slug || '')}" placeholder="sports-day">`, 'The bit after /c/ in the link. Leave blank and it follows the title.')}
+      ${row('Blurb', `<input class="in wide" id="sc-blurb" value="${esc(c?.blurb || '')}" placeholder="One line under the title">`)}
+      ${row('Live on the site', `<input type="checkbox" class="sw" id="sc-pub" ${c?.published ? 'checked' : ''}>`, 'Unticked, nobody can reach it even with the link.')}
+    </div></div>
+
+    <div class="grp"><h3>The face of the card</h3><div class="box">
+      <div class="rowx" id="sc-artbox">
+        ${c?.artwork_path
+          ? `<img id="sc-artimg" src="${esc(base + c.artwork_path)}" alt="" style="width:160px;border-radius:10px;display:block;background:var(--fill)">`
+          : '<div class="hint">Nothing yet.</div>'}
+      </div>
+      ${row('Replace it', `<input type="file" id="sc-art" accept="image/*">`, 'The Canva export. JPG, PNG or WebP.')}
+      <div class="rowx" id="sc-artmsg" style="padding-top:0"></div>
+    </div></div>
+
+    <div class="grp"><h3>The video behind WATCH NOW</h3><div class="box">
+      ${row('YouTube or Instagram link', `<input class="in wide" id="sc-vurl" value="${esc(c?.video_url || '')}" placeholder="https://youtu.be/…">`, 'Easiest, and the page stays light.')}
+      ${row('…or upload a file', `<input type="file" id="sc-vfile" accept="video/mp4,video/webm,video/quicktime">`, c?.video_path ? 'A file is already uploaded. Choosing another replaces it.' : 'mp4, webm or mov, up to 200 MB.')}
+      <div class="rowx" id="sc-vmsg" style="padding-top:0">${c?.video_path ? `<span class="chip c-good">file uploaded</span> <button class="lnk" id="sc-vclear">Remove it</button>` : ''}</div>
+    </div><div class="foot">A link wins if both are set.</div></div>
+
+    ${id ? `<div class="grp"><h3>Photos on the card’s page</h3><div class="box">
+      <div class="rowx" id="sc-gal" style="display:flex;flex-wrap:wrap;gap:8px">
+        ${m.map(x => `<div style="position:relative">
+          ${x.kind === 'video'
+            ? `<video src="${esc(base + x.path)}" style="width:92px;height:92px;object-fit:cover;border-radius:8px;background:#000"></video>`
+            : `<img src="${esc(base + x.path)}" alt="" style="width:92px;height:92px;object-fit:cover;border-radius:8px;background:var(--fill)">`}
+          <button class="btn line sm sc-delm" data-id="${x.id}" title="Remove"
+            style="position:absolute;top:-6px;right:-6px;padding:1px 6px;line-height:1.4">×</button>
+        </div>`).join('') || '<div class="hint">No photos yet.</div>'}
+      </div>
+      ${row('Add photos', `<input type="file" id="sc-gadd" accept="image/*" multiple>`, 'Choose several at once.')}
+      <div class="rowx" id="sc-gmsg" style="padding-top:0"></div>
+    </div></div>` : '<div class="grp"><div class="box"><div class="rowx hint">Save the card first, then you can add photos to its page.</div></div></div>'}`;
+
+  el('drawer-foot').innerHTML = `<div id="sc-msg"></div>
+    ${id ? '<button class="btn line" id="sc-del" style="color:var(--red)">Delete</button>' : ''}
+    <button class="btn line" id="sc-cancel">Cancel</button><button class="btn" id="sc-save">Save</button>`;
+  el('sc-cancel').onclick = closeDrawer;
+
+  // Files are uploaded the moment they are chosen, so Save is only ever about
+  // the words — and a half-finished upload cannot be saved by accident.
+  let artPath = c?.artwork_path ?? undefined;
+  let vidPath = c?.video_path ?? undefined;
+  const slugNow = () => (el('sc-slug').value || el('sc-title').value || 'card');
+
+  el('sc-art').onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const msg = el('sc-artmsg'); msg.innerHTML = '<span class="hint">Uploading…</span>';
+    try {
+      artPath = await siteUpload(f, 'artwork', slugNow(), s => msg.innerHTML = `<span class="hint">${s}</span>`);
+      el('sc-artbox').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" style="width:160px;border-radius:10px;display:block">`;
+      msg.innerHTML = '<span class="chip c-good">uploaded</span> Press Save to use it.';
+    } catch (e) { msg.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  };
+
+  el('sc-vfile').onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    const msg = el('sc-vmsg'); msg.innerHTML = '<span class="hint">Uploading — a large video takes a while…</span>';
+    try {
+      vidPath = await siteUpload(f, 'video', slugNow());
+      msg.innerHTML = '<span class="chip c-good">uploaded</span> Press Save to use it.';
+    } catch (e) { msg.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  };
+  const vclear = el('sc-vclear');
+  if (vclear) vclear.onclick = () => { vidPath = null; el('sc-vmsg').innerHTML = '<span class="hint">Will be removed when you save.</span>'; };
+
+  const gadd = el('sc-gadd');
+  if (gadd) gadd.onchange = async ev => {
+    const files = [...ev.target.files]; if (!files.length) return;
+    const msg = el('sc-gmsg');
+    for (let i = 0; i < files.length; i++) {
+      msg.innerHTML = `<span class="hint">Uploading ${i + 1} of ${files.length}…</span>`;
+      try {
+        const kind = files[i].type.startsWith('video') ? 'video' : 'gallery';
+        const path = await siteUpload(files[i], kind, slugNow());
+        const r = await enqApi('/api/site', { action: 'add_media', card_id: id, path, kind: kind === 'video' ? 'video' : 'image' });
+        if (!r.ok) throw new Error(r.error);
+      } catch (e) { msg.innerHTML = `<span class="err">${esc(e.message)}</span>`; return; }
+    }
+    msg.innerHTML = '<span class="chip c-good">added</span>';
+    const j = await enqApi('/api/site'); if (j.ok) { _site = j; openCard(id); }
+  };
+
+  el('drawer-body').querySelectorAll('.sc-delm').forEach(x => x.onclick = async () => {
+    if (!confirm('Remove this photo from the page? The file is deleted too.')) return;
+    const r = await enqApi('/api/site', { action: 'delete_media', id: Number(x.dataset.id) });
+    if (!r.ok) return alert(r.error);
+    const j = await enqApi('/api/site'); if (j.ok) { _site = j; openCard(id); }
+  });
+
+  const del = el('sc-del');
+  if (del) del.onclick = async () => {
+    if (!confirm(`Delete “${c.title}”?\n\nThe card, its photos and its video are all removed, and the page at /c/${c.slug} stops existing. This cannot be undone.`)) return;
+    const r = await enqApi('/api/site', { action: 'delete_card', id });
+    if (!r.ok) return alert(r.error);
+    closeDrawer(true); tabWebsite();
+  };
+
+  el('sc-save').onclick = async ev => {
+    const btn = ev.currentTarget;
+    if (!el('sc-title').value.trim()) return el('sc-msg').innerHTML = '<div class="err">A card needs a title.</div>';
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const r = await enqApi('/api/site', {
+      action: 'save_card', id,
+      title: el('sc-title').value, slug: el('sc-slug').value, blurb: el('sc-blurb').value,
+      published: el('sc-pub').checked, video_url: el('sc-vurl').value,
+      sort: c?.sort ?? (_site.cards.length + 1),
+      ...(artPath !== undefined ? { artwork_path: artPath } : {}),
+      ...(vidPath !== undefined ? { video_path: vidPath } : {}),
+    });
+    if (!r.ok) { btn.disabled = false; btn.textContent = 'Save'; return el('sc-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`; }
+    closeDrawer(true); tabWebsite();
+  };
+}
