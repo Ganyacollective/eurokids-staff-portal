@@ -13,8 +13,8 @@
 <link rel="icon" href="/favicon.png" type="image/png">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=78">
-<link rel="prefetch" href="/brand/enquiries.js?v=78" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=79">
+<link rel="prefetch" href="/brand/enquiries.js?v=79" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -140,6 +140,7 @@ const TABS = {
   enq_today:  { app: 'enquiries', label: 'Today',       icon: 'sun',    sect: 'Enquiries', need: () => has('admission') || has('finance') },
   enq_list:   { app: 'enquiries', label: 'Enquiries',   icon: 'inbox',  sect: 'Enquiries', need: () => has('admission') || has('finance') },
   enq_calls:  { app: 'enquiries', label: 'Calls',       icon: 'phone',  sect: 'Enquiries', need: () => has('admission') || has('finance') },
+  enq_reports:{ app: 'enquiries', label: 'Reports',     icon: 'list',   sect: 'Enquiries', need: () => has('admission') || has('finance') },
   enq_setup:  { app: 'enquiries', label: 'Setup',       icon: 'gear',   sect: 'Setup',     need: () => isOwner() || has('finance') },
   // The public website. Admin only: a wrong card here is visible to every
   // parent who looks, which is a different kind of mistake from a wrong row.
@@ -187,7 +188,7 @@ const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reimbursements
 const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters',
   billing: 'Day care billing', reimb: 'Reimbursements' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
-const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls'], letters: ['letters'],
+const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls', 'enq_reports'], letters: ['letters'],
   billing: ['bill_home', 'bill_customers', 'bill_recurring'], reimb: ['rb_home', 'rb_customers', 'rb_recurring'] };
 const tabsFor = a => Object.keys(TABS).filter(t => (TABS[t].app || 'admissions') === (a || 'admissions') && TABS[t].need());
 
@@ -589,7 +590,7 @@ function renderApp(){
      assets: tabAssets, supplies: tabSupplies,
      rb_home: tabReimbursements, rb_customers: tabCustomers, rb_recurring: tabRecurring,
      bill_home: tabDaycareBilling, bill_customers: tabCustomers, bill_recurring: tabRecurring,
-     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_setup: tabEnqSetup, website: tabWebsite }[tab] || tabOverview)();
+     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_reports: tabEnqReports, enq_setup: tabEnqSetup, website: tabWebsite }[tab] || tabOverview)();
 }
 
 /* ── Forms for signature ──────────────────────────────────────────────────
@@ -6028,7 +6029,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=78"></script>
+<script src="/brand/enquiries.js?v=79"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

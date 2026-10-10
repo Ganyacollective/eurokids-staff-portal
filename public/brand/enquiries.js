@@ -1145,3 +1145,73 @@ function openCard(id){
     closeDrawer(true); tabWebsite();
   };
 }
+
+/* ══ reports ══════════════════════════════════════════════════
+   Only the enquiry half, on purpose.
+
+   The fee tables hold 418 instalments and paid_on is set on none of them,
+   because parents pay through EPMS and nothing is written back. Drawn from
+   that, the hub would report about ₹1.24 crore overdue out of ₹1.28 crore —
+   wrong by roughly a crore. A wrong figure on a page that looks official is
+   worse than a blank space, so the space is here and labelled. */
+
+async function tabEnqReports(){
+  const b = el('body');
+  b.innerHTML = head('Reports', 'What the enquiry book can honestly say.') + '<div class="loading">Counting…</div>';
+  const j = await enqApi('/api/reports/enquiries');
+  if (!j.ok) return b.innerHTML = head('Reports', '') + fail(j.error);
+
+  const pc = (n, of_) => of_ ? Math.round(100 * n / of_) + '%' : '—';
+  const bar = (n, max) => `<span style="display:inline-block;height:6px;border-radius:3px;background:var(--accent);width:${max ? Math.max(2, Math.round(60 * n / max)) : 0}px;vertical-align:middle"></span>`;
+  const maxMonth = Math.max(1, ...j.months.map(r => r.enquiries));
+  const maxSrc = Math.max(1, ...j.sources.map(r => r.enquiries));
+
+  b.innerHTML = head('Reports', `${j.total} enquiries on record`)
+    + `<div class="stats">
+        <div class="stat"><div class="k">Enquiries</div><div class="v">${j.total}</div><div class="m">all time</div></div>
+        <div class="stat"><div class="k">Visited the school</div><div class="v">${j.visited}</div><div class="m">${pc(j.visited, j.total)} of them</div></div>
+        <div class="stat"><div class="k">Still open</div><div class="v">${j.open}</div><div class="m">in progress or form taken</div></div>
+        <div class="stat ${j.median_days_to_first_note == null ? '' : j.median_days_to_first_note <= 1 ? 'good' : j.median_days_to_first_note <= 3 ? '' : 'warn'}">
+          <div class="k">First spoken to</div><div class="v">${j.median_days_to_first_note == null ? '—' : j.median_days_to_first_note + 'd'}</div>
+          <div class="m">median, after they enquired</div></div>
+      </div>`
+
+    + ((j.caveats.never_won || j.caveats.never_lost) ? `<div class="grp"><div class="box"><div class="rowx">
+        <div class="foot warn" style="margin:0"><strong>Conversion cannot be measured.</strong>
+        ${j.caveats.never_won ? 'Not one enquiry has ever been marked <em>won</em>' : ''}${j.caveats.never_won && j.caveats.never_lost ? ' and none marked <em>lost</em>' : ''}, yet there are children on the roll who started as enquiries here. Until somebody closes an enquiry when a family joins or walks away, these columns stay empty and nobody can say which source is worth the money.</div>
+      </div></div></div>` : '')
+
+    + `<div class="grp"><h3>Month by month</h3><div class="panel"><div class="tw"><table>
+        <thead><tr><th>Month</th><th>Enquiries</th><th>Visited</th><th>Visit rate</th><th>Form taken</th><th>Won</th><th>Lost</th><th>Still open</th><th>Avg keenness</th></tr></thead>
+        <tbody>${j.months.map(r => `<tr>
+          <td class="font-medium">${esc(r.month)}</td>
+          <td>${bar(r.enquiries, maxMonth)} <b style="margin-left:6px">${r.enquiries}</b></td>
+          <td>${r.visited}</td><td class="hint">${pc(r.visited, r.enquiries)}</td>
+          <td>${r.form_taken || '—'}</td><td>${r.won || '—'}</td><td>${r.lost || '—'}</td><td>${r.open || '—'}</td>
+          <td class="hint">${r.keen ?? '—'}</td></tr>`).join('')}</tbody></table></div></div></div>`
+
+    + `<div class="grp"><h3>Where they come from</h3><div class="panel"><div class="tw"><table>
+        <thead><tr><th>Source</th><th>Enquiries</th><th>Visited</th><th>Visit rate</th><th>Won</th><th>Avg keenness</th></tr></thead>
+        <tbody>${j.sources.map(r => `<tr>
+          <td class="font-medium">${esc(r.source)}</td>
+          <td>${bar(r.enquiries, maxSrc)} <b style="margin-left:6px">${r.enquiries}</b></td>
+          <td>${r.visited}</td><td class="hint">${pc(r.visited, r.enquiries)}</td>
+          <td>${r.won || '—'}</td><td class="hint">${r.keen ?? '—'}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="foot">A family who rang and then walked in counts under both, so these add up to more than ${j.total}.</div></div>`
+
+    + `<div class="grp"><h3>What they ask for</h3><div class="box">
+        ${j.programmes.map(p => `<div class="row"><div class="l">${esc(p.programme)}</div><div class="v"><b>${p.enquiries}</b></div></div>`).join('')}
+      </div></div>`
+
+    + `<div class="grp"><h3>Who is doing the work</h3><div class="panel"><div class="tw"><table>
+        <thead><tr><th>Who</th><th>Notes written</th><th>Families touched</th><th>Calls logged</th><th>First</th><th>Last</th></tr></thead>
+        <tbody>${j.staff.map(r => `<tr>
+          <td class="font-medium">${esc(r.who)}</td><td><b>${r.notes}</b></td><td>${r.enquiries}</td>
+          <td>${r.calls || '—'}</td><td class="hint">${esc(r.first)}</td><td class="hint">${esc(r.last)}</td></tr>`).join('')
+          || '<tr><td colspan="6" class="hint">Nobody has written a note yet.</td></tr>'}</tbody></table></div></div>
+      <div class="foot">Counted from notes and calls, which are the things people actually record. Conversions per person are not here because no enquiry is ever marked won.${j.untouched ? ` <strong>${j.untouched}</strong> enquir${j.untouched === 1 ? 'y has' : 'ies have'} no note from anyone.` : ''}</div></div>`
+
+    + `<div class="grp"><h3>Fee collection</h3><div class="box"><div class="rowx">
+        <div class="foot warn" style="margin:0">${esc(j.caveats.money)}</div>
+      </div></div><div class="foot">This section fills itself in once EPMS payments are written back.</div></div>`;
+}
