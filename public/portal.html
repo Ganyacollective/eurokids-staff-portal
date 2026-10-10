@@ -941,7 +941,7 @@ const LATE_GRACE_MIN = 10, HALF_LWP_THRESHOLD = 90, STRIKE_TO_HALF_DAY = 3, SAT_
 // quietly re-run at startup from the raw punches it already holds — no
 // re-upload, nobody having to know a "Re-run" button exists. Bump this whenever
 // the rules change.
-const ENGINE_VERSION = 5;   // v5: an optional holiday only counts for somebody who took it
+const ENGINE_VERSION = 6;   // v6: staying away on an optional holiday is taking it, capped at five
 
 function reconcile(rawRows, month){
   const holByDate = new Map(); state.holidays.forEach(h => holByDate.set(h.date, h));
@@ -949,34 +949,34 @@ function reconcile(rawRows, month){
   // Does this holiday give THIS person the day off?
   //
   // Mandatory: the centre is shut, so yes unless she is one of the few who
-  // works through it. Optional: the centre is OPEN, so only if she declared
-  // she was taking it. An optional holiday nobody declared is an ordinary
-  // working day — which is the whole point of the word optional, and was not
-  // what this engine did: it handed all eleven to everybody, every year.
+  // works through it.
+  //
+  // Optional: the centre is OPEN, and nobody applies for these. Staying away
+  // IS taking it — that is what the word means here. The engine only reaches
+  // this question when there is no punch and no leave application, so the
+  // answer is simply yes: she took the day. Whoever came in has an ordinary
+  // working day and nothing happens to them.
   const holidayOffFor = (hol, emp) => {
     if (!hol) return false;
     if (hol.is_mandatory) {
       return !emp.works_through_holidays && !(hol.working_employee_ids || []).includes(emp.id);
     }
-    return (hol.observing_employee_ids || []).includes(emp.id);
+    return true;
   };
 
-  // Which of her declared optional days fall beyond the cap. Taken in date
-  // order, so the ones she takes first are the ones she is paid for.
-  const overCapOptional = new Map();   // employee id -> Set of dates
-  state.employees.filter(e => e.is_active).forEach(emp => {
-    const cap = leaveAllowance(emp).optHol;
-    // Every optional holiday on this year's list, not just the ones inside
-    // the AY date window. Two of them sit outside it — Good Friday falls
-    // three days before the year starts, Holi a few days after it ends — and
-    // filtering by date made those two free AND uncapped, which is the one
-    // combination nobody intended.
-    const mine = state.holidays
-      .filter(h => !h.is_mandatory && (h.observing_employee_ids || []).includes(emp.id))
-      .sort((a, b) => a.date.localeCompare(b.date));
-    overCapOptional.set(emp.id, new Set(mine.slice(cap).map(h => h.date)));
+  // How many optional days each person has already been away for in earlier
+  // months of this academic year. The cap is annual but the engine runs a
+  // month at a time, so the months already reconciled are the only memory it
+  // has — and they are enough, because they hold the days themselves.
+  const priorOptional = new Map();
+  Object.entries(state.attendanceMonths || {}).forEach(([m, md]) => {
+    if (!md || m >= month) return;
+    (md.reconciledDays || []).forEach(d => {
+      if (!d.is_optional_holiday) return;
+      if (d.date < AY.start || d.date > AY.end) return;
+      priorOptional.set(d.employee_id, (priorOptional.get(d.employee_id) || 0) + 1);
+    });
   });
-  const optionalOverCap = (emp, date) => !!overCapOptional.get(emp.id)?.has(date);
   function inVacation(d){ for (const v of state.vacations) if (d >= v.start_date && d <= v.end_date) return v; return null; }
   function isStudentHoliday(d){
     return (state.student_holidays||[]).find(s => {
@@ -1161,18 +1161,16 @@ function reconcile(rawRows, month){
           else if (dayStatus === "CasualLeave") s2.clDays++;
           else s2.lwpDays++;
         }
-      } else if (hol && !hol.is_mandatory && holidayOffFor(hol, emp)) {
-        // An optional holiday she declared. Paid, unless it is past her cap,
-        // in which case she still gets the day but not the money.
-        const over = optionalOverCap(emp, date);
-        reconciledDays.push({ employee_id:emp.id, date, dow,
-          status: over ? "LWP" : "Holiday",
-          note: over ? `Optional holiday beyond the ${leaveAllowance(emp).optHol} allowed: ${hol.name}`
-                     : `Optional holiday taken: ${hol.name}`,
-          is_optional_holiday: true, holiday_name: hol.name, over_optional_cap: over });
+      } else if (hol && !hol.is_mandatory) {
+        // Away on an optional holiday, with no leave application: she took it.
+        // Whether it is paid depends on how many she has had, settled in the
+        // cap pass once every day of the month is known.
+        reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday",
+          note:`Optional holiday taken: ${hol.name}`,
+          is_optional_holiday: true, holiday_name: hol.name });
         const s2 = ensure(emp);
-        if (over) s2.lwpDays++;
-        else { s2.holidays++; s2.optionalHolidaysObserved = (s2.optionalHolidaysObserved || 0) + 1; }
+        s2.holidays++;
+        s2.optionalHolidaysObserved = (s2.optionalHolidaysObserved || 0) + 1;
       } else {
         // Saturdays fall through to the free-Saturday allowance in Pass 2.
         reconciledDays.push({ employee_id:emp.id, date, dow, status:"LWP", note:"No punch and no leave application for this day" });
@@ -1461,21 +1459,54 @@ function reconcile(rawRows, month){
         continue;
       }
 
-      // Optional holiday. The centre was open, so this is only a holiday for
-      // somebody who declared she was taking it. For everybody else the row
-      // is left alone and the ordinary rules decide the day.
-      if (!holidayOffFor(hol, emp)) continue;
-      const over = optionalOverCap(emp, hol.date);
+      // Optional holiday with no punch row at all — PetPooja omits the date
+      // entirely when nobody came in. No punch and no leave means she took it.
       reconciledDays.push({
-        employee_id: emp.id, date: hol.date, dow: holDow,
-        status: over ? "LWP" : "Holiday",
-        note: over ? `Optional holiday beyond the ${leaveAllowance(emp).optHol} allowed: ${hol.name}`
-                   : `Optional holiday taken: ${hol.name}`,
-        is_optional_holiday: true, holiday_name: hol.name, over_optional_cap: over,
+        employee_id: emp.id, date: hol.date, dow: holDow, status: "Holiday",
+        note: `Optional holiday taken: ${hol.name}`,
+        is_optional_holiday: true, holiday_name: hol.name,
       });
       const s = ensure(emp);
-      if (over) s.lwpDays++;
-      else { s.holidays++; s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1; }
+      s.holidays++;
+      s.optionalHolidaysObserved = (s.optionalHolidaysObserved || 0) + 1;
+    }
+  }
+
+  /* The optional-holiday cap.
+     ──────────────────────────────────────────────────────────────────────
+     Five a year. Nobody applies for these — staying away is taking one — so
+     the count can only be known once the month's days exist, which is why
+     this runs here rather than inside the passes above.
+
+     Earliest first, so the days she took at the start of the year are the
+     ones she is paid for and the surplus falls at the end. Anything past the
+     cap is still her day off; it simply is not paid.
+
+     It runs before the sandwich rule so that a day already unpaid here is not
+     counted as a school-given holiday there and docked a second time.        */
+  {
+    const byEmp = new Map();
+    for (const d of reconciledDays) {
+      if (!d.is_optional_holiday) continue;
+      if (d.date < AY.start || d.date > AY.end) continue;
+      if (!byEmp.has(d.employee_id)) byEmp.set(d.employee_id, []);
+      byEmp.get(d.employee_id).push(d);
+    }
+    for (const [empId, days] of byEmp) {
+      const emp = state.employees.find(e => e.id === empId);
+      if (!emp) continue;
+      const cap = leaveAllowance(emp).optHol;
+      const already = priorOptional.get(empId) || 0;
+      days.sort((a, b) => a.date.localeCompare(b.date));
+      days.forEach((d, i) => {
+        if (already + i < cap) return;
+        if (d.is_overridden) return;          // HR said otherwise by hand
+        d.status = "LWP";
+        d.over_optional_cap = true;
+        d.note = `Optional holiday beyond the ${cap} allowed this year: ${d.holiday_name}`;
+        const su = empSummary.get(empId);
+        if (su) { su.holidays--; su.optionalHolidaysObserved--; su.lwpDays++; }
+      });
     }
   }
 
@@ -1923,25 +1954,37 @@ function renderEmployees(){
 
 function renderHolidays(){
   document.getElementById('holidays-tbody').innerHTML = [...state.holidays].sort((a,b)=>a.date.localeCompare(b.date)).map(h => {
-    // Two different questions, depending on the kind of holiday.
+    // Mandatory: the centre is shut, so the only list worth keeping is of the
+    // few who come in anyway, and somebody has to tick them.
     //
-    // Mandatory: the centre is shut, so the list is of the few who come in
-    // anyway. Optional: the centre is OPEN, so the list is of the staff who
-    // chose to take the day — and that is what makes it a holiday for them.
-    // Everybody else works a normal day.
+    // Optional: the centre is open and nobody applies — staying away IS
+    // taking the day. So there is nothing to tick. The figure is counted from
+    // the month once it has been reconciled, which is the truth rather than
+    // somebody's intention.
     const names = ids => (ids||[]).map(id => empById(id)?.display_name).filter(Boolean);
-    const who = h.is_mandatory ? names(h.working_employee_ids) : names(h.observing_employee_ids);
-    const label = h.is_mandatory ? 'work it' : 'took it';
-    const cell = who.length === 0
-      ? `<span class="text-gray-400 italic">nobody ${label}</span>`
-      : `<span class="text-eurokids-blue font-medium">${who.length} staff</span> <span class="text-gray-400 text-xs">— ${who.slice(0,3).join(', ')}${who.length>3?'…':''}</span>`;
+    let cell;
+    if (h.is_mandatory) {
+      const who = names(h.working_employee_ids);
+      cell = who.length === 0
+        ? '<span class="text-gray-400 italic">nobody works it</span>'
+        : `<span class="text-eurokids-blue font-medium">${who.length} staff</span> <span class="text-gray-400 text-xs">— ${who.slice(0,3).join(', ')}${who.length>3?'…':''}</span>`;
+    } else {
+      const md = state.attendanceMonths?.[h.date.slice(0,7)];
+      const took = (md?.reconciledDays || []).filter(d => d.date === h.date && d.is_optional_holiday);
+      const over = took.filter(d => d.over_optional_cap).length;
+      cell = !md
+        ? '<span class="text-gray-400 italic">month not imported yet</span>'
+        : took.length === 0
+          ? '<span class="text-gray-400 italic">everybody came in</span>'
+          : `<span class="text-eurokids-blue font-medium">${took.length} stayed away</span>${over ? ` <span class="text-xs text-red-600">(${over} past the cap)</span>` : ''}`;
+    }
     return `<tr>
       <td class="text-gray-600">${fmtDate(h.date)}</td>
       <td class="font-medium">${h.name}</td>
       <td><span class="badge ${h.is_mandatory?'b-mandatory':'b-optional'}">${h.is_mandatory?'Mandatory':'Optional'}</span></td>
       <td>${cell}</td>
-      <td><button onclick="editHoliday('${h.id}')" class="btn-link">Edit</button> ·
-          <button onclick="manageHolidayWorkers('${h.id}')" class="btn-link">${h.is_mandatory?'Who works':'Who took it'}</button> ·
+      <td><button onclick="editHoliday('${h.id}')" class="btn-link">Edit</button>${
+          h.is_mandatory ? ` · <button onclick="manageHolidayWorkers('${h.id}')" class="btn-link">Who works</button>` : ''} ·
           <button onclick="removeHoliday('${h.id}')" class="btn-danger">Delete</button></td>
     </tr>`;
   }).join('');
@@ -1967,8 +2010,9 @@ function editHoliday(holId){
         <input type="checkbox" id="eh-mand" ${h.is_mandatory?'checked':''}>
         <span class="text-sm">Mandatory — the centre is closed and everybody is off</span>
       </label>
-      <p class="text-xs text-gray-500">Optional means the centre is open. It is a holiday only for the staff who
-        chose to take it, and it counts against their ${AY.optional_hol_per_teacher} a year.</p>
+      <p class="text-xs text-gray-500">Optional means the centre is open. Anyone who stays away has taken it —
+        no application needed — and it counts against their ${AY.optional_hol_per_teacher} a year. Past that
+        the day is still theirs but is not paid.</p>
       <div id="eh-msg" class="text-sm text-red-600"></div>
       <div class="flex gap-2 pt-2">
         <button onclick="saveHoliday('${holId}')" class="btn-primary flex-1">Save</button>
@@ -1994,8 +2038,7 @@ function saveHoliday(holId){
   h.date = date; h.name = name; h.is_mandatory = mand;
   // Switching kind makes the other list meaningless: who works through a
   // closure says nothing about who chose to take a day the centre was open.
-  if (mand) h.observing_employee_ids = [];
-  else h.working_employee_ids = [];
+  if (!mand) h.working_employee_ids = [];   // meaningless once the centre is open
   saveState();
 
   // Both months. Moving a holiday out of September and into October leaves
@@ -2009,35 +2052,15 @@ function saveHoliday(holId){
 
 function manageHolidayWorkers(holId){
   const h = state.holidays.find(x => x.id === holId);
-  if (!h) return;
-  const mandatory = !!h.is_mandatory;
-  const current = new Set((mandatory ? h.working_employee_ids : h.observing_employee_ids) || []);
+  if (!h || !h.is_mandatory) return;   // optional days are decided by absence
+  const current = new Set(h.working_employee_ids || []);
   const sorted = [...state.employees].filter(e=>e.is_active).sort((a,b)=>a.display_name.localeCompare(b.display_name));
-
-  // How many optional days each person has already taken this year, so the
-  // cap is visible at the moment somebody is about to go over it.
-  const takenByEmp = {};
-  if (!mandatory) {
-    state.holidays.forEach(x => {
-      if (x.is_mandatory || x.id === holId) return;
-      if (x.date < AY.start || x.date > AY.end) return;
-      (x.observing_employee_ids||[]).forEach(id => { takenByEmp[id] = (takenByEmp[id]||0) + 1; });
-    });
-  }
-
   const rows = sorted.map(e => {
     const checked = current.has(e.id) ? 'checked' : '';
-    const isPermWth = mandatory && e.works_through_holidays;
-    let note;
-    if (mandatory) {
-      note = isPermWth ? '<span class="text-xs text-eurokids-blue">always works through holidays</span>'
-                       : `<span class="text-xs text-gray-400">${e.department} · ${e.designation}</span>`;
-    } else {
-      const used = takenByEmp[e.id] || 0;
-      const cap = leaveAllowance(e).optHol;
-      const over = used + (current.has(e.id) ? 1 : 0) > cap;
-      note = `<span class="text-xs ${over?'text-red-600 font-semibold':'text-gray-400'}">${used} of ${cap} optional days taken${over?' — this one is over the cap and will be unpaid':''}</span>`;
-    }
+    const isPermWth = e.works_through_holidays;
+    const note = isPermWth
+      ? '<span class="text-xs text-eurokids-blue">always works through holidays</span>'
+      : `<span class="text-xs text-gray-400">${e.department} · ${e.designation}</span>`;
     return `<label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-2">
       <input type="checkbox" class="hol-worker-cb" data-emp="${e.id}" ${checked} ${isPermWth?'disabled':''} />
       <div class="flex-1">
@@ -2046,17 +2069,10 @@ function manageHolidayWorkers(holId){
       </div>
     </label>`;
   }).join('');
-
-  openModal(mandatory ? `Who works on "${h.name}"?` : `Who took "${h.name}" off?`, `
+  openModal(`Who works on "${h.name}"?`, `
     <div class="space-y-3">
-      ${mandatory
-        ? `<p class="text-sm text-gray-600">Tick the staff who <em>do</em> work on this mandatory holiday. Their
-             attendance is processed as a regular working day — absences without leave count as LWP.</p>
-           <p class="text-xs text-gray-500">Staff marked "Works through mandatory holidays" on their profile are exempted automatically.</p>`
-        : `<p class="text-sm text-gray-600">The centre is <em>open</em> on this day. Tick the staff who chose to take
-             it off — for them it is a paid holiday, and it counts against their ${AY.optional_hol_per_teacher} a year.</p>
-           <p class="text-xs text-gray-500">Anybody not ticked works a normal day. Absent without applying is LWP,
-             the same as any other working day.</p>`}
+      <p class="text-sm text-gray-600">Tick the staff who <em>do</em> work on this mandatory holiday. Their attendance is processed as a regular working day — absences without leave count as LWP.</p>
+      <p class="text-xs text-gray-500">Staff marked "Works through mandatory holidays" on their profile are exempted automatically.</p>
       <div class="border border-gray-200 rounded-lg p-3 max-h-80 overflow-y-auto bg-gray-50">${rows}</div>
       <div class="flex gap-2 pt-2">
         <button onclick="saveHolidayWorkers('${holId}')" class="btn-primary flex-1">Save</button>
@@ -2069,9 +2085,7 @@ function manageHolidayWorkers(holId){
 function saveHolidayWorkers(holId){
   const h = state.holidays.find(x => x.id === holId);
   if (!h) return;
-  const selected = Array.from(document.querySelectorAll('.hol-worker-cb:checked:not(:disabled)')).map(cb => cb.dataset.emp);
-  if (h.is_mandatory) h.working_employee_ids = selected;
-  else h.observing_employee_ids = selected;
+  h.working_employee_ids = Array.from(document.querySelectorAll('.hol-worker-cb:checked:not(:disabled)')).map(cb => cb.dataset.emp);
   saveState();
   const targetMonth = h.date.slice(0,7);
   if (state.attendanceMonths[targetMonth]) rerunReconciliation(targetMonth);
