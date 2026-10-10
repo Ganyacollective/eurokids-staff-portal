@@ -385,7 +385,7 @@
           <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <div>
               <h2 class="text-sm font-semibold">Student-only holidays</h2>
-              <p class="text-xs text-gray-500 mt-1">Days when students are off but teachers come at <b>9:00 AM</b> uniform (like Saturday timing). Late strikes computed against 9:11 AM.</p>
+              <p class="text-xs text-gray-500 mt-1">Days when students are off but teachers come at <b>9:00 AM</b> uniform (like Saturday timing). Late strikes computed against 9:11 AM. <b>Day care is not included</b> — the children are there either way, so day care staff report at their own usual time on these days, and on Saturdays. Set someone's working pattern to "Day care" under Employees → Edit.</p>
             </div>
             <div class="flex gap-2">
               <button onclick="seedStudentHolidaysFromPdf()" class="btn-link">Seed from PDF</button>
@@ -941,7 +941,28 @@ const LATE_GRACE_MIN = 10, HALF_LWP_THRESHOLD = 90, STRIKE_TO_HALF_DAY = 3, SAT_
 // quietly re-run at startup from the raw punches it already holds — no
 // re-upload, nobody having to know a "Re-run" button exists. Bump this whenever
 // the rules change.
-const ENGINE_VERSION = 6;   // v6: staying away on an optional holiday is taking it, capped at five
+const ENGINE_VERSION = 7;   // v7: day care keeps its own hours — the school calendar is not theirs
+
+// Day care does not follow the school's calendar.
+//
+// On a Saturday, and on a student holiday, everyone else reports at 9:00 and
+// is judged against 9:11. Day care is not everyone else: the children are
+// there the same hours whether or not the school has a programme that day, so
+// the staff come at their own time — Aarti at 11:00, Maria at 3:45 in the
+// afternoon — Saturdays included. They work every Saturday, so the two free
+// ones a month are not theirs either.
+//
+// The working pattern already said this: "Day care — Mon to Sat, every
+// Saturday" has been on their profile all along, and went no further than the
+// appointment letter. The engine never read it, so it measured an 11:00 start
+// against 9:00, called her two hours late, and took half a day's pay — 42
+// times from one person. This resolves it exactly as the roster and the
+// employee form do, so somebody saved before the field existed still answers
+// correctly from their designation.
+function isDayCare(emp){
+  if (!emp) return false;
+  return (emp.schedule_type || (/day\s*care|daycare/i.test(emp.designation || '') ? 'day_care' : '')) === 'day_care';
+}
 
 function reconcile(rawRows, month){
   const holByDate = new Map(); state.holidays.forEach(h => holByDate.set(h.date, h));
@@ -998,6 +1019,25 @@ function reconcile(rawRows, month){
     return s;
   }
 
+  // Was the building open at all that day?
+  //
+  // On a mandatory holiday the centre is shut, and the only people expected in
+  // are the few who have been ticked for it — or who carry the blanket "works
+  // through mandatory holidays" flag on their profile. That flag is where this
+  // goes wrong. Rinki carries it, so the engine expected her at work on
+  // Independence Day and recorded leave without pay when she did not come. Not
+  // one person in the centre punched that day. There was nothing to come to.
+  //
+  // So before charging anybody for missing a mandatory holiday, ask whether
+  // anyone was there. This can only ever withhold a deduction, never create
+  // one, and it reads the same punches the engine already trusts for
+  // everything else. The last time a rule of mine had no such check, it took a
+  // day's pay from twenty-three people for a day the school was closed.
+  const punchedThatDay = new Set();
+  rawRows.forEach(row => {
+    if (row.first_punch || row.last_punch) punchedThatDay.add(row.attendance_date);
+  });
+
   // One anomaly per unknown name, with a row count — not one per row, which
   // produced hundreds and made the Anomalies page unreadable.
   const unmatchedNames = new Map();
@@ -1036,10 +1076,24 @@ function reconcile(rawRows, month){
     const hasPunchData = (inMinPre != null) || (outMinPre != null);
 
     // Does this vacation apply to this employee?
-    //   • Permanent opt-out: emp.works_through_vacations = true (daycare staff, didis on year-round duty)
-    //   • Per-vacation opt-out: vac.working_employee_ids includes emp.id (summer camp volunteers, one-off)
-    // If either is true, the vacation is skipped for this employee and the day is processed as a normal working day.
-    const vacationAppliesToThisEmp = vac && !emp.works_through_vacations && !(vac.working_employee_ids||[]).includes(emp.id);
+    //   • Per-vacation list: vac.working_employee_ids includes emp.id (summer
+    //     camp volunteers, one-off). Where this list has been filled in at all,
+    //     it is somebody's decision about this particular vacation and it wins
+    //     over every default below — including the day care one. The Summer
+    //     Break 2026 list names seventeen people, two of them day care and one
+    //     day care didi deliberately left off; no day care staff punched at all
+    //     that week. A blanket rule that overruled that would have charged her
+    //     six days of leave without pay for a week she was given off.
+    //   • Day care: otherwise never on vacation. The centre's vacations belong
+    //     to the school, and the day care runs through them — that is the whole
+    //     point of it. This used to rest on somebody remembering to tick a box,
+    //     and for two of the three it had not been ticked.
+    //   • Permanent opt-out: emp.works_through_vacations = true (didis on year-round duty)
+    const vacCurated = (vac?.working_employee_ids || []).length > 0;
+    const vacationAppliesToThisEmp = vac
+      && !emp.works_through_vacations
+      && !(vac.working_employee_ids || []).includes(emp.id)
+      && !(isDayCare(emp) && !vacCurated);
 
     // Vacation — show actual attendance if the teacher came (e.g. summer camp).
     if (vacationAppliesToThisEmp) {
@@ -1069,13 +1123,30 @@ function reconcile(rawRows, month){
       return;
     }
 
+    // Expected in on a mandatory holiday — and not one person in the centre
+    // punched (see punchedThatDay above). The day off was real whatever the
+    // roster said, so it is the holiday it was, not an absence.
+    if (hol?.is_mandatory && !hasPunchData && !punchedThatDay.has(date)) {
+      reconciledDays.push({ employee_id:emp.id, date, dow, status:"Holiday",
+        note:`${hol.name} — expected in, but the centre was shut: nobody punched` });
+      ensure(emp).holidays++;
+      return;
+    }
+
     const matched = leavesFor(emp.id, date);
     const inMin = timeToMin(row.first_punch);
     const outMin = timeToMin(row.last_punch);
     const stuHol = isStudentHoliday(date);
     const specialDay = isSpecialDay(date);
-    const sched = (isSat || stuHol) ? SAT_REPORTING_MIN : emp.reporting_minutes;
-    const schedNote = stuHol ? `Student holiday "${stuHol.name||''}" — uniform 9:00 AM` : null;
+    // Day care keeps its own hours on both (see isDayCare above).
+    const dayCare = isDayCare(emp);
+    const uniform9 = (isSat || stuHol) && !dayCare;
+    const sched = uniform9 ? SAT_REPORTING_MIN : emp.reporting_minutes;
+    const schedNote = stuHol
+      ? (dayCare
+          ? `Student holiday "${stuHol.name||''}" — day care, reports at ${minToTime(emp.reporting_minutes)} as always`
+          : `Student holiday "${stuHol.name||''}" — uniform 9:00 AM`)
+      : null;
     // One punch and not the other: she was here, the machine only caught half of it.
     const forgotPunch = (inMin != null) !== (outMin != null);
 
@@ -1123,8 +1194,11 @@ function reconcile(rawRows, month){
         if (isHalf) { if (st === "EarnedLeave") s.elDays += 0.5; else s.clDays += 0.5; s.fd += 0.5; }
         else s.fd++;
       } else if (inMin != null) {
-        // Forgot to punch OUT — but the IN time is reliable, so still compute late strike against it
-        const lateMin = inMin - (isSat || stuHol ? SAT_REPORTING_MIN : emp.reporting_minutes);
+        // Forgot to punch OUT — but the IN time is reliable, so still compute
+        // late strike against it. Against `sched`, which is the one time this
+        // person was actually due: this line used to recompute the rule itself
+        // and so quietly disagreed with the rest of the day.
+        const lateMin = inMin - sched;
         let dayStatus = "FullDay", isStrike = false;
         if (lateMin > HALF_LWP_THRESHOLD) dayStatus = "HalfLWP";
         else if (lateMin > LATE_GRACE_MIN) { dayStatus = "Late"; isStrike = true; }
@@ -1221,10 +1295,12 @@ function reconcile(rawRows, month){
   // Pass 2: Saturday cap — first 2 absent Saturdays/month show as Week Off (not LWP) AND don't count as cuts.
   // RULE: only the Teacher and Admin departments enjoy the 2-Saturday allowance.
   // Every other department (Support Staff, plus any future categories) works every Saturday.
+  // Day care is the exception inside Teacher and Admin: the children are there
+  // on Saturday, so the staff are, and there is no allowance to draw on.
   for (const s of empSummary.values()) {
     s.satRefunds = 0;
     const dept = s.employee.department;
-    const eligibleForSatAllowance = (dept === 'Teacher' || dept === 'Admin');
+    const eligibleForSatAllowance = (dept === 'Teacher' || dept === 'Admin') && !isDayCare(s.employee);
     if (!eligibleForSatAllowance) {
       // No 2-Saturday allowance — every Saturday is a working day
       s.satExcess = s.satAbsences;
@@ -1943,8 +2019,9 @@ function renderEmployees(){
     <td class="text-gray-600">${e.department}</td>
     <td class="text-gray-600">${e.designation}</td>
     <td class="text-gray-600">${minToTime(e.reporting_minutes)}${
-      (e.schedule_type === 'day_care' || /day\s*care|daycare/i.test(e.designation||''))
-        ? '<div class="text-xs text-gray-400">every Saturday</div>' : ''}</td>
+      isDayCare(e)
+        ? '<div class="text-xs text-eurokids-blue">Day care · this time every working day, Saturdays and student holidays included</div>'
+        : '<div class="text-xs text-gray-400">9:00 AM on Saturdays and student holidays</div>'}</td>
     <td class="text-gray-600 text-xs">${e.phone || '<span class="text-gray-400 italic">—</span>'}</td>
     <td class="text-gray-600 text-xs">${e.email || '<span class="text-gray-400 italic">—</span>'}</td>
     <td class="text-right">${canSeePay() ? inr(salaryOf(e.id)) : '<span class="text-gray-300">—</span>'}</td>
@@ -2255,8 +2332,13 @@ function manageVacationWorkers(vacId){
   const sorted = [...state.employees].filter(e=>e.is_active).sort((a,b)=>a.display_name.localeCompare(b.display_name));
   const rows = sorted.map(e => {
     const checked = current.has(e.id) ? 'checked' : '';
+    // Day care is NOT shown as permanently exempt here, because this list beats
+    // the day-care default: once anyone is ticked, the ticks are the record of
+    // who worked, and a day care person left off was left off on purpose.
     const isPermWtv = e.works_through_vacations;
-    const note = isPermWtv ? '<span class="text-xs text-eurokids-blue">always works through vacations</span>' : '<span class="text-xs text-gray-400">' + e.department + ' · ' + e.designation + '</span>';
+    const note = isPermWtv ? '<span class="text-xs text-eurokids-blue">always works through vacations</span>'
+      : isDayCare(e) ? '<span class="text-xs text-eurokids-blue">day care — tick if the day care ran this time</span>'
+      : '<span class="text-xs text-gray-400">' + e.department + ' · ' + e.designation + '</span>';
     return `<label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-2">
       <input type="checkbox" class="vac-worker-cb" data-emp="${e.id}" ${checked} ${isPermWtv?'disabled':''} />
       <div class="flex-1">
@@ -2268,7 +2350,7 @@ function manageVacationWorkers(vacId){
   openModal(`Who works during "${v.name}"?`, `
     <div class="space-y-3">
       <p class="text-sm text-gray-600">Tick the staff who <em>do</em> work during this vacation (summer camp volunteers, etc.). Their attendance will be processed as a normal working month — late strikes apply, absences without leave count as LWP, and salary is paid in full as usual.</p>
-      <p class="text-xs text-gray-500">Daycare staff marked as "Works through vacations" on their Employee profile are exempted automatically (shown disabled below — manage that flag from Employees → Edit).</p>
+      <p class="text-xs text-gray-500"><b>If you tick nobody</b>, day care staff are still treated as working — the day care runs through the school's vacations. <b>The moment you tick anyone</b>, this list becomes the record of who worked, so tick the day care staff too if the day care ran. Anyone marked "Works through vacations" on their profile is exempt either way (shown disabled below — manage that from Employees → Edit).</p>
       <div class="border border-gray-200 rounded-lg p-3 max-h-80 overflow-y-auto bg-gray-50">${rows}</div>
       <div class="flex gap-2 pt-2">
         <button onclick="saveVacationWorkers('${vacId}')" class="btn-primary flex-1">Save</button>
@@ -2694,7 +2776,7 @@ function renderReports(){
       </header>
       <table>
         <thead><tr><th>Date</th><th>Day</th><th>Reporting time</th><th>Punched in</th><th>Late by</th><th>Result</th><th></th></tr></thead>
-        <tbody>${lateDetails.map(d => { const dow = dayOfWeek(d.date); const sched = d.sched != null ? d.sched : (dow===6 ? 540 : emp.reporting_minutes); const isStu = isStudentHolidayDate(d.date); return `<tr>
+        <tbody>${lateDetails.map(d => { const dow = dayOfWeek(d.date); const sched = d.sched != null ? d.sched : ((dow===6 && !isDayCare(emp)) ? SAT_REPORTING_MIN : emp.reporting_minutes); const isStu = isStudentHolidayDate(d.date); return `<tr>
           <td class="font-medium">${fmtDateShort(d.date)}</td>
           <td class="text-gray-600">${dowName(dow)}${dow===6?' (Sat)':''}${isStu?' <span class="badge b-hol" style="font-size:9px">student-hol</span>':''}</td>
           <td class="text-gray-600">${minToTime(sched)}</td>
