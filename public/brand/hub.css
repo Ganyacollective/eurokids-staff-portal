@@ -169,7 +169,7 @@ input[type=checkbox]:not(.sw){width:16px;height:16px;accent-color:var(--accent);
 .seg button{background:none;border:0;padding:4px 12px;border-radius:6px;font-size:var(--fs-body);color:var(--label);min-height:24px}
 .seg button.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04);font-weight:600}
 /* chips: status (static) and filter (pressable) */
-.chip{display:inline-flex;align-items:center;gap:5px;font-size:var(--fs-sub);font-weight:600;padding:2px 8px;border-radius:999px;line-height:1.4;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:5px;border:0;font-size:var(--fs-sub);font-weight:600;padding:2px 8px;border-radius:999px;line-height:1.4;white-space:nowrap}
 .c-good{background:var(--green-wash);color:#157A3A} .c-warn{background:var(--orange-wash);color:#8A4B00}
 .c-crit{background:var(--red-wash);color:#B3232A} .c-mute{background:var(--fill);color:var(--label-2)} .c-acc{background:var(--accent-wash);color:var(--accent)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -407,8 +407,6 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 
 /* ══ enquiries ══ */
 .heat{display:inline-flex;gap:3px;vertical-align:middle}
-.heat i{width:8px;height:8px;border-radius:50%;background:var(--fill-3);display:inline-block}
-.heat i.on{background:var(--orange)}
 .enq-row{border-top:1px solid var(--sep)} .enq-row:first-child{border-top:0}
 .panel>.box{box-shadow:none;border-radius:0}
 
@@ -469,6 +467,13 @@ input[type="range"].keen-range::-moz-range-thumb{
 .keen-n{font-size:var(--fs-sub);font-weight:700;font-variant-numeric:tabular-nums;color:var(--kc);min-width:18px;display:inline-block;text-align:right}
 
 /* ══ what to do about this family ══
+   One colour per card. The status chip carries it; the stage, the programme
+   and "on roll" are grey, because nobody scans for those. The headline is
+   black unless something is actually late, which is the single thing on this
+   screen that should pull the eye. The keenness bar keeps red-amber-green
+   because that is a judgement rather than a label. Three colours, each
+   meaning something — the version before this had six competing in one card
+   and read as decoration.
    This replaced a tinted panel with a 22px headline and a blue progress bar —
    the shape every generated admin screen has, which says "a machine laid this
    out" before it says anything about the family. What a coordinator needs in
@@ -479,16 +484,15 @@ input[type="range"].keen-range::-moz-range-thumb{
 .snap-pills{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .snap-next{margin:10px 0 2px;font-size:var(--fs-t2);line-height:var(--lh-t2);font-weight:600;letter-spacing:-.01em;color:var(--label)}
 .snap-next.due{color:var(--red)}
-.snap-next.done{color:#157A3A}
 .snap-meta{font-size:var(--fs-co);color:var(--label-2)}
 .snap-story{margin-top:10px;padding:10px 12px;border-radius:var(--r-ctl);background:var(--fill);
   font-size:var(--fs-co);line-height:1.5;color:var(--label)}
 .snap-story .lnk{font-style:normal}
 .snap-keen{display:flex;align-items:center;gap:10px;margin-top:12px}
 .snap-keen .cap{font-size:var(--fs-sub);color:var(--label-2);min-width:62px}
-.snap-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.snap-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .snap-bar a,.snap-bar button{display:inline-flex;align-items:center;gap:7px;font:inherit;
-  font-size:var(--fs-co);font-weight:600;padding:8px 14px;border-radius:var(--r-ctl);border:0;cursor:pointer;
+  font-size:var(--fs-co);font-weight:600;padding:8px 12px;border-radius:var(--r-ctl);border:0;cursor:pointer;
   text-decoration:none;background:var(--fill);color:var(--label);transition:background .12s}
 .snap-bar a:hover,.snap-bar button:hover{background:var(--fill-2)}
 .snap-bar .pri{background:var(--accent);color:#fff}
@@ -524,56 +528,40 @@ details.fold>summary:hover{background:var(--fill)}
 details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .fold-body{padding:4px 16px 14px}
 
-/* ══ the enquiry card ══
-   The sheet opened as six identical grey boxes, every row the same weight:
-   label on the left, control on the right, from "Inquiry status" down to
-   "Academic year". Nothing told you whether this family was hot or cold, due a
-   call today or last touched in March, without reading all of it.
-
-   So the top of the sheet stops being a form and becomes an answer to three
-   questions — where are they, how keen are they, what happens next — and the
-   colour comes from the status rather than being decoration. The form is still
-   underneath; it is just no longer the first thing. */
-.ecard{border-radius:var(--r-card);padding:14px 16px;margin-bottom:4px;
-  background:linear-gradient(var(--ec-wash,var(--fill)),var(--ec-wash,var(--fill))),var(--bg-card);
-  box-shadow:inset 4px 0 0 var(--ec,var(--label-3)), var(--shadow-card)}
-.ecard.won{--ec:var(--green);  --ec-wash:var(--green-wash)}
-.ecard.lost{--ec:var(--red);   --ec-wash:var(--red-wash)}
-.ecard.warm{--ec:var(--orange);--ec-wash:var(--orange-wash)}
-.ecard.open{--ec:var(--accent);--ec-wash:var(--accent-wash)}
-
-.ecard .ec-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.ecard .ec-next{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:8px 0 2px}
-.ecard .ec-next.due{color:var(--red)}
-.ecard .ec-m{font-size:var(--fs-co);color:var(--label-2)}
-
-/* The story in one line. Italic and set apart, because it is the only thing on
-   this card nobody typed — it is assembled from the notes, and should not be
-   mistaken for something a colleague wrote by hand. */
-.ecard .ec-story{margin-top:8px;padding-top:8px;border-top:1px solid var(--sep);
-  font-size:var(--fs-co);line-height:var(--lh-co);color:var(--label);font-style:italic}
+/* `.lnk` is the only survivor of the old .ecard block — the drawer header it
+   belonged to was rewritten as .snap*, and every one of those rules became
+   unreachable. Deleted rather than left to be puzzled over later. */
 .lnk{background:none;border:0;padding:0;font:inherit;font-style:normal;color:var(--accent);
   font-weight:600;cursor:pointer}
 .lnk:hover{text-decoration:underline;text-underline-offset:3px}
 
-/* How keen, as something you can read at a glance instead of a number out of
-   ten. Cold is blue and warm is orange because a 3 and an 8 should not be the
-   same colour in the corner of your eye. */
-.keen{display:flex;align-items:center;gap:8px;margin-top:10px}
-.keen .bar{flex:1;max-width:160px;height:6px;border-radius:3px;background:var(--fill-2);overflow:hidden}
-.keen .bar i{display:block;height:100%;border-radius:3px;background:var(--k,var(--accent))}
-.keen b{font-size:var(--fs-sub);color:var(--label-2);font-weight:600}
+/* The child's name stays put.
+   Thirteen columns fit on no screen, so the table scrolls sideways — and four
+   columns along you are reading a row with no idea whose it is. The first
+   column pins to the left edge, because the name is the one part of a row
+   that answers "who is this?". A sticky cell is transparent by default and
+   the scrolling columns slide visibly underneath it, so it needs its own
+   background; the shadow on its right edge is what makes it read as pinned
+   rather than as a rendering fault.
 
-/* The things you actually do, as buttons rather than three levels inside an
-   "Actions…" menu. Ringing a parent is the commonest act in this screen and
-   it was the most buried. */
-.qa{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
-.qa a,.qa button{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-co);font-weight:600;
-  padding:7px 12px;border-radius:999px;border:0;cursor:pointer;text-decoration:none;
-  background:var(--bg-card);color:var(--label);box-shadow:0 0 0 1px rgba(0,0,0,.09)}
-.qa a:hover,.qa button:hover{background:#F5F5F7}
-.qa .pri{background:var(--accent);color:#fff;box-shadow:none}
-.qa .pri:hover{background:var(--accent-dk)}
+   The status stripe lives on this same cell as an inset box-shadow, and this
+   rule carries a higher specificity than the stripe's (an id beats two
+   classes), so the stripe has to be repeated here per status or pinning the
+   column would silently delete the colour coding. */
+#eq-table th:first-child,
+#eq-table td:first-child{
+  position:sticky;left:0;z-index:2;
+  background:var(--bg-card);
+  box-shadow:1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18);
+  min-width:168px;max-width:230px}
+#eq-table thead th:first-child{z-index:3;background:var(--bg-grouped)}
+/* The washes are deliberately translucent, which a pinned cell cannot be —
+   the scrolling columns would show straight through it. Painting the wash as
+   a flat gradient layer on top of the solid card colour keeps the exact tint
+   while leaving the cell opaque. */
+#eq-table tr.t-crit td:first-child{box-shadow:inset 3px 0 0 var(--red),    1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--red-wash),var(--red-wash)) ,var(--bg-card)}
+#eq-table tr.t-warn td:first-child{box-shadow:inset 3px 0 0 var(--orange), 1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--orange-wash),var(--orange-wash)),var(--bg-card)}
+#eq-table tr.t-good td:first-child{box-shadow:inset 3px 0 0 var(--green),  1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--green-wash),var(--green-wash)) ,var(--bg-card)}
 
 /* the sheet can take the whole screen when a record needs room */
 .drawer.wide{width:min(1100px,100vw)}

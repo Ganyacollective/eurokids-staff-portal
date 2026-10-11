@@ -10,8 +10,12 @@
    filters stack the way Coda's do.
    ============================================================ */
 
+// Colour means "look at this". "In progress" is where 175 of 198 enquiries
+// sit, so colouring it says nothing and competes with the one blue thing on
+// the screen that is actually a button. Grey is the right answer for the
+// ordinary case.
 const ENQ_STATUSES = [
-  ['in_progress', 'In progress',             'c-acc'],
+  ['in_progress', 'In progress',             'c-mute'],
   ['form_taken',  'Form taken · fee pending','c-warn'],
   ['won',         'Won',                     'c-good'],
   ['almost_lost', 'Almost lost',             'c-warn'],
@@ -29,6 +33,13 @@ const enqName = e => e.child_name || (e.father_name ? `${e.father_name}’s chil
 const heatBar = h => (h === null || h === undefined) ? '<span class="hint">—</span>'
   : `<span class="heat" title="${h} / 10"><i style="width:${h * 10}%;background:${h >= 7 ? 'var(--green)' : h >= 4 ? 'var(--orange)' : 'var(--red)'}"></i></span><b class="heatn">${h}</b>`;
 const statusChip = s => `<span class="chip ${ENQ_STATUS[s]?.c || 'c-mute'}">${ENQ_STATUS[s]?.l || s}</span>`;
+// hub.html calls this money(); portal.html and teacher.html call it inr().
+// The fees block on Reports was written against the name the portal uses, and
+// the hub does not load the portal — so the whole screen threw a
+// ReferenceError mid-template, the assignment aborted, and Reports sat on
+// "Counting…" for ever. One alias, rather than a rename that would drift
+// again the next time something is moved between the two.
+const inr = n => money(n);
 const chipList = (a, cls = 'c-mute') => (a || []).map(x => `<span class="chip ${cls}">${esc(x)}</span>`).join(' ') || '<span class="hint">—</span>';
 const whenAgo = iso => {
   if (!iso) return '—';
@@ -442,13 +453,14 @@ function openLogCall(preset = {}){
   el('drawer-foot').innerHTML = `<div id="lc-msg"></div><button class="btn line" id="lc-cancel">Cancel</button><button class="btn" id="lc-save">Log the call</button>`;
   el('lc-cancel').onclick = closeDrawer;
 
-  let foundId = 0;
+  let foundId = 0, lookedUp = false;
   el('lc-phone').oninput = debounce(async () => {
     const d = el('lc-phone').value.replace(/\D/g, '').slice(-10);
-    foundId = 0;
+    foundId = 0; lookedUp = false;
     if (d.length < 10) { el('lc-known').innerHTML = ''; el('lc-newgrp').style.display = 'none'; return; }
     const { data } = await getSb().schema('eurokids').from('v_enquiry')
       .select('id,child_name,father_name,status').eq('phone_key', d).limit(1).maybeSingle();
+    lookedUp = true;
     if (data) {
       foundId = data.id;
       el('lc-known').innerHTML = `<span class="chip c-good">known</span> <strong>${esc(enqName(data))}</strong> — the call goes on their card.`;
@@ -476,9 +488,12 @@ function openLogCall(preset = {}){
       note: el('lc-note').value, follow_up_on: el('lc-follow').value || null,
       child_name: el('lc-child') ? el('lc-child').value : '',
       caller_name: el('lc-parent') ? el('lc-parent').value : '',
-      // Only ever true when the drawer has actually told them it is a new
-      // number, so an outbound call to a typo cannot invent a family.
-      createIfUnknown: !foundId,
+      // Only once the lookup has actually answered. It starts unanswered and
+      // is debounced, so pasting a number and pressing Save at once used to
+      // send "create it" for a number we in fact know — which for an outbound
+      // call defeats the guard that stops the hub inventing a family for a
+      // misdial.
+      createIfUnknown: lookedUp && !foundId,
     });
     if (!j.ok) { btn.disabled = false; btn.textContent = 'Log the call'; return el('lc-msg').innerHTML = `<div class="err">${esc(j.error)}</div>`; }
     enqRefresh();
@@ -544,7 +559,7 @@ async function renderNotify(){
     (nobody ? `<div class="rowx hint">Nobody has been chosen yet, so new enquiries still go to the old office address. Tick somebody and that stops.</div>` : '') +
     j.people.map(p => `<div class="row" style="align-items:flex-start">
       <div class="l">${esc(p.name)}<span class="sub">${esc(p.email)}${p.role === 'admin' ? ' · admin' : ''}</span></div>
-      <div class="v" style="flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:62%">
+      <div class="v chips" style="flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:62%">
         ${j.sources.map(s => `<button class="chip nt-src ${p.sources.includes(s) ? 'on c-good' : 'c-mute'}"
             data-u="${esc(p.id)}" data-s="${esc(s)}" ${j.canEdit ? '' : 'disabled'}
             style="cursor:${j.canEdit ? 'pointer' : 'default'}">${esc(s)}</button>`).join('')}
@@ -680,10 +695,10 @@ async function openEnquiry(id){
         <div class="snap-pills">
           <span class="chip ${ENQ_STATUS[e.status]?.c || 'c-mute'}">${ENQ_STATUS[e.status]?.l || esc(e.status)}</span>
           ${(e.stages || []).slice(-1).map(x => `<span class="chip c-mute">${esc(x)}</span>`).join('')}
-          ${(e.programs || []).map(x => `<span class="chip c-acc">${esc(x)}</span>`).join('')}
-          ${e.on_roster ? '<span class="chip c-good">on roll</span>' : ''}
+          ${(e.programs || []).map(x => `<span class="chip c-mute">${esc(x)}</span>`).join('')}
+          ${e.on_roster ? '<span class="chip c-mute">on roll</span>' : ''}
         </div>
-        <div class="snap-next ${overdue ? 'due' : (e.status === 'won' || e.on_roster) ? 'done' : ''}">${next}</div>
+        <div class="snap-next ${overdue ? 'due' : ''}">${next}</div>
         <div class="snap-meta">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
 
         <div class="snap-keen"><span class="cap">How keen</span>
@@ -700,7 +715,7 @@ async function openEnquiry(id){
           ${phone ? `<a class="pri" href="tel:${esc(phone)}">Call ${esc((e.father_name || e.mother_name || '').split(' ')[0] || 'them')}</a>` : ''}
           ${phone ? `<a href="${waHref(phone, waText)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
           <button id="qa-logcall">Log a call</button>
-          <button id="qa-visit">Visited just now</button>
+          <button id="qa-visit">Visited</button>
         </div></div>`;
     })()}
 
@@ -862,15 +877,26 @@ async function openEnquiry(id){
     };
     if (!patch.father_phone && !patch.mother_phone) { el('pf-msg').innerHTML = '<div class="err">Keep at least one phone number — it is how the family is recognised.</div>'; return false; }
     if (patch.status === 'won' && !e.won_at) patch.won_at = new Date().toISOString();
-    if (patch.visit_at !== e.visit_at) patch.visit_reminder_sent_at = null;   // a moved visit gets a fresh reminder
+    // Compare instants, not strings. The browser builds
+    // "2026-10-15T09:30:00.000Z" and PostgREST returns
+    // "2026-10-15T09:30:00+00:00" — never equal, even when nothing moved. So
+    // every Save cleared the reminder flag, and the cron, which selects on
+    // that flag being null, emailed the family about tomorrow's visit again.
+    const sameVisit = +new Date(patch.visit_at || 0) === +new Date(e.visit_at || 0);
+    if (!sameVisit) patch.visit_reminder_sent_at = null;   // a moved visit gets a fresh reminder
     const { error } = await s.from('enquiry').update(patch).eq('id', id);
     if (error) { el('pf-msg').innerHTML = `<div class="err">${esc(error.message)}</div>`; return false; }
     const evs = [];
     if (patch.status !== e.status) evs.push({ enquiry_id: id, kind: patch.status === 'won' ? 'won' : patch.status === 'lost' ? 'lost' : 'status', summary: `${ENQ_STATUS[e.status]?.l} → ${ENQ_STATUS[patch.status]?.l}${extra.lost_reason ? ' · ' + extra.lost_reason : ''}`, actor: who() });
     if (patch.sentiment !== e.sentiment) evs.push({ enquiry_id: id, kind: 'sentiment', summary: `Sentiment ${e.sentiment ?? '—'} → ${patch.sentiment}`, actor: who() });
-    if (patch.visit_at && patch.visit_at !== e.visit_at) evs.push({ enquiry_id: id, kind: 'visit', summary: `Visit booked for ${dtLocal(patch.visit_at)}`, actor: who() });
+    if (patch.visit_at && !sameVisit) evs.push({ enquiry_id: id, kind: 'visit', summary: `Visit booked for ${dtLocal(patch.visit_at)}`, actor: who() });
     if (patch.first_visit_at && !e.first_visit_at) evs.push({ enquiry_id: id, kind: 'visit', summary: 'Visited the school', actor: who(), at: patch.first_visit_at });
-    if (String(patch.stages) !== String(e.stages)) evs.push({ enquiry_id: id, kind: 'stage', summary: `Stage → ${patch.stages.join(', ') || '—'}`, actor: who() });
+    // Sorted, because the chips come back in declaration order and the
+    // database holds them in the order they were added. Unsorted, adding a
+    // stage from the table made every later Save write a stage event that
+    // recorded no change.
+    const sameStages = String([...patch.stages].sort()) === String([...(e.stages || [])].sort());
+    if (!sameStages) evs.push({ enquiry_id: id, kind: 'stage', summary: `Stage → ${patch.stages.join(', ') || '—'}`, actor: who() });
     if (evs.length) await s.from('enquiry_event').insert(evs);
     enqRefresh(); return true;
   };
@@ -1036,7 +1062,7 @@ function paintWebsite(){
         <div class="row"><div class="l">How fast the cards travel<span class="sub">Seconds for the row to move its own length. Bigger is slower — 90 drifts, 40 is brisk.</span></div>
           <div class="v" style="gap:10px"><input type="range" id="sw-speed" min="20" max="120" step="5" value="${esc(speed)}" style="max-width:200px"><b class="heatn" id="sw-speedn">${esc(speed)}s</b></div></div>
       </div><div class="foot" id="sw-speedmsg">${needVid ? `${needVid} of ${cards.length} cards have no video yet — their WATCH NOW opens a page with only photos.` : 'Every card has a video.'}</div></div>`
-    + (needVid === cards.length || cards.some(placeholder) ? `<div class="grp"><div class="box"><div class="rowx">
+    + (cards.some(placeholder) ? `<div class="grp"><div class="box"><div class="rowx">
         <div class="foot warn" style="margin:0">The artwork on these cards is still the placeholder I generated, not your Canva designs. Open a card and drop the real export in.</div>
       </div></div></div>` : '')
     + `<div class="grp"><h3>Cards</h3><div class="box" id="sw-list">
@@ -1263,7 +1289,7 @@ async function tabEnqReports(){
     + `<div class="grp"><h3>Month by month</h3><div class="panel"><div class="tw"><table>
         <thead><tr><th>Month</th><th>Enquiries</th><th>Visited</th><th>Visit rate</th><th>Form taken</th><th>Won</th><th>Lost</th><th>Still open</th><th>Avg keenness</th></tr></thead>
         <tbody>${j.months.map(r => `<tr>
-          <td class="font-medium">${esc(r.month)}</td>
+          <td style="font-weight:600">${esc(r.month)}</td>
           <td>${bar(r.enquiries, maxMonth)} <b style="margin-left:6px">${r.enquiries}</b></td>
           <td>${r.visited}</td><td class="hint">${pc(r.visited, r.enquiries)}</td>
           <td>${r.form_taken || '—'}</td><td>${r.won || '—'}</td><td>${r.lost || '—'}</td><td>${r.open || '—'}</td>
@@ -1272,7 +1298,7 @@ async function tabEnqReports(){
     + `<div class="grp"><h3>Where they come from</h3><div class="panel"><div class="tw"><table>
         <thead><tr><th>Source</th><th>Enquiries</th><th>Visited</th><th>Visit rate</th><th>Won</th><th>Avg keenness</th></tr></thead>
         <tbody>${j.sources.map(r => `<tr>
-          <td class="font-medium">${esc(r.source)}</td>
+          <td style="font-weight:600">${esc(r.source)}</td>
           <td>${bar(r.enquiries, maxSrc)} <b style="margin-left:6px">${r.enquiries}</b></td>
           <td>${r.visited}</td><td class="hint">${pc(r.visited, r.enquiries)}</td>
           <td>${r.won || '—'}</td><td class="hint">${r.keen ?? '—'}</td></tr>`).join('')}</tbody></table></div></div>
@@ -1285,7 +1311,7 @@ async function tabEnqReports(){
     + `<div class="grp"><h3>Who is doing the work</h3><div class="panel"><div class="tw"><table>
         <thead><tr><th>Who</th><th>Notes written</th><th>Families touched</th><th>Calls logged</th><th>First</th><th>Last</th></tr></thead>
         <tbody>${j.staff.map(r => `<tr>
-          <td class="font-medium">${esc(r.who)}</td><td><b>${r.notes}</b></td><td>${r.enquiries}</td>
+          <td style="font-weight:600">${esc(r.who)}</td><td><b>${r.notes}</b></td><td>${r.enquiries}</td>
           <td>${r.calls || '—'}</td><td class="hint">${esc(r.first)}</td><td class="hint">${esc(r.last)}</td></tr>`).join('')
           || '<tr><td colspan="6" class="hint">Nobody has written a note yet.</td></tr>'}</tbody></table></div></div>
       <div class="foot">Counted from notes and calls, which are the things people actually record. Conversions per person are not here because no enquiry is ever marked won.${j.untouched ? ` <strong>${j.untouched}</strong> enquir${j.untouched === 1 ? 'y has' : 'ies have'} no note from anyone.` : ''}</div></div>`
@@ -1306,9 +1332,9 @@ async function tabEnqReports(){
         <div class="panel"><div class="tw"><table>
           <thead><tr><th>Programme</th><th>Children</th><th>Invoiced</th><th>Collected</th><th>Still due</th><th>Collected</th></tr></thead>
           <tbody>${m.by_programme.map(x => `<tr>
-            <td class="font-medium">${esc(x.programme)}</td><td>${x.children}</td>
+            <td style="font-weight:600">${esc(x.programme)}</td><td>${x.children}</td>
             <td>${inr(x.invoiced)}</td><td>${inr(x.collected)}</td>
-            <td class="${x.due > 0 ? 'text-amber-700' : ''}">${x.due ? inr(x.due) : '—'}</td>
+            <td style="${x.due > 0 ? 'color:var(--orange);font-weight:600' : ''}">${x.due ? inr(x.due) : '—'}</td>
             <td>${bar(x.invoiced, maxP)} <span class="hint" style="margin-left:6px">${x.invoiced ? Math.round(100 * x.collected / x.invoiced) : 0}%</span></td>
           </tr>`).join('')}</tbody></table></div></div>
         <div class="foot">${m.as_of ? 'As EPMS had it on ' + dtLocal(m.as_of) + '.' : ''} ${esc(j.caveats.plan_unmaintained || '')}</div></div>
@@ -1321,7 +1347,7 @@ async function tabEnqReports(){
       ${m.top_owing.length ? `<div class="grp"><h3>Who still owes</h3><div class="panel"><div class="tw"><table>
         <thead><tr><th>Child</th><th>Programme</th><th>Invoiced</th><th>Paid</th><th>Still due</th></tr></thead>
         <tbody>${m.top_owing.map(x => `<tr>
-          <td class="font-medium">${esc(x.name || x.uin)}</td><td class="hint">${esc(x.programme || '')}</td>
+          <td style="font-weight:600">${esc(x.name || x.uin)}</td><td class="hint">${esc(x.programme || '')}</td>
           <td class="hint">${inr(x.invoiced)}</td><td class="hint">${inr(x.collected)}</td>
           <td><b>${inr(x.due)}</b></td></tr>`).join('')}</tbody></table></div></div>
         <div class="foot">The fifteen largest. ${m.families_owing} famil${m.families_owing === 1 ? 'y owes' : 'ies owe'} something.</div></div>` : ''}`;

@@ -30,7 +30,10 @@ export async function POST(req: Request) {
   // The screen already refuses these, but the screen is not the gate: anyone
   // with a session can call this. A voided invoice is not owed and a draft has
   // not been sent to anybody, so neither can receive money.
-  if (action === "pay" || action === "writeoff") {
+  // "unpay" belongs here too: deleting a payment re-runs the balance
+  // calculation, so removing one from a voided invoice made it show as owed
+  // again and put it back into receivables.
+  if (action === "pay" || action === "writeoff" || action === "unpay") {
     if (inv.status === "void") return NextResponse.json({ ok: false, error: "That invoice was voided." }, { status: 409 });
     if (inv.status === "draft") return NextResponse.json({ ok: false, error: "That invoice has not been sent yet." }, { status: 409 });
   }
@@ -54,9 +57,21 @@ export async function POST(req: Request) {
     }
     const { error } = await a.from("daycare_payment").insert({
       invoice_id: id, amount, mode: b.mode, reference: b.reference || null,
-      paid_on: b.paid_on || undefined, note: b.note || null, recorded_by: who.name,
+      paid_on: b.paid_on || undefined, note: b.note ?? undefined, recorded_by: who.name,
     });
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+
+    // Settled at the desk? Then take the payment link down.
+    //
+    // Void and write-off both cancel it; paying did not. So a family who paid
+    // cash at reception could still tap "Pay now" in the invoice email a week
+    // later and pay the whole thing a second time — and the webhook records
+    // what Razorpay reports without a balance check, because the overpay
+    // guard above only runs for people using this screen.
+    const { data: after } = await a.from("daycare_invoice").select("balance_due, razorpay_link_id").eq("id", id).maybeSingle();
+    if (after && Number(after.balance_due) <= 0 && after.razorpay_link_id) {
+      await cancelPaymentLink(after.razorpay_link_id).catch(() => {});
+    }
   }
 
   else if (action === "writeoff") {
@@ -70,7 +85,7 @@ export async function POST(req: Request) {
     // to 600. It oscillated and never reached zero.
     const { error } = await a.from("daycare_invoice")
       .update({ written_off: Number(inv.written_off || 0) + Number(inv.balance_due),
-                note: b.note || null, updated_at: new Date().toISOString() })
+                note: b.note ?? undefined, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     await a.rpc("recalc_daycare_invoice", { p_invoice: id });
