@@ -134,14 +134,22 @@ img, video { max-width: 100%; display: block; }
    Used by every page through <PageHead>. Spacing comes from the scale, so
    the gap between an eyebrow and a headline is the same on all nine pages
    instead of being chosen again each time. */
-.phead { max-width: 20ch; }
+/* A measure is for wide screens only.
+   This block read `.phead { max-width: 20ch }` with the cap lifted at
+   700px — exactly backwards. On a 393px phone 20ch is about 190px, so the
+   whole header sat in half the screen with the headline breaking after two
+   words and a column of white space beside it. A character-count measure
+   is a way of stopping a line getting too long on a desktop; on a phone
+   the screen already does that, and anything narrower than the screen just
+   throws the width away. */
+.phead { max-width: none; }
 .phead .eyebrow + h1 { margin-top: var(--s4); }
 .phead .lead { max-width: 46ch; }
 .phead-after { margin-top: var(--s7); }
-/* The headline wants a short measure; everything under it wants a longer
-   one, so the block is widened only below the h1. */
-.phead h1, .phead .display { max-width: 16ch; }
-@media (min-width: 700px) { .phead { max-width: none; } }
+@media (min-width: 760px) {
+  .phead h1 { max-width: 17ch; }
+  .phead .display { max-width: 14ch; }
+}
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -613,3 +621,26 @@ img, video { max-width: 100%; display: block; }
 }
 .foot-more a { display: inline; padding: 0; opacity: .86; }
 .foot-more a:hover { opacity: 1; }
+
+/* ── key/value rows on a narrow screen ────────────────────────────────
+   Every facts table on the site is a <dl> laid out as a row: label left,
+   value right-aligned. That works from about 520px up. Below it the value
+   has nowhere to go and wraps into a ragged right-aligned stack — "1.5 to
+   5.5 years, plus day care to / 10". On a phone the label and the value
+   each get their own line, left-aligned, which is how a spec sheet is read
+   anyway. */
+@media (max-width: 519px) {
+  .local-facts dl > div,
+  .local-hours dl > div,
+  .contact-hours dl > div,
+  .camp-facts dl > div {
+    display: block;
+  }
+  .local-facts dd,
+  .local-hours dd,
+  .contact-hours dd,
+  .camp-facts dd {
+    text-align: left;
+    margin-top: 2px;
+  }
+}
