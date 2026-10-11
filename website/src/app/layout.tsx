@@ -133,7 +133,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <h4>Come and see us</h4>
                 <a href="tel:+912069622686">020 6962 2686</a>
                 <a href="mailto:admin@eurokidsjmdenclave.org">admin@eurokidsjmdenclave.org</a>
-                <a href="/contact">Where we are</a>
+                <a href="/contact-us">Where we are</a>
                 <a href="#enquire">Book a visit</a>
               </div>
               <div>

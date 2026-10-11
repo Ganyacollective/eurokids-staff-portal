@@ -13,7 +13,7 @@ const LINKS = [
   { href: "https://admin.eurokidsjmdenclave.org/staff", label: "Teachers", external: true },
   { href: "/annual-function", label: "Annual Function" },
   { href: "/pay", label: "Make A Payment" },
-  { href: "/contact", label: "Contact Us" },
+  { href: "/contact-us", label: "Contact Us" },
 ];
 
 export default function Header() {
