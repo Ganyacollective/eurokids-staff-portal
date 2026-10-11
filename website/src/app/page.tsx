@@ -1,7 +1,6 @@
 import CardMarquee from "@/components/CardMarquee";
 import IntakeHead from "@/components/IntakeHead";
 import EnquiryForm from "@/components/EnquiryForm";
-import PageHead from "@/components/PageHead";
 import { listCards, getSetting } from "@/lib/site";
 
 // A safety net, not the mechanism. The hub calls /api/revalidate the moment
@@ -19,38 +18,10 @@ export default async function Home() {
 
   return (
     <>
-      {/* The page had no hero at all — it opened straight onto a moving row
-          of posters. That is why it read as something assembled rather than
-          designed: a visitor arrived with nothing told to them and no
-          hierarchy to follow. One sentence, at the largest size on the
-          scale, and then the posters as evidence for it. */}
-      <section className="hero wrap">
-        <PageHead
-          eyebrow="Admissions open 26–27"
-          title={
-            <>
-              A place your child
-              <br />
-              runs into.
-            </>
-          }
-          lead="Preschool and day care in Undri, Pune. Est. 2017, and trusted by more than three thousand families since."
-          display
-        >
-          <div className="hero-do">
-            <a className="btn btn-solid" href="#enquire">
-              Book a visit
-            </a>
-            <a className="btn btn-quiet" href="tel:+912069622686">
-              020 6962 2686
-            </a>
-          </div>
-        </PageHead>
-      </section>
-
-      {/* A year of the school, scrolling past. A family at the reception
-          tablet sees this before they reach the first question, which is a
-          better introduction than any sentence we could write. */}
+      {/* The posters are the first thing, with nothing above them. I had put
+          a hero here; Abhinav took it out, and he is right that a family at
+          the reception tablet should meet a year of the school before they
+          meet a sentence about it. */}
       <CardMarquee cards={cards} seconds={Number(seconds) || 55} />
 
       <section className="tf-section" id="enquire">

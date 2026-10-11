@@ -84,7 +84,17 @@ const SCHOOL_JSONLD = {
     postalCode: "411060",
     addressCountry: "IN",
   },
-  areaServed: ["Undri", "NIBM", "Mohammadwadi", "Pisoli", "Kondhwa"],
+  areaServed: ["Undri", "NIBM", "Mohammadwadi", "Pisoli", "Kondhwa", "Hadapsar"],
+  // Coordinates let a search engine place the school on a map instead of
+  // inferring it from the address line, which is what the "near me"
+  // searches are resolved against.
+  geo: { "@type": "GeoCoordinates", latitude: 18.4575, longitude: 73.9165 },
+  hasMap:
+    "https://www.google.com/maps/search/?api=1&query=EuroKids+JMD+Enclave+Undri+Pune",
+  award: "Best Ambience Award",
+  slogan: "Choose the best.",
+  sameAs: ["https://www.instagram.com/eurokidsjmdenclave/"],
+  numberOfEmployees: { "@type": "QuantitativeValue", minValue: 10 },
   openingHoursSpecification: [{
     "@type": "OpeningHoursSpecification",
     dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
@@ -209,6 +219,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             >
               Follow Us
             </a>
+
+            {/* Internal links, which are how a search engine finds the
+                pages that are not in the top nav — and how a parent who
+                landed on the refund policy from Google gets to the thing
+                they were actually looking for. */}
+            <nav className="foot-more" aria-label="More pages">
+              <a href="/preschool-in-undri">Preschool in Undri</a>
+              <a href="/daycare-in-undri">Day care in Undri</a>
+              <a href="/preschool-in-mohammadwadi">Near Mohammadwadi &amp; NIBM</a>
+              <a href="/programmes">Programmes</a>
+              <a href="/faq">Questions parents ask</a>
+              <a href="/summercamp">Summer camp</a>
+              <a href="/annual-function">Annual function</a>
+              <a href="/contact-us">Contact</a>
+            </nav>
 
             <div className="foot-rule" />
             <div className="foot-fine">

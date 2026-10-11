@@ -16,6 +16,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const fixed: MetadataRoute.Sitemap = [
     { url: `${SITE}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
+    // The pages that answer a search rather than a visitor who is already
+    // here. Weighted above the event pages for that reason.
+    { url: `${SITE}/preschool-in-undri`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
+    { url: `${SITE}/daycare-in-undri`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
+    { url: `${SITE}/preschool-in-mohammadwadi`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE}/programmes`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE}/faq`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/summercamp`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE}/annual-function`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/contact-us`, lastModified: now, changeFrequency: "yearly", priority: 0.7 },
