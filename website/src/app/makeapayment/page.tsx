@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   title: "Make a payment",
   description:
     "Pay EuroKids JMD Enclave securely — admission form fee, day care and school fees. Cards, UPI, net banking and wallets accepted.",
-  alternates: { canonical: "/pay" },
+  alternates: { canonical: "/makeapayment" },
 };
 
 // The two hosted pages. Kept here rather than in the database because a

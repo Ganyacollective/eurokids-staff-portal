@@ -12,7 +12,7 @@ const LINKS = [
   { href: "/summercamp", label: "Summercamp" },
   { href: "https://admin.eurokidsjmdenclave.org/staff", label: "Teachers", external: true },
   { href: "/annual-function", label: "Annual Function" },
-  { href: "/pay", label: "Make A Payment" },
+  { href: "/makeapayment", label: "Make A Payment" },
   { href: "/contact-us", label: "Contact Us" },
 ];
 

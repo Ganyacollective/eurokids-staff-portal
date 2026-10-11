@@ -19,7 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/summercamp`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE}/annual-function`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE}/contact-us`, lastModified: now, changeFrequency: "yearly", priority: 0.7 },
-    { url: `${SITE}/pay`, lastModified: now, changeFrequency: "yearly", priority: 0.5 },
+    { url: `${SITE}/makeapayment`, lastModified: now, changeFrequency: "yearly", priority: 0.5 },
     { url: `${SITE}/terms-conditions`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE}/refund-cancellation-policy`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
     { url: `${SITE}/privacy-policy`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
@@ -30,7 +30,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let cards: MetadataRoute.Sitemap = [];
   try {
     cards = (await listCards()).map((c) => ({
-      url: `${SITE}/c/${c.slug}`,
+      url: `${SITE}/events/${c.slug}`,
       lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.6,

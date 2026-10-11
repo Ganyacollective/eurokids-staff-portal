@@ -365,12 +365,6 @@ img, video { max-width: 100%; display: block; }
   .foot-awards li { font-size: 13px; }
 }
 
-/* ── making a payment ─────────────────────────────────────────────────────
-   Two choices, and the whole job of this page is that a parent can tell in
-   one glance which one is theirs. The old page gave them two identical blue
-   buttons under two shouted headings, so they picked at random and rang the
-   office. Different kickers, different words, plenty of air, and one action
-   per card. */
 /* ── make a payment ───────────────────────────────────────────────────
    Two buttons. The cards, kickers, example chips and the four-point
    "before you pay" list are gone: all of it sat between a parent and a

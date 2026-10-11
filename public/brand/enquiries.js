@@ -1075,7 +1075,7 @@ function paintWebsite(){
                 : `<div style="width:46px;height:60px;border-radius:6px;background:var(--fill);flex:none"></div>`}
               <div style="min-width:0">
                 <div style="font-weight:600">${esc(c.title)}</div>
-                <span class="sub">/c/${esc(c.slug)} · ${m.length} photo${m.length === 1 ? '' : 's'}
+                <span class="sub">/events/${esc(c.slug)} · ${m.length} photo${m.length === 1 ? '' : 's'}
                   ${c.video_url ? '· video link' : c.video_path ? '· video file' : '· no video'}</span>
               </div>
             </div>
@@ -1128,13 +1128,13 @@ function openCard(id){
   const c = id ? _site.cards.find(x => x.id === id) : null;
   const m = id ? _site.media.filter(x => x.card_id === id) : [];
   const base = _site.base;
-  openDrawer(c ? c.title : 'New card', c ? `/c/${c.slug}` : 'It stays hidden until you publish it.');
+  openDrawer(c ? c.title : 'New card', c ? `/events/${c.slug}` : 'It stays hidden until you publish it.');
   const row = (l, ctl, sub) => `<div class="row"><div class="l">${l}${sub ? `<span class="sub">${sub}</span>` : ''}</div><div class="v">${ctl}</div></div>`;
 
   el('drawer-body').innerHTML = `
     <div class="grp" style="margin-top:0"><h3>The card</h3><div class="box">
       ${row('Title', `<input class="in wide" id="sc-title" value="${esc(c?.title || '')}" placeholder="Sports Day">`)}
-      ${row('Address', `<input class="in wide" id="sc-slug" value="${esc(c?.slug || '')}" placeholder="sports-day">`, 'The bit after /c/ in the link. Leave blank and it follows the title.')}
+      ${row('Address', `<input class="in wide" id="sc-slug" value="${esc(c?.slug || '')}" placeholder="sports-day">`, 'The bit after /events/ in the link. Leave blank and it follows the title.')}
       ${row('Blurb', `<input class="in wide" id="sc-blurb" value="${esc(c?.blurb || '')}" placeholder="One line under the title">`)}
       ${row('Live on the site', `<input type="checkbox" class="sw" id="sc-pub" ${c?.published ? 'checked' : ''}>`, 'Unticked, nobody can reach it even with the link.')}
     </div></div>
@@ -1227,7 +1227,7 @@ function openCard(id){
 
   const del = el('sc-del');
   if (del) del.onclick = async () => {
-    if (!confirm(`Delete “${c.title}”?\n\nThe card, its photos and its video are all removed, and the page at /c/${c.slug} stops existing. This cannot be undone.`)) return;
+    if (!confirm(`Delete “${c.title}”?\n\nThe card, its photos and its video are all removed, and the page at /events/${c.slug} stops existing. This cannot be undone.`)) return;
     const r = await enqApi('/api/site', { action: 'delete_card', id });
     if (!r.ok) return alert(r.error);
     closeDrawer(true); tabWebsite();

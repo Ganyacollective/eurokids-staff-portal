@@ -29,7 +29,7 @@ export default function CardMarquee({ cards, seconds = 90 }: { cards: Card[]; se
           return (
             <Link
               key={`${c.id}-${i}`}
-              href={`/c/${c.slug}`}
+              href={`/events/${c.slug}`}
               className="card"
               aria-hidden={ghost || undefined}
               tabIndex={ghost ? -1 : undefined}

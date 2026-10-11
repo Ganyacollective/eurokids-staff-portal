@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const done = ["/"];
   revalidatePath("/");
-  if (slug) { revalidatePath(`/c/${slug}`); done.push(`/c/${slug}`); }
+  if (slug) { revalidatePath(`/events/${slug}`); done.push(`/events/${slug}`); }
 
   return NextResponse.json({ ok: true, revalidated: done, at: new Date().toISOString() });
 }
