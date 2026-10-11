@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     template: "%s | EuroKids JMD Enclave",
   },
   description:
-    "EuroKids JMD Enclave, Undri — preschool and day care in Pune. Est. 2017, trusted by 3000+ parents, 6,000 sq ft of play area. Admissions open for 26-27.",
+    "EuroKids JMD Enclave, Undri — preschool and day care in Pune. Est. 2017, trusted by 3000+ parents, 5,000 sq ft of play area. Admissions open for 26-27.",
   openGraph: {
     type: "website",
     siteName: "EuroKids JMD Enclave",
