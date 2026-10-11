@@ -60,6 +60,10 @@ img, video { max-width: 100%; display: block; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
 
 .wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--pad); }
+/* Anything that also carries .wrap must set padding-block, never the padding
+   shorthand: the shorthand resets left and right to zero and the text ends up
+   flush against the edge of the phone. That is how six pages shipped without
+   any side margin. */
 
 /* ── header ──────────────────────────────────────────────────────────── */
 .nav {
@@ -281,7 +285,7 @@ img, video { max-width: 100%; display: block; }
 }
 .tf-again:hover { color: var(--brand); border-color: var(--brand); }
 
-.card-page { padding: clamp(26px, 5vw, 56px) 0 clamp(50px, 9vw, 96px); }
+.card-page { padding-block: clamp(26px, 5vw, 56px) clamp(50px, 9vw, 96px); }
 .card-title { font-size: var(--fs-hero); text-align: center; margin-bottom: clamp(20px, 4vw, 40px); }
 .player { border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
 .player iframe, .player video { width: 100%; height: 100%; border: 0; display: block; }
@@ -364,13 +368,14 @@ img, video { max-width: 100%; display: block; }
    payment they had already decided to make, and Razorpay's own page says
    the same things. The two labels now say which is which on their own, so
    nothing sits under them. */
-.pay { padding: 72px 0 96px; max-width: 760px; }
+.pay { padding-block: 64px 96px; max-width: 760px; }
 .pay h1 { font-size: clamp(32px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.025em; margin: 0; }
 .pay-buttons { display: grid; gap: 14px; margin-top: 36px; grid-template-columns: 1fr; }
 @media (min-width: 620px) { .pay-buttons { grid-template-columns: 1fr 1fr; gap: 16px; } }
+@media (min-width: 620px) { .pay-btn { min-height: 108px; padding: 32px 24px; border-radius: 18px; } }
 .pay-btn {
   display: flex; align-items: center; justify-content: center;
-  text-align: center; padding: 32px 24px; border-radius: 18px; min-height: 108px;
+  text-align: center; padding: 26px 22px; border-radius: 16px; min-height: 84px;
   background: #E8352A; color: #fff; text-decoration: none;
   font-size: clamp(18px, 2.4vw, 21px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.25;
   transition: transform .16s ease, box-shadow .16s ease;
@@ -381,7 +386,7 @@ img, video { max-width: 100%; display: block; }
    Nobody wants to read these and everybody has to, so the only kindness on
    offer is legibility: a 68-character measure, generous leading, and headings
    you can scan to find the one clause you came for. */
-.prose-page { padding: 56px 0 80px; max-width: 760px; }
+.prose-page { padding-block: 56px 80px; max-width: 760px; }
 .prose-head h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
 .prose-intro { margin: 16px 0 0; font-size: 17px; line-height: 1.6; color: #3c3c43; }
 .prose-updated { margin: 14px 0 0; font-size: 13.5px; color: #8a8a93; }
@@ -403,7 +408,7 @@ img, video { max-width: 100%; display: block; }
 .prose-foot p { margin: 0; font-size: 15px; line-height: 1.6; color: #3c3c43; }
 
 /* ── contact ─────────────────────────────────────────────────────────── */
-.contact { padding: 56px 0 84px; max-width: 920px; }
+.contact { padding-block: 56px 84px; max-width: 920px; }
 .contact-head h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
 .contact-head p { margin: 14px 0 0; max-width: 54ch; font-size: 16.5px; line-height: 1.6; color: #4a4a52; }
 .contact-grid { display: grid; gap: 14px; margin-top: 34px; grid-template-columns: 1fr; }
@@ -436,7 +441,7 @@ img, video { max-width: 100%; display: block; }
 }
 
 /* ── summer camp and the annual function ─────────────────────────────── */
-.camp { padding: 56px 0 84px; max-width: 920px; }
+.camp { padding-block: 56px 84px; max-width: 920px; }
 .camp-kicker { font-size: 12.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #E8352A; }
 .camp-head h1 { font-size: clamp(32px, 6vw, 50px); line-height: 1.05; letter-spacing: -0.03em; margin: 10px 0 0; }
 .camp-head > p { margin: 16px 0 0; max-width: 56ch; font-size: 17px; line-height: 1.6; color: #4a4a52; }
