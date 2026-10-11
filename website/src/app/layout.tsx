@@ -29,13 +29,24 @@ export const metadata: Metadata = {
   // exactly what was happening on the reception iPad.
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "EuroKids", statusBarStyle: "default" },
+  // Two different marks, deliberately. The tab carries the EuroKids logo,
+  // because a parent with eleven tabs open should be able to find the school
+  // by its badge. The home-screen icon is the blocks mark: a wide wordmark
+  // crushed into a rounded square reads as a smudge at any size a phone uses.
   icons: {
     icon: [
-      { url: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-96.png", sizes: "96x96", type: "image/png" },
     ],
     apple: [{ url: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/apple-touch-icon.png", sizes: "180x180" }],
   },
+  alternates: { canonical: "/" },
+  keywords: [
+    "preschool in Undri", "playschool Undri Pune", "day care Undri",
+    "EuroKids Undri", "nursery admission Pune", "preschool near Nyati",
+    "best preschool Undri", "creche Undri Pune",
+  ],
+  other: { "geo.region": "IN-MH", "geo.placename": "Undri, Pune" },
 };
 
 export const viewport: Viewport = {
@@ -47,10 +58,55 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+// Who this is, in the form a search engine reads.
+//
+// A preschool is a local business before it is a website: the result a parent
+// sees should carry the address, the phone number and the hours, not just a
+// blue link. Every figure here is one the school already says out loud on its
+// own pages — nothing is invented to decorate the markup.
+const SCHOOL_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "Preschool",
+  name: "EuroKids JMD Enclave",
+  alternateName: "EuroKids Undri",
+  url: "https://eurokidsjmdenclave.org",
+  logo: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/eurokids-logo.png",
+  telephone: "+91-20-6962-2686",
+  email: "admin@eurokidsjmdenclave.org",
+  foundingDate: "2017",
+  parentOrganization: { "@type": "Organization", name: "EuroKids International" },
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "JMD Enclave, Undri",
+    addressLocality: "Pune",
+    addressRegion: "Maharashtra",
+    postalCode: "411060",
+    addressCountry: "IN",
+  },
+  areaServed: ["Undri", "NIBM", "Mohammadwadi", "Pisoli", "Kondhwa"],
+  openingHoursSpecification: [{
+    "@type": "OpeningHoursSpecification",
+    dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    opens: "08:00", closes: "18:30",
+  }],
+  hasOfferCatalog: {
+    "@type": "OfferCatalog",
+    name: "Programmes",
+    itemListElement: ["Play Group", "Nursery", "Euro Junior", "Euro Senior", "Day Care", "Summer Camp"]
+      .map((n) => ({ "@type": "Offer", itemOffered: { "@type": "Service", name: n } })),
+  },
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className={`${inter.variable} ${tight.variable}`}>
+        {/* Structured data goes in the document, not in a tag manager: it has
+            to be in the HTML the crawler is handed. */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(SCHOOL_JSONLD) }}
+        />
         <Header />
         <main id="main">{children}</main>
         <footer className="foot">
@@ -89,6 +145,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </div>
 
+            {/* The four claims the old site closed with. They are the reason
+                a parent comparing three preschools picks this one, so they
+                belong above the legal line rather than buried on a page. */}
+            <ul className="foot-awards">
+              <li>Best Ambience Award</li>
+              <li><b>№1</b> Preschool in Undri</li>
+              <li>5,000 sq ft play area</li>
+              <li>200+ five-star reviews</li>
+            </ul>
+
             <div className="foot-rule" />
             <div className="foot-fine">
               <span>
@@ -96,9 +162,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 EuroKids International.
               </span>
               <nav>
-                <a href="/terms">Terms</a>
-                <a href="/refund-policy">Refunds</a>
-                <a href="/privacy">Privacy</a>
+                <a href="/terms-conditions">Terms &amp; Conditions</a>
+                <a href="/refund-cancellation-policy">Refund &amp; Cancellation</a>
+                <a href="/privacy-policy">Privacy Policy</a>
+                <a href="/contact-us">Contact Us</a>
               </nav>
             </div>
           </div>

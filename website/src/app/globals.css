@@ -311,3 +311,40 @@ img, video { max-width: 100%; display: block; }
   flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .foot-fine nav { display: flex; gap: 18px; flex-wrap: wrap; }
 .foot-fine nav a { display: inline; padding: 0; }
+
+/* ── the four claims the school closes with ───────────────────────────────
+   A parent comparing three preschools in Undri decides on these. They sat on
+   the old site's footer and were lost in the rebuild. Laid out as a row that
+   wraps rather than a grid, so four, two or one per line all look deliberate. */
+.foot-awards {
+  list-style: none;
+  margin: 28px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+}
+.foot-awards li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.92);
+}
+/* The laurel, drawn in CSS rather than shipped as two images per claim. */
+.foot-awards li::before,
+.foot-awards li::after {
+  content: "";
+  width: 9px;
+  height: 20px;
+  flex: none;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  border-radius: 10px 0 10px 0;
+}
+.foot-awards li::after { transform: scaleX(-1); }
+.foot-awards li b { font-weight: 700; font-size: 16px; }
+@media (max-width: 560px) {
+  .foot-awards { gap: 8px 18px; }
+  .foot-awards li { font-size: 13px; }
+}
