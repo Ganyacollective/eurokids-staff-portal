@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Inter_Tight } from "next/font/google";
 import Header from "@/components/Header";
+import Reveal from "@/components/Reveal";
 import "./globals.css";
 
 // The two faces the current site uses: Inter Tight for headings, Inter for
@@ -158,6 +159,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(SCHOOL_JSONLD) }}
         />
+        <Reveal />
         <Header />
         <main id="main">{children}</main>
         <footer className="foot">

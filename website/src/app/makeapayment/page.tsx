@@ -13,6 +13,7 @@
 // in the office with somebody who can answer them.
 
 import type { Metadata } from "next";
+import PageHead from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Make a payment",
@@ -30,9 +31,9 @@ const EVERYTHING_ELSE = "https://pages.razorpay.com/pl_QPss3eP6Cae3Pp/view";
 export default function PayPage() {
   return (
     <div className="wrap pay">
-      <h1>Make a payment</h1>
+      <PageHead eyebrow="Fees" title="Make a payment" />
 
-      <div className="pay-buttons">
+      <div className="pay-buttons" data-reveal>
         <a className="pay-btn" href={ADMISSION} target="_blank" rel="noopener noreferrer">
           Pay for admission form
         </a>

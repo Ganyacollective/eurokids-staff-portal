@@ -7,6 +7,7 @@
 // nobody has to remember a separate list.
 
 import type { Metadata } from "next";
+import PageHead from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Summer Camp",
@@ -27,22 +28,19 @@ const DAYS = [
 export default function SummerCamp() {
   return (
     <div className="wrap camp">
-      <header className="camp-head">
-        <span className="camp-kicker">Summer Camp</span>
-        <h1>Somewhere to be, all summer.</h1>
-        <p>
-          Five weeks of water, paint, music and noise for children from 2 to 8 — including
-          children who do not go to school here. Half day or full day, with day care
-          available either side.
-        </p>
-        <a className="camp-btn" href="/#enquire">Put my child&rsquo;s name down</a>
+      <PageHead
+        eyebrow="Summer Camp"
+        title="Somewhere to be, all summer."
+        lead="Five weeks of water, paint, music and noise for children from 2 to 8 — including children who do not go to school here. Half day or full day, with day care available either side."
+      >
+        <a className="btn btn-solid" href="/#enquire">Put my child&rsquo;s name down</a>
         <p className="camp-note">
           Dates for the next camp are not fixed yet. Leave your details and we will call you
           the moment they are, before it opens to everybody else.
         </p>
-      </header>
+      </PageHead>
 
-      <section className="camp-what">
+      <section className="camp-what" data-reveal>
         <h2>What a week looks like</h2>
         <div className="camp-grid">
           {DAYS.map((x) => (
@@ -54,7 +52,7 @@ export default function SummerCamp() {
         </div>
       </section>
 
-      <section className="camp-facts">
+      <section className="camp-facts" data-reveal>
         <dl>
           <div><dt>Ages</dt><dd>2 to 8 years</dd></div>
           <div><dt>Open to</dt><dd>Any child, from any school</dd></div>

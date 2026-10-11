@@ -6,6 +6,7 @@
 // date nobody has agreed.
 
 import type { Metadata } from "next";
+import PageHead from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Annual Function",
@@ -17,21 +18,18 @@ export const metadata: Metadata = {
 export default function AnnualFunction() {
   return (
     <div className="wrap camp">
-      <header className="camp-head">
-        <span className="camp-kicker">Annual Function 26&ndash;27</span>
-        <h1>Every child on that stage.</h1>
-        <p>
-          Not the confident few. Every child in the school gets a part, a costume and a
-          moment in front of their own family — which for most of them is the first time
-          they have stood in front of a crowd and been clapped for.
-        </p>
+      <PageHead
+        eyebrow="Annual Function 26–27"
+        title="Every child on that stage."
+        lead="Not the confident few. Every child in the school gets a part, a costume and a moment in front of their own family — which for most of them is the first time they have stood in front of a crowd and been clapped for."
+      >
         <p className="camp-note">
           The date and venue for 26&ndash;27 have not been announced. Parents of children on
           the roll will hear first, by email and on the WhatsApp group.
         </p>
-      </header>
+      </PageHead>
 
-      <section className="camp-what">
+      <section className="camp-what" data-reveal>
         <h2>How it works</h2>
         <div className="camp-grid">
           <div className="camp-card">
@@ -58,7 +56,7 @@ export default function AnnualFunction() {
         </div>
       </section>
 
-      <section className="camp-facts">
+      <section className="camp-facts" data-reveal>
         <dl>
           <div><dt>Who performs</dt><dd>Every child on the roll</dd></div>
           <div><dt>Rehearsals</dt><dd>During school hours</dd></div>

@@ -8,6 +8,8 @@
 // One component rather than three copies, because the day the address changes
 // it should change in one place.
 
+import PageHead from "@/components/PageHead";
+
 export default function Prose({
   title,
   intro,
@@ -21,11 +23,9 @@ export default function Prose({
 }) {
   return (
     <div className="wrap prose-page">
-      <header className="prose-head">
-        <h1>{title}</h1>
-        {intro ? <p className="prose-intro">{intro}</p> : null}
+      <PageHead eyebrow="Legal" title={title} lead={intro}>
         {updated ? <p className="prose-updated">Last updated {updated}</p> : null}
-      </header>
+      </PageHead>
       <div className="prose">{children}</div>
       <aside className="prose-foot">
         <h2>Still not sure?</h2>

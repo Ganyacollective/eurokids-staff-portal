@@ -7,6 +7,7 @@
 // parent ends up filling in neither.
 
 import type { Metadata } from "next";
+import PageHead from "@/components/PageHead";
 
 export const metadata: Metadata = {
   title: "Contact Us",
@@ -21,15 +22,13 @@ const MAPS =
 export default function ContactUs() {
   return (
     <div className="wrap contact">
-      <header className="contact-head">
-        <h1>Come and see us</h1>
-        <p>
-          The best way to judge a preschool is to stand in it. Walk in any working day —
-          no appointment needed — and somebody will show you around.
-        </p>
-      </header>
+      <PageHead
+        eyebrow="Visit"
+        title="Come and see us"
+        lead="The best way to judge a preschool is to stand in it. Walk in any working day — no appointment needed — and somebody will show you around."
+      />
 
-      <div className="contact-grid">
+      <div className="contact-grid" data-reveal>
         <a className="contact-card" href="tel:+912069622686">
           <span className="contact-kicker">Call the school</span>
           <strong>020 6962 2686</strong>
@@ -55,7 +54,7 @@ export default function ContactUs() {
         </a>
       </div>
 
-      <section className="contact-hours">
+      <section className="contact-hours" data-reveal>
         <div>
           <h2>Opening hours</h2>
           <dl>
@@ -82,7 +81,7 @@ export default function ContactUs() {
         </div>
       </section>
 
-      <section className="contact-cta">
+      <section className="contact-cta" data-reveal>
         <h2>Thinking about admission?</h2>
         <p>
           Tell us about your child and we will have the right person call you back.
