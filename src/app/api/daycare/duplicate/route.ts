@@ -61,6 +61,12 @@ export async function POST(req: Request) {
     await a.from("daycare_invoice_line").insert(lines.map((l) => ({
       invoice_id: copy.id, position: l.position, rate_id: l.rate_id, name: l.name,
       description: l.description, qty: l.qty, rate: l.rate, amount: l.amount,
+      // rate_text carries the exact worked-out rate for an hourly line. Left
+      // out of the copy, a duplicated invoice reprints the rounded figure and
+      // shows 130 × 92.31 = 12,000.30 beside a total of 12,000 — which is the
+      // line an employer's finance team queries, and the whole reason
+      // hours-breakup.ts exists.
+      rate_text: l.rate_text,
       amount_is_fixed: l.amount_is_fixed })));
   }
   return NextResponse.json({ ok: true, id: copy.id });

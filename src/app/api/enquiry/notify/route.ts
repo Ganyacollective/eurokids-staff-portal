@@ -42,6 +42,15 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ ok: false, error: "Not signed in." }, { status: 401 });
 
   const db = admin();
+  // Who may even look.
+  //
+  // This authenticated and then stopped, so any signed-in account -- a
+  // teacher with no grants at all -- could read every hub user's email
+  // address and role. The POST was gated correctly; the GET was not, and
+  // mayEdit was computed here only to colour a button.
+  if (!(await mayEdit(db, user.id))) {
+    return NextResponse.json({ ok: false, error: "Only an admin can see or change who is notified." }, { status: 403 });
+  }
   // The address is on the auth record, not the profile — profiles carries the
   // name and the role and nothing you could send an email to.
   const [{ data: authList }, { data: profs }, { data: prefs }] = await Promise.all([

@@ -44,6 +44,17 @@ export async function POST(req: NextRequest) {
   const { data: lr, error: lrErr } = await admin.from("leave_requests").select("*").eq("id", request_id).single();
   if (lrErr || !lr) return NextResponse.json({ error: "Request not found" }, { status: 404 });
 
+  // It must be your own application.
+  //
+  // The token was checked and then ignored: any signed-in teacher could pass
+  // somebody else's request_id and have the server mail HR that person's
+  // leave type, dates and reason — as often as they liked. HR and admins may
+  // still act for anyone.
+  const { data: me } = await admin.from("profiles").select("role").eq("id", userResult.user.id).maybeSingle();
+  if (lr.user_id !== userResult.user.id && me?.role !== "admin") {
+    return NextResponse.json({ error: "That is not your leave application." }, { status: 403 });
+  }
+
   const { data: link } = await admin.from("teacher_links").select("display_name, department, designation").eq("user_id", lr.user_id).maybeSingle();
   const teacherName = link?.display_name || userResult.user.email || "A staff member";
   const role = link?.designation || link?.department || "";

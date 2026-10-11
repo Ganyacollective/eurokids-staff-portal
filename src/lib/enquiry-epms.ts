@@ -59,9 +59,15 @@ function samePerson(a?: string | null, b?: string | null): "yes" | "maybe" | "no
   return "no";
 }
 
-// Someone who actually joined. Quit and TransferOut are children who left;
-// their enquiry should not be marked won on the strength of a name.
-const JOINED = ["newadmission", "transferin", "carriedforward"];
+// Someone who actually joined.
+//
+// Expressed as what is NOT a joiner, which is how the EPMS pull itself puts
+// it. An allowlist of the four statuses seen today would quietly match
+// nothing the day EuroKids adds a fifth: every enquiry would simply stop
+// closing, and the sync would go on reporting success with closed: 0. A
+// child who left is the thing we actually know how to recognise.
+const LEFT = /quit|transferout|transfer out|withdraw|cancel/i;
+const hasJoined = (status?: string | null) => !!status && !LEFT.test(status);
 
 export async function findAdmitted(admin: SupabaseClient): Promise<{ matches: Match[]; scanned: number; roll: number }> {
   const [{ data: enq }, { data: kids }] = await Promise.all([
@@ -79,7 +85,7 @@ export async function findAdmitted(admin: SupabaseClient): Promise<{ matches: Ma
   // the wrong enquiry is the kind of error nobody ever goes looking for.
   const byName = new Map<string, EpmsChild[]>();
   for (const k of roll) {
-    if (!JOINED.includes(norm(k.student_status).replace(/\s/g, ""))) continue;
+    if (!hasJoined(k.student_status)) continue;
     const n = norm(k.student_name);
     if (!n) continue;
     const list = byName.get(n);

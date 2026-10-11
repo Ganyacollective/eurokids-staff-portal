@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0.1" y1="0" x2="0.8" y2="1">
+      <stop offset="0"   stop-color="#FF5A33"/>
+      <stop offset="0.5" stop-color="#FF2217"/>
+      <stop offset="1"   stop-color="#C90F06"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#fff" stop-opacity="0.20"/>
+      <stop offset="0.42" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD979"/><stop offset="1" stop-color="#FFB224"/>
+    </linearGradient>
+    <linearGradient id="cream" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFE3C2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="114" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="114" fill="url(#sheen)"/>
+
+  <!-- Three blocks, stacked the way a four-year-old stacks them: the top one
+       a little off true. It says "preschool" at sixteen pixels, where an arch
+       turns into a padlock and a wordmark turns to mush. -->
+  <g>
+    <rect x="112" y="286" width="134" height="134" rx="30" fill="url(#cream)"/>
+    <rect x="266" y="286" width="134" height="134" rx="30" fill="url(#amber)"/>
+    <g transform="rotate(-7 256 212)">
+      <rect x="189" y="145" width="134" height="134" rx="30" fill="#fff"/>
+    </g>
+  </g>
+</svg>

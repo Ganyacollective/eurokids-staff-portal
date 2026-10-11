@@ -48,11 +48,20 @@ function diagnose(err: string) {
 // nobody knows has stopped. Every failure leaves a row in epms.sync_runs (so
 // the Overview can show it) and, once, an email.
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization") || "";
-  const dry = req.nextUrl.searchParams.get("dry") === "1";
-  if (CRON_SECRET && auth !== `Bearer ${CRON_SECRET}` && !dry) {
-    return NextResponse.json({ ok: false }, { status: 401 });
+  // The secret is required whatever the query string says.
+  //
+  // This read `if (CRON_SECRET && auth !== ... && !dry)`, so adding ?dry=1
+  // skipped authentication altogether. "dry" only ever meant "do not write
+  // the bookkeeping row" -- the work itself still ran: the EPMS pull with the
+  // service-role key, enquiries flipped to won, and on the reminder crons a
+  // list of parents' email addresses and children's names handed to whoever
+  // asked. A dry run is something an authorised caller does, not a way in.
+  const provided = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
+    || req.nextUrl.searchParams.get("key") || "";
+  if (!CRON_SECRET || provided !== CRON_SECRET) {
+    return NextResponse.json({ ok: false, error: "Unauthorised" }, { status: 401 });
   }
+  const dry = req.nextUrl.searchParams.get("dry") === "1";
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
   const epms = admin.schema("epms");

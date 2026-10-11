@@ -20,7 +20,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ ok: false, error: "This link has expired." }, { status: 410 });
   }
 
-  const data = (l.snapshot as { data: LetterData })?.data;
+  // The signed copy if there is one, the unsigned base otherwise.
+  //
+  // This always rendered snapshot.data, which is the letter BEFORE it was
+  // signed. The signing step writes the finished copy to snapshot.signed, so
+  // "download my signed letter" handed back a document with no signature and
+  // no certificate on it, still printing the "sign here" URL — under a
+  // filename that said "signed" and a date. The header comment above claimed
+  // the opposite was happening.
+  const snap = l.snapshot as { data?: LetterData; signed?: LetterData } | null;
+  const data = snap?.signed ?? snap?.data;
   if (!data) return NextResponse.json({ ok: false, error: "This letter has no content." }, { status: 500 });
 
   const pdf = await renderLetterPdf(data);

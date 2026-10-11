@@ -447,6 +447,83 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 #eq-table tr.t-warn td:first-child{box-shadow:inset 3px 0 0 var(--orange), 1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--orange-wash),var(--orange-wash)),var(--bg-card)}
 #eq-table tr.t-good td:first-child{box-shadow:inset 3px 0 0 var(--green),  1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--green-wash),var(--green-wash)) ,var(--bg-card)}
 
+/* ══ the sentiment slider ══
+   It was the browser's default: one blue bar for a 2 and for a 9. The number
+   is the one judgement a coordinator makes about a family, so it carries its
+   own colour — cold is red, warming is amber, keen is green — and the track
+   fills to show how far along it is without needing to read the figure. */
+input[type="range"].keen-range{
+  -webkit-appearance:none;appearance:none;height:22px;background:transparent;cursor:pointer}
+input[type="range"].keen-range::-webkit-slider-runnable-track{
+  height:6px;border-radius:3px;
+  background:linear-gradient(to right, var(--kc) 0 var(--kp), var(--fill-2) var(--kp) 100%)}
+input[type="range"].keen-range::-moz-range-track{
+  height:6px;border-radius:3px;
+  background:linear-gradient(to right, var(--kc) 0 var(--kp), var(--fill-2) var(--kp) 100%)}
+input[type="range"].keen-range::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.25)}
+input[type="range"].keen-range::-moz-range-thumb{
+  width:16px;height:16px;border:0;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.25)}
+.keen-n{font-size:var(--fs-sub);font-weight:700;font-variant-numeric:tabular-nums;color:var(--kc);min-width:18px;display:inline-block;text-align:right}
+
+/* ══ what to do about this family ══
+   This replaced a tinted panel with a 22px headline and a blue progress bar —
+   the shape every generated admin screen has, which says "a machine laid this
+   out" before it says anything about the family. What a coordinator needs in
+   the first second is three things: where this stands, what happens next, and
+   the phone. So: a line of status, one sentence of plain type, and the
+   actions as a real toolbar. No hero number, no bar, no tint. */
+.snap{padding:2px 0 14px;border-bottom:1px solid var(--sep);margin-bottom:4px}
+.snap-pills{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.snap-next{margin:10px 0 2px;font-size:var(--fs-t2);line-height:var(--lh-t2);font-weight:600;letter-spacing:-.01em;color:var(--label)}
+.snap-next.due{color:var(--red)}
+.snap-next.done{color:#157A3A}
+.snap-meta{font-size:var(--fs-co);color:var(--label-2)}
+.snap-story{margin-top:10px;padding:10px 12px;border-radius:var(--r-ctl);background:var(--fill);
+  font-size:var(--fs-co);line-height:1.5;color:var(--label)}
+.snap-story .lnk{font-style:normal}
+.snap-keen{display:flex;align-items:center;gap:10px;margin-top:12px}
+.snap-keen .cap{font-size:var(--fs-sub);color:var(--label-2);min-width:62px}
+.snap-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.snap-bar a,.snap-bar button{display:inline-flex;align-items:center;gap:7px;font:inherit;
+  font-size:var(--fs-co);font-weight:600;padding:8px 14px;border-radius:var(--r-ctl);border:0;cursor:pointer;
+  text-decoration:none;background:var(--fill);color:var(--label);transition:background .12s}
+.snap-bar a:hover,.snap-bar button:hover{background:var(--fill-2)}
+.snap-bar .pri{background:var(--accent);color:#fff}
+.snap-bar .pri:hover{background:var(--accent-dk)}
+
+/* ══ a note ══
+   Nobody could tell where to type. The box now says so, the button only
+   wakes up when there is something to send, and every entry carries who
+   wrote it and when — stamped on save, so nobody types a date again. */
+.note-new{display:flex;flex-direction:column;gap:8px;padding:12px 16px 12px 0;margin-left:16px}
+.note-new textarea{width:100%;min-height:62px;resize:vertical;background:var(--field);border:0;
+  border-radius:var(--r-ctl);padding:10px 12px;font:inherit;font-size:var(--fs-body);color:var(--label)}
+.note-new textarea:focus{background:#fff;box-shadow:var(--focus);outline:0}
+.note-new .act{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.note-new .who{font-size:var(--fs-sub);color:var(--label-3)}
+.note-item{padding:11px 16px 11px 0;margin-left:16px;border-top:1px solid var(--sep)}
+.note-item:first-of-type{border-top:0}
+.note-head{display:flex;align-items:baseline;gap:8px;font-size:var(--fs-sub);color:var(--label-2);margin-bottom:3px}
+.note-head b{color:var(--label);font-weight:600}
+.note-body{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--label);white-space:pre-wrap}
+
+/* ══ things that fold away ══
+   The duplicate suggestions sat open above the table and pushed the enquiry
+   list off the screen — a helpful feature making the main job harder. It
+   folds now, shut by default, with the count on the summary. */
+details.fold{background:var(--bg-card);border-radius:var(--r-card);box-shadow:var(--shadow-card);margin:12px 0}
+details.fold>summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;align-items:center;gap:10px;
+  font-size:var(--fs-body);font-weight:600;color:var(--label)}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after{content:"›";margin-left:auto;color:var(--label-3);font-size:17px;transition:transform .15s}
+details.fold[open]>summary::after{transform:rotate(90deg)}
+details.fold>summary:hover{background:var(--fill)}
+details.fold[open]>summary{border-bottom:1px solid var(--sep)}
+.fold-body{padding:4px 16px 14px}
+
 /* ══ the enquiry card ══
    The sheet opened as six identical grey boxes, every row the same weight:
    label on the left, control on the right, from "Inquiry status" down to

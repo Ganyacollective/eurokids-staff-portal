@@ -13,9 +13,12 @@ import { resolveLine, sendInvoice, monthsBetween, type LineInput } from "@/lib/d
 // invoice, so a double run, a replay and a person pressing the button at the
 // same moment still produce one.
 export async function GET(req: Request) {
+  // Required, not "required if configured". The old shape left the route
+  // wide open on any deployment where CRON_SECRET had not been set, and a
+  // caller could raise and email a whole month of invoices.
   const secret = process.env.CRON_SECRET;
-  if (secret && (req.headers.get("authorization") || "") !== `Bearer ${secret}`) {
-    return NextResponse.json({ ok: false, error: "No." }, { status: 401 });
+  if (!secret || (req.headers.get("authorization") || "") !== `Bearer ${secret}`) {
+    return NextResponse.json({ ok: false, error: "Unauthorised" }, { status: 401 });
   }
   const a = admin();
   const today = new Date(Date.now() + 19800000).toISOString().slice(0, 10);

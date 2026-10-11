@@ -77,7 +77,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Unique per provider, so a double-tap on Save cannot write the call twice.
-  const callId = `manual-${key}-${at}`;
+  //
+  // To the minute, not the millisecond. When the "when" field is left blank
+  // the browser sends null and `at` becomes the moment the request arrived,
+  // so two taps were two distinct keys and the upsert inserted both -- which
+  // is exactly what this key existed to prevent.
+  const callId = `manual-${key}-${at.slice(0, 16)}`;
   // caller_key is generated from caller by the database — setting it here is
   // rejected outright, which would have been a 500 on the first call anybody
   // logged.
@@ -108,12 +113,18 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (b.follow_up_on) {
-    await tbl.from("enquiry").update({ follow_up_on: b.follow_up_on }).eq("id", enquiryId);
+  // A date, or nothing. An unchecked string reaches a date column, Postgres
+  // refuses it, and the route still answered ok with the call-back quietly
+  // missing.
+  let followUpSet: string | null = null;
+  if (b.follow_up_on && /^\d{4}-\d{2}-\d{2}$/.test(String(b.follow_up_on))) {
+    const { error: fErr } = await tbl.from("enquiry")
+      .update({ follow_up_on: String(b.follow_up_on) }).eq("id", enquiryId);
+    if (!fErr) followUpSet = String(b.follow_up_on);
   }
 
   return NextResponse.json({
-    ok: true, enquiry_id: enquiryId, created,
+    ok: true, enquiry_id: enquiryId, created, follow_up_on: followUpSet,
     family: known ? (known.child_name || known.father_name || phone) : null,
   });
 }

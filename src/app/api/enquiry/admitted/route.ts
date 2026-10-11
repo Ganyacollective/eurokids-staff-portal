@@ -52,10 +52,15 @@ export async function POST(req: NextRequest) {
   // Closing one by hand, from the "not sure" list, after a person has looked.
   if (b.id && b.uin) {
     const now = new Date().toISOString();
-    const { error } = await admin.schema("eurokids").from("enquiry").update({
+    // The update is scoped to open enquiries, so for one already won or lost
+    // it matches no rows and reports no error. Without checking, the route
+    // went on to write "Joined -- on the EuroKids roll" onto a timeline whose
+    // own record said otherwise, and answered ok.
+    const { data: hit, error } = await admin.schema("eurokids").from("enquiry").update({
       status: "won", won_at: now, admitted_uin: String(b.uin), updated_at: now, updated_by: name,
-    }).eq("id", Number(b.id)).in("status", ["in_progress", "form_taken", "almost_lost"]);
+    }).eq("id", Number(b.id)).in("status", ["in_progress", "form_taken", "almost_lost"]).select("id");
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    if (!hit?.length) return NextResponse.json({ ok: false, error: "That enquiry has already been closed." }, { status: 409 });
     await admin.schema("eurokids").from("enquiry_event").insert({
       enquiry_id: Number(b.id), at: now, kind: "won", actor: name,
       summary: `Joined — on the EuroKids roll as ${b.uin}. Confirmed by ${name}.`,

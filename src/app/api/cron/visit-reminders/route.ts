@@ -14,9 +14,20 @@ const RESEND_FROM = process.env.RESEND_FROM || `${SCHOOL_NAME} <admin@eurokidsjm
 // visit booked for tomorrow get "see you at 10 tomorrow" by email, and by
 // WhatsApp once the Business API is connected. Each visit is reminded once.
 export async function GET(req: NextRequest) {
-  const auth = req.headers.get("authorization") || "";
+  // The secret is required whatever the query string says.
+  //
+  // This read `if (CRON_SECRET && auth !== ... && !dry)`, so adding ?dry=1
+  // skipped authentication altogether. "dry" only ever meant "do not write
+  // the bookkeeping row" -- the work itself still ran: the EPMS pull with the
+  // service-role key, enquiries flipped to won, and on the reminder crons a
+  // list of parents' email addresses and children's names handed to whoever
+  // asked. A dry run is something an authorised caller does, not a way in.
+  const provided = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
+    || req.nextUrl.searchParams.get("key") || "";
+  if (!CRON_SECRET || provided !== CRON_SECRET) {
+    return NextResponse.json({ ok: false, error: "Unauthorised" }, { status: 401 });
+  }
   const dry = req.nextUrl.searchParams.get("dry") === "1";
-  if (CRON_SECRET && auth !== `Bearer ${CRON_SECRET}` && !dry) return NextResponse.json({ ok: false }, { status: 401 });
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
   // "tomorrow" in Indian time

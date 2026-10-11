@@ -57,7 +57,8 @@ const who = () => (profile?.full_name || session?.user?.email || '').split('@')[
 // Save one field and leave a trail, so "who changed this, and when" is answerable.
 async function enqPatch(id, patch, note){
   const { error } = await getSb().schema('eurokids').from('enquiry')
-    .update({ ...patch, updated_by: who() }).eq('id', id);
+    // Who and when, on every edit, without anybody having to type it.
+    .update({ ...patch, updated_by: who(), updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { alert('Could not save: ' + error.message); return false; }
   if (note) await getSb().schema('eurokids').from('enquiry_event').insert({ enquiry_id: id, kind: note.kind || 'edit', summary: note.summary, actor: who() });
   enqRefresh(); return true;
@@ -283,10 +284,22 @@ function eqRun(){
   const sel = (id, v, opts, label) => `<select class="in eq-edit" data-f="${id}" style="width:auto;max-width:160px"><option value=""></option>${opts.map(o => `<option value="${esc(o)}" ${v === o ? 'selected' : ''}>${esc(label ? label(o) : o)}</option>`).join('')}</select>`;
   el('eq-rows').innerHTML = list.map(r => `<tr data-id="${r.id}" class="${r.follow_up_due ? 't-warn' : r.status === 'won' ? 't-good' : r.status === 'lost' ? 't-crit' : ''}">
       <td class="eq-open" style="cursor:pointer"><strong>${esc(enqName(r))}</strong>${r.on_roster ? ' <span class="chip c-good">on roll</span>' : ''}<div class="hint">${esc(r.academic_year)} · ${whenAgo(r.created_at)}</div></td>
-      <td style="min-width:120px"><input type="range" class="eq-heat" min="0" max="10" value="${r.sentiment ?? 5}" style="width:80px;height:24px;vertical-align:middle" title="${r.sentiment ?? '—'} / 10"><b class="heatn">${r.sentiment ?? '—'}</b></td>
+      <td style="min-width:132px">${(() => {
+        const v = r.sentiment ?? 5;
+        const c = v >= 7 ? 'var(--green)' : v >= 4 ? 'var(--orange)' : 'var(--red)';
+        return `<span style="display:inline-flex;align-items:center;gap:8px">
+          <input type="range" class="keen-range eq-heat" min="0" max="10" value="${v}"
+                 style="--kc:${c};--kp:${v * 10}%;width:86px" title="${r.sentiment ?? '—'} / 10">
+          <b class="keen-n" style="--kc:${c}">${r.sentiment ?? '—'}</b></span>`;
+      })()}</td>
       <td>${chipList(r.programs, 'c-acc')}</td>
       <td>${sel('status', r.status, ENQ_STATUSES.map(s => s[0]), v => ENQ_STATUS[v]?.l || v)}</td>
-      <td style="white-space:normal;max-width:220px">${chipList(r.stages)}</td>
+      <td style="white-space:normal;max-width:210px">
+        <select class="in eq-stage" style="width:100%;font-size:var(--fs-sub)">
+          <option value="">— add a stage —</option>
+          ${ENQ_STAGES.map(st => `<option value="${esc(st)}" ${(r.stages || []).includes(st) ? 'selected' : ''}>${esc(st)}</option>`).join('')}
+        </select>
+        ${(r.stages || []).length > 1 ? `<div class="hint" style="margin-top:3px">${esc((r.stages || []).slice(0, -1).join(' → '))}</div>` : ''}</td>
       <td>${chipList(r.sources)}</td>
       <td class="hint">${esc(r.father_name || r.mother_name || '—')}</td>
       <td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '<span class="hint">—</span>'}</td>
@@ -309,8 +322,26 @@ function eqRun(){
     const ok = await enqPatch(id, patch, { kind: f === 'status' ? 'status' : 'edit', summary: `${EQ_FIELDS.find(z => z.k === f)?.l || f} → ${v || '—'}` });
     setTimeout(() => { x.style.boxShadow = ''; if (ok) { const row = _eq.rows.find(z => z.id === id); if (row) Object.assign(row, patch); } }, 700);
   });
+  // Adding a stage from the table itself. Opening a family's whole record to
+  // tick "1st Premise Visit" was the commonest reason anybody opened it.
+  el('eq-rows').querySelectorAll('.eq-stage').forEach(x => x.onchange = async () => {
+    const tr = x.closest('tr'), id = Number(tr.dataset.id);
+    const st = x.value; if (!st) return;
+    const row = _eq.rows.find(z => z.id === id);
+    const stages = [...new Set([...(row?.stages || []), st])];
+    x.style.boxShadow = '0 0 0 3px rgba(52,199,89,.4)';
+    const ok = await enqPatch(id, { stages }, { kind: 'stage', summary: `Stage → ${st}` });
+    setTimeout(() => { x.style.boxShadow = ''; if (ok && row) row.stages = stages; }, 700);
+  });
+
   el('eq-rows').querySelectorAll('.eq-heat').forEach(x => {
-    x.oninput = () => { x.nextElementSibling.textContent = x.value; };
+    const n = x.nextElementSibling;
+    const paint = () => {
+      const v = Number(x.value), c = v >= 7 ? 'var(--green)' : v >= 4 ? 'var(--orange)' : 'var(--red)';
+      x.style.setProperty('--kc', c); x.style.setProperty('--kp', v * 10 + '%');
+      n.textContent = v; n.style.setProperty('--kc', c);
+    };
+    x.oninput = paint;
     x.onchange = async () => { const id = Number(x.closest('tr').dataset.id);
       await enqPatch(id, { sentiment: Number(x.value) }, { kind: 'sentiment', summary: `Sentiment → ${x.value}/10` });
       const row = _eq.rows.find(z => z.id === id); if (row) row.sentiment = Number(x.value); };
@@ -547,9 +578,11 @@ async function renderDupeBanner(){
   if (!j.ok) return bar.innerHTML = '';
 
   if (!j.pairs.length) {
-    bar.innerHTML = `<div class="rowx hint" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-      <span>No possible duplicates waiting.</span>
-      <button class="btn line" id="dupe-scan" ${j.ready ? '' : 'disabled title="ANTHROPIC_API_KEY is not set on this deployment."'}>Look for duplicates</button></div>`;
+    bar.innerHTML = `<details class="fold"><summary>Possible duplicate families <span class="chip c-mute">none waiting</span></summary>
+      <div class="fold-body"><div class="hint" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <span>Nothing to look at. Phone numbers already merge on their own; this is for the same family under two different numbers.</span>
+        <button class="btn line" id="dupe-scan" ${j.ready ? '' : 'disabled title="ANTHROPIC_API_KEY is not set on this deployment."'}>Look for duplicates</button>
+      </div></div></details>`;
   } else {
     const nm = e => esc(e.child_name || e.father_name || e.father_phone || ('#' + e.id));
     const side = (e, pid, other) => `<div style="flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:10px">
@@ -559,14 +592,18 @@ async function renderDupeBanner(){
         <div class="hint">${esc(e.address || '')}</div>
         <button class="btn line dupe-keep" data-p="${pid}" data-keep="${e.id}" style="margin-top:8px;width:100%">Keep this one, fold in #${other}</button>
       </div>`;
-    bar.innerHTML = `<div class="grp" style="margin:12px 0"><h3>Possibly the same family (${j.pairs.length})</h3>
+    // Shut by default. Open, it pushed the enquiry list off the screen — a
+    // helpful feature making the main job harder.
+    bar.innerHTML = `<details class="fold"><summary>Possible duplicate families
+        <span class="chip c-warn">${j.pairs.length} waiting</span></summary><div class="fold-body">
       ${j.pairs.map(p => `<div class="box" style="margin-bottom:8px"><div class="rowx">
         <div style="margin-bottom:8px"><span class="chip ${p.confidence >= 85 ? 'c-crit' : p.confidence >= 65 ? 'c-warn' : 'c-mute'}">${p.confidence}% sure</span>
           <span style="margin-left:8px">${esc(p.reason)}</span></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">${side(p.a, p.id, p.b.id)}${side(p.b, p.id, p.a.id)}</div>
         <div style="margin-top:8px"><button class="btn line dupe-no" data-p="${p.id}">They are different families</button></div>
       </div></div>`).join('')}
-      <div class="foot"><button class="btn line" id="dupe-scan" ${j.ready ? '' : 'disabled'}>Look again</button></div></div>`;
+      <div style="padding-top:4px"><button class="btn line" id="dupe-scan" ${j.ready ? '' : 'disabled'}>Look again</button></div>
+      </div></details>`;
   }
 
   const scan = el('dupe-scan');
@@ -623,32 +660,44 @@ async function openEnquiry(id){
         e.intake_photo_at ? ' · ' + dtLocal(e.intake_photo_at) : ''}</div></div>` : ''}
 
     ${(() => {
-      // Where are they, how keen are they, what happens next — before any
-      // form row. The colour is the status, not decoration.
+      // Where this stands, what happens next, and the phone — in that order,
+      // because that is the order a coordinator needs them in.
+      //
+      // What was here was a tinted panel with a 22px headline and a blue
+      // progress bar: the shape every generated admin screen has. It
+      // announced that a machine laid it out before it said anything about
+      // the family. Plain type, real pills, a proper toolbar.
       const keen = e.sentiment ?? 5;
-      const tone = e.status === 'won' ? 'won' : e.status === 'lost' ? 'lost'
-        : e.follow_up_due ? 'warm' : 'open';
-      const kcol = keen >= 7 ? 'var(--orange)' : keen >= 4 ? 'var(--accent)' : 'var(--label-3)';
-      const next = e.on_roster ? 'On the roll 🎉'
+      const kcol = keen >= 7 ? 'var(--green)' : keen >= 4 ? 'var(--orange)' : 'var(--red)';
+      const overdue = e.follow_up_due && !e.on_roster;
+      const next = e.on_roster ? 'On the roll'
+        : e.status === 'won' ? `Joined${e.admitted_uin ? ' · ' + esc(e.admitted_uin) : ''}`
+        : e.status === 'lost' ? `Lost${e.lost_reason ? ' — ' + esc(e.lost_reason) : ''}`
         : e.visit_at && new Date(e.visit_at) > new Date() ? 'Visiting ' + dtLocal(e.visit_at)
         : e.follow_up_on ? (e.follow_up_due ? 'Call them back today' : 'Call back ' + longDate(e.follow_up_on))
         : 'No follow-up set';
-      return `<div class="ecard ${tone}">
-        <div class="ec-top">
+      return `<div class="snap">
+        <div class="snap-pills">
           <span class="chip ${ENQ_STATUS[e.status]?.c || 'c-mute'}">${ENQ_STATUS[e.status]?.l || esc(e.status)}</span>
-          ${(e.stages || []).slice(-1).map(s => `<span class="chip c-mute">${esc(s)}</span>`).join('')}
+          ${(e.stages || []).slice(-1).map(x => `<span class="chip c-mute">${esc(x)}</span>`).join('')}
+          ${(e.programs || []).map(x => `<span class="chip c-acc">${esc(x)}</span>`).join('')}
           ${e.on_roster ? '<span class="chip c-good">on roll</span>' : ''}
-          ${e.has_intake_photo ? '<span class="chip c-mute">photo</span>' : ''}
         </div>
-        <div class="ec-next ${e.follow_up_due && !e.on_roster ? 'due' : ''}">${esc(next)}</div>
-        <div class="ec-m">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
-        <div class="ec-story" id="en-story">${e.ai_summary
-          ? `<span id="en-storytext">${esc(e.ai_summary)}</span> <button class="lnk" id="en-restory" title="Write it again from the latest notes">↻</button>`
-          : `<button class="lnk" id="en-restory">Summarise this family</button>`}</div>
-        <div class="keen"><span class="ec-m">How keen</span>
-          <span class="bar" style="--k:${kcol}"><i style="width:${keen * 10}%"></i></span><b>${keen}/10</b></div>
-        <div class="qa">
-          ${phone ? `<a class="pri" href="tel:${esc(phone)}">Call ${esc(e.father_name || e.mother_name || '')}</a>` : ''}
+        <div class="snap-next ${overdue ? 'due' : (e.status === 'won' || e.on_roster) ? 'done' : ''}">${next}</div>
+        <div class="snap-meta">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
+
+        <div class="snap-keen"><span class="cap">How keen</span>
+          <input type="range" class="keen-range" id="en-sent" min="0" max="10" value="${keen}"
+                 style="--kc:${kcol};--kp:${keen * 10}%;max-width:190px;flex:1">
+          <b class="keen-n" id="en-sentn" style="--kc:${kcol}">${keen}</b></div>
+
+        ${e.ai_summary
+          ? `<div class="snap-story" id="en-story"><span id="en-storytext">${esc(e.ai_summary)}</span>
+               <button class="lnk" id="en-restory" title="Write it again from the latest notes">Rewrite</button></div>`
+          : `<div class="snap-story" id="en-story"><button class="lnk" id="en-restory">Summarise this family in one line</button></div>`}
+
+        <div class="snap-bar">
+          ${phone ? `<a class="pri" href="tel:${esc(phone)}">Call ${esc((e.father_name || e.mother_name || '').split(' ')[0] || 'them')}</a>` : ''}
           ${phone ? `<a href="${waHref(phone, waText)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
           <button id="qa-logcall">Log a call</button>
           <button id="qa-visit">Visited just now</button>
@@ -658,7 +707,6 @@ async function openEnquiry(id){
     <div class="grp"><h3>Where they are</h3><div class="box">
       ${row('Inquiry status', `<select class="in" id="en-status">${ENQ_STATUSES.map(([k, l]) => `<option value="${k}" ${e.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
       ${row('Admission stage', multi('en-stages', e.stages, ENQ_STAGES))}
-      ${row('How keen', `<div style="display:flex;align-items:center;gap:10px;flex:1;justify-content:flex-end"><input type="range" id="en-sent" min="0" max="10" value="${e.sentiment ?? 5}" style="max-width:200px"><b class="heatn" id="en-sentn">${e.sentiment ?? 5}</b></div>`, '0 cold · 10 to be won at any cost')}
       ${row('Follow up on', inp('en-follow', e.follow_up_on, '', 'date'))}
       ${row('Handled by', inp('en-by', e.updated_by, who()))}
       ${row('Academic year', `<select class="in" id="en-ay">${[acadYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
@@ -690,7 +738,11 @@ async function openEnquiry(id){
     </div></div>
 
     <div class="grp"><h3>Notes &amp; timeline</h3><div class="box">
-      <div class="note-in"><textarea class="in" id="en-note" rows="1" placeholder="Add a note — what they said, what you promised"></textarea><button class="btn sm" id="en-addnote">Add</button></div>
+      <div class="note-new">
+        <textarea id="en-note" placeholder="What did they say? What did you promise?"></textarea>
+        <div class="act"><span class="who" id="en-notewho"></span>
+          <button class="btn sm" id="en-addnote" disabled>Add note</button></div>
+      </div>
       <div id="en-timeline"></div>
     </div><div class="foot">Every note keeps its author and time.</div></div>`;
 
@@ -745,9 +797,28 @@ async function openEnquiry(id){
     })();
   }
 
-  el('en-sent').oninput = () => { el('en-sentn').textContent = el('en-sent').value; };
+  // Red, amber, green as it moves — the number is a judgement, so it should
+  // look like one rather than like the browser's default blue for everything.
+  const paintKeen = () => {
+    const v = Number(el('en-sent').value);
+    const c = v >= 7 ? 'var(--green)' : v >= 4 ? 'var(--orange)' : 'var(--red)';
+    el('en-sent').style.setProperty('--kc', c);
+    el('en-sent').style.setProperty('--kp', v * 10 + '%');
+    const n = el('en-sentn'); n.textContent = v; n.style.setProperty('--kc', c);
+  };
+  el('en-sent').oninput = paintKeen;
   el('en-callst').onchange = () => { if (el('en-callst').value && !el('en-calldate').value) el('en-calldate').value = new Date().toISOString().slice(0, 10); };
-  const ta = el('en-note'); ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight) + 'px'; };
+  // The box says what it wants, the button stays asleep until there is
+  // something to send, and the line underneath says who it will be filed
+  // under and when — so nobody types a date into the note itself.
+  const ta = el('en-note');
+  el('en-notewho').textContent = `Will be saved as ${who() || 'you'} · ${dtLocal(new Date().toISOString())}`;
+  ta.oninput = () => {
+    ta.style.height = 'auto'; ta.style.height = Math.min(220, Math.max(62, ta.scrollHeight)) + 'px';
+    el('en-addnote').disabled = !ta.value.trim();
+  };
+  // Cmd/Ctrl+Enter sends, because a textarea swallows Enter.
+  ta.onkeydown = ev => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') el('en-addnote').click(); };
 
   const drawTimeline = () => {
     const items = [
@@ -755,17 +826,24 @@ async function openEnquiry(id){
       ...(events || []).map(x => ({ at: x.at, kind: x.kind, summary: x.summary, actor: x.actor })),
       ...(calls || []).map(c => ({ at: c.started_at, kind: c.status === 'missed' ? 'missed_call' : c.direction === 'outbound' ? 'call_out' : 'call_in', summary: `${c.status === 'missed' ? 'Missed call' : c.direction === 'outbound' ? 'We called' : 'They called'}${c.agent ? ' · ' + c.agent : ''}${c.duration_s ? ' · ' + c.duration_s + 's' : ''}`, actor: c.agent, rec: c.recording_url })),
     ].sort((a, z) => (z.at || '').localeCompare(a.at || ''));
-    el('en-timeline').innerHTML = items.map(x => `<div class="note"><span style="margin-right:6px">${EVENT_ICON[x.kind] || '•'}</span>${esc(x.summary || x.kind)}${x.rec ? ` <a href="${esc(x.rec)}" target="_blank" rel="noopener">▶︎ recording</a>` : ''}
-        <div class="who"><span>${x.noteId ? 'Added by <strong>' + esc(x.actor || 'someone') + '</strong>' : esc(x.actor || 'system')} · ${dtLocal(x.at)}</span>${x.noteId ? `<a href="#" class="en-delnote" data-id="${x.noteId}">Remove</a>` : ''}</div></div>`).join('') || '<div class="note hint">Nothing yet.</div>';
+    el('en-timeline').innerHTML = items.map(x => `<div class="note-item">
+        <div class="note-head"><span>${EVENT_ICON[x.kind] || '•'}</span>
+          <b>${esc(x.actor || 'system')}</b><span>${dtLocal(x.at)}</span>
+          ${x.noteId ? `<a href="#" class="en-delnote" data-id="${x.noteId}" style="margin-left:auto">Remove</a>` : ''}</div>
+        <div class="note-body">${esc(x.summary || x.kind)}${x.rec ? ` <a href="${esc(x.rec)}" target="_blank" rel="noopener">▶︎ recording</a>` : ''}</div>
+      </div>`).join('') || '<div class="note-item hint">Nothing yet.</div>';
     el('en-timeline').querySelectorAll('.en-delnote').forEach(a => a.onclick = async ev => { ev.preventDefault(); if (!confirm('Remove this note?')) return; await s.from('enquiry_note').delete().eq('id', Number(a.dataset.id)); enqRefresh(); openEnquiry(id); });
   };
   drawTimeline();
 
   el('en-addnote').onclick = async () => {
     const text = ta.value.trim(); if (!text) return;
-    const { error } = await s.from('enquiry_note').insert({ enquiry_id: id, body: text, author: who(), created_by: session?.user?.id || null });
-    if (error) return alert('Could not save the note: ' + error.message);
-    await s.from('enquiry').update({ updated_by: who() }).eq('id', id);
+    const btn = el('en-addnote'); btn.disabled = true; btn.textContent = 'Saving…';
+    // The author and the time are the database's job, not the typist's.
+    const { error } = await s.from('enquiry_note').insert({
+      enquiry_id: id, body: text, author: who(), created_by: session?.user?.id || null });
+    if (error) { btn.disabled = false; btn.textContent = 'Add note'; return alert('Could not save the note: ' + error.message); }
+    await s.from('enquiry').update({ updated_by: who(), updated_at: new Date().toISOString() }).eq('id', id);
     ta.value = ''; enqRefresh(); openEnquiry(id);
   };
 

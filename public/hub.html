@@ -10,11 +10,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="EuroKids Hub">
 <link rel="apple-touch-icon" href="/brand/icons/apple-touch-icon.png">
-<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=80">
-<link rel="prefetch" href="/brand/enquiries.js?v=80" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=81">
+<link rel="prefetch" href="/brand/enquiries.js?v=81" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -142,10 +143,12 @@ const TABS = {
   enq_calls:  { app: 'enquiries', label: 'Calls',       icon: 'phone',  sect: 'Enquiries', need: () => has('admission') || has('finance') },
   enq_reports:{ app: 'enquiries', label: 'Reports',     icon: 'list',   sect: 'Enquiries', need: () => has('admission') || has('finance') },
   enq_setup:  { app: 'enquiries', label: 'Setup',       icon: 'gear',   sect: 'Setup',     need: () => isOwner() || has('finance') },
-  // The public website, behind its own permission rather than Admission: a
-  // wrong card here is seen by every parent who looks, and somebody can be
-  // trusted with the enquiry book without being trusted with that.
-  website:    { app: 'enquiries', label: 'Website',     icon: 'globe',  sect: 'Setup',     need: () => has('website') || isOwner() },
+  // The public website is its own application, not a corner of Enquiries.
+  // It sat under Enquiries → Setup, where somebody looking for the website
+  // would never think to go and somebody working the enquiry book kept
+  // finding it by accident. Behind its own permission, too: working the
+  // enquiry book and changing what every parent sees are different jobs.
+  website:    { app: 'website', label: 'Cards',        icon: 'globe',  sect: 'Website',   need: () => has('website') || isOwner() },
   // ── Fees ──
   overview:   { label: 'Overview',      icon: 'house',  sect: 'Fees',          need: () => has('admission') || has('finance') },
   children:   { label: 'Children',      icon: 'people', sect: 'Fees',          need: () => has('finance') || has('admission') },
@@ -187,10 +190,11 @@ const TABS = {
 };
 const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reimbursements', 'Billing', 'School', 'Reference', 'Setup'];
 const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters',
-  billing: 'Day care billing', reimb: 'Reimbursements' };
+  billing: 'Day care billing', reimb: 'Reimbursements', website: 'Website' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
 const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls', 'enq_reports'], letters: ['letters'],
-  billing: ['bill_home', 'bill_customers', 'bill_recurring'], reimb: ['rb_home', 'rb_customers', 'rb_recurring'] };
+  billing: ['bill_home', 'bill_customers', 'bill_recurring'], reimb: ['rb_home', 'rb_customers', 'rb_recurring'],
+  website: ['website'] };
 const tabsFor = a => Object.keys(TABS).filter(t => (TABS[t].app || 'admissions') === (a || 'admissions') && TABS[t].need());
 
 /* ── boot ─────────────────────────────────────────────── */
@@ -341,6 +345,8 @@ function renderChooser(){
   // for Staff Portal, which is a different application altogether.
   if (has('letters')) doors.push({ key:'letters', name:'Appointment Letters',
     desc:'Write, send and track staff appointment letters; signed on their phone.', ok:true, href:null });
+  if (has('website') || isOwner()) doors.push({ key:'website', name:'Website',
+    desc:'The public site: the cards on the front, their artwork, photos and videos.', ok:true, href:null });
   if (isOwner()) doors.push({ key:'users', name:'Users & Access',
     desc:'Accounts for coordinators and HR; what each may open.', ok:true, href:null });
   writeUrl(false);
@@ -6033,7 +6039,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=80"></script>
+<script src="/brand/enquiries.js?v=81"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
