@@ -28,7 +28,8 @@
      Each step is a clamp on the viewport, so the jump from phone to
      desktop is continuous and there is no breakpoint where the type
      suddenly lurches. */
-  --step-s:  clamp(13px, 0.15vw + 12.5px, 14px);   /* captions, eyebrows */
+  --step-xs: clamp(12.5px, 0.1vw + 12.1px, 13.5px); /* fine print, eyebrows */
+  --step-s:  clamp(14px, 0.2vw + 13.4px, 15px);     /* meta, captions */
   --step-0:  clamp(16px, 0.25vw + 15.2px, 17px);   /* body */
   --step-1:  clamp(18px, 0.6vw + 16.2px, 22px);    /* lead paragraph */
   --step-2:  clamp(21px, 1vw + 18px, 27px);        /* h3 */
@@ -96,7 +97,7 @@ h3 { font-size: var(--step-2); line-height: 1.18; letter-spacing: var(--track-h3
    hierarchy being identical everywhere is most of what makes a set of
    pages feel like one site. */
 .eyebrow {
-  font-size: var(--step-s); font-weight: 700; letter-spacing: var(--track-eyebrow);
+  font-size: var(--step-xs); font-weight: 700; letter-spacing: var(--track-eyebrow);
   text-transform: uppercase; color: var(--brand); margin: 0;
 }
 .display { font-size: var(--step-5); line-height: 1.0; letter-spacing: var(--track-display); font-weight: 700; }
@@ -176,12 +177,12 @@ img, video { max-width: 100%; display: block; }
 }
 .nav-in { display: flex; align-items: center; gap: 28px; width: 100%; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: -.02em;
-  text-decoration: none; white-space: nowrap; font-size: 15.5px; }
+  text-decoration: none; white-space: nowrap; font-size: var(--step-s); }
 .brand .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--brand); flex: none; }
 .nav-links { display: none; gap: 26px; margin-left: auto; align-items: center; }
 @media (min-width: 900px) { .nav-links { display: flex; } }
 .nav-links a {
-  text-decoration: none; font-size: 14.5px; color: var(--ink); opacity: .74;
+  text-decoration: none; font-size: var(--step-s); color: var(--ink); opacity: .74;
   position: relative; padding: 4px 0; transition: opacity .18s;
 }
 .nav-links a:hover { opacity: 1; }
@@ -200,7 +201,7 @@ img, video { max-width: 100%; display: block; }
   border-bottom: 1px solid var(--line); padding: 8px var(--pad) 20px;
   display: grid; gap: 2px; z-index: 49;
 }
-.nav-sheet a { text-decoration: none; font-size: 17px; padding: 13px 2px; border-bottom: 1px solid var(--line); }
+.nav-sheet a { text-decoration: none; font-size: var(--step-0); padding: 13px 2px; border-bottom: 1px solid var(--line); }
 .nav-sheet a:last-child { border-bottom: 0; }
 
 /* ── the drifting cards ──────────────────────────────────────────────── */
@@ -272,7 +273,7 @@ img, video { max-width: 100%; display: block; }
   font-size: clamp(25px, 3.4vw, 38px); margin: 0; letter-spacing: -.028em;
   color: var(--ink); font-weight: 600;
 }
-.tf-sub { font-size: 17px; color: #7E635F; margin: 10px 0 0; max-width: 44ch; line-height: 1.5; }
+.tf-sub { font-size: var(--step-0); color: #7E635F; margin: 10px 0 0; max-width: 44ch; line-height: 1.5; }
 
 /* No card. The questions sit on the page, separated from the welcome by a
    single hairline — the only structure the thing needs. */
@@ -295,7 +296,7 @@ img, video { max-width: 100%; display: block; }
 @keyframes tfDown { from { opacity: 0; transform: translateY(-22px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tf-panel.in-up, .tf-panel.in-down { animation: none; } }
 
-.tf-num { margin: 0 0 14px; font-size: 13px; font-weight: 600; color: #B4918B;
+.tf-num { margin: 0 0 14px; font-size: var(--step-xs); font-weight: 600; color: #B4918B;
   display: flex; align-items: center; gap: 6px; letter-spacing: .04em; }
 .tf-q {
   font-size: clamp(26px, 4vw, 42px); font-weight: 600; margin: 0 0 12px;
@@ -303,7 +304,7 @@ img, video { max-width: 100%; display: block; }
   font-family: var(--font-inter-tight), var(--font-inter), system-ui, sans-serif;
 }
 .tf-req { color: var(--brand); font-size: .38em; vertical-align: super; margin-left: 7px; }
-.tf-hint { font-size: 16px; color: #7E635F; margin: 0 0 30px; max-width: 52ch; line-height: 1.5; }
+.tf-hint { font-size: var(--step-0); color: #7E635F; margin: 0 0 30px; max-width: 52ch; line-height: 1.5; }
 
 /* Underlined, not boxed. A box around every field is what makes a form look
    like a form; a rule under the answer looks like something to write on. */
@@ -344,19 +345,19 @@ img, video { max-width: 100%; display: block; }
 .tf-opt:hover { border-color: rgba(60,20,14,.44); }
 .tf-opt[aria-pressed="true"] { border-color: var(--brand); background: #FFF6F5; }
 .tf-opt kbd {
-  font: inherit; font-size: 12.5px; font-weight: 600; width: 26px; height: 26px; flex: none;
+  font: inherit; font-size: var(--step-xs); font-weight: 600; width: 26px; height: 26px; flex: none;
   display: grid; place-items: center; border-radius: 6px;
   background: rgba(60,20,14,.06); color: #8A6A64;
 }
 .tf-opt[aria-pressed="true"] kbd { background: var(--brand); color: #fff; }
 .tf-opt > span:first-of-type { flex: 1; }
-.tf-check { color: var(--brand); font-weight: 700; font-size: 18px; }
-.tf-multi-note { font-size: 14.5px; color: #8A6A64; margin: 16px 0 0; }
+.tf-check { color: var(--brand); font-weight: 700; font-size: var(--step-1); }
+.tf-multi-note { font-size: var(--step-s); color: #8A6A64; margin: 16px 0 0; }
 
 .tf-actions { display: flex; align-items: center; gap: 18px; margin-top: 34px; flex-wrap: wrap; }
 .tf-ok {
   display: inline-flex; align-items: center; gap: 11px;
-  font: inherit; font-weight: 600; font-size: 17px;
+  font: inherit; font-weight: 600; font-size: var(--step-0);
   padding: 15px 32px; border-radius: 8px; border: 0; cursor: pointer;
   background: var(--brand); color: #fff;
   transition: background .15s, opacity .15s;
@@ -364,32 +365,32 @@ img, video { max-width: 100%; display: block; }
 .tf-ok:hover { background: #E31C12; }
 .tf-ok:active { background: #C81710; }
 .tf-ok:disabled { opacity: .45; cursor: default; }
-.tf-enter { font-size: 13.5px; color: #A98A85; }
+.tf-enter { font-size: var(--step-xs); color: #A98A85; }
 .tf-enter strong { font-weight: 600; color: #7E635F; }
 @media (max-width: 760px) { .tf-enter { display: none; } }
 
 .tf-steps { position: absolute; right: 0; top: 0; display: flex; gap: 8px; }
 .tf-steps button {
   width: 44px; height: 42px; border: 1.5px solid rgba(60,20,14,.16); border-radius: 9px;
-  cursor: pointer; background: #fff; color: #7E635F; font-size: 16px; line-height: 1;
+  cursor: pointer; background: #fff; color: #7E635F; font-size: var(--step-0); line-height: 1;
   transition: border-color .14s, color .14s;
 }
 .tf-steps button:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
 .tf-steps button:disabled { opacity: .3; cursor: default; }
 @media (max-width: 600px) { .tf-steps { position: static; margin-top: 26px; } }
 
-.tf-err { color: #9B1C1C; font-size: 15.5px; margin: 20px 0 0; font-weight: 500; }
+.tf-err { color: #9B1C1C; font-size: var(--step-s); margin: 20px 0 0; font-weight: 500; }
 
 .tf-done { padding: clamp(10px, 3vw, 30px) 0 clamp(30px, 5vw, 50px); max-width: 560px; }
 .tf-tick {
   width: 56px; height: 56px; margin: 0 0 24px; border-radius: 50%;
-  background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 26px;
+  background: var(--brand); color: #fff; display: grid; place-items: center; font-size: var(--step-3);
 }
 .tf-done h2 { font-size: clamp(27px, 3.8vw, 40px); margin: 0; letter-spacing: -.03em; }
 /* Quiet, and out of the way. The coordinator presses it when the next family
    arrives; it is not something a parent needs to notice. */
 .tf-again {
-  margin-top: 22px; font: inherit; font-size: 15px; color: #8A6A64;
+  margin-top: 22px; font: inherit; font-size: var(--step-s); color: #8A6A64;
   background: none; border: 0; border-bottom: 1px solid rgba(60,20,14,.28);
   padding: 2px 0; cursor: pointer; transition: color .14s, border-color .14s;
 }
@@ -403,26 +404,26 @@ img, video { max-width: 100%; display: block; }
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
 .gallery figure { margin: 0; border-radius: 10px; overflow: hidden; background: #F1F1F4; }
 .gallery img, .gallery video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
-.gallery figcaption { font-size: 13px; color: var(--muted); padding: 8px 10px 10px; }
+.gallery figcaption { font-size: var(--step-xs); color: var(--muted); padding: 8px 10px 10px; }
 .back { display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
-  font-size: 14.5px; color: var(--muted); margin-bottom: 20px; }
+  font-size: var(--step-s); color: var(--muted); margin-bottom: 20px; }
 .back:hover { color: var(--ink); }
 
 /* ── footer ──────────────────────────────────────────────────────────── */
 .foot { background: var(--brand); color: rgba(255,255,255,.88); padding: clamp(38px,6vw,60px) 0 36px;
-  font-size: 14px; }
+  font-size: var(--step-s); }
 /* Centred, because this is a closing statement rather than a directory.
    The three-column grid that was here served a link list that no longer
    exists. */
 .foot-top { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0; }
-.foot-name { margin: 18px 0 0; font-size: 15px; letter-spacing: .01em; color: #fff; }
+.foot-name { margin: 18px 0 0; font-size: var(--step-s); letter-spacing: .01em; color: #fff; }
 .foot-cta { margin: 6px 0 0; font-size: clamp(26px, 4.6vw, 38px); line-height: 1.12;
   letter-spacing: -0.02em; color: #fff; font-weight: 700; }
-.foot-sub { margin: 8px 0 0; font-size: 17px; color: rgba(255,255,255,.88); }
+.foot-sub { margin: 8px 0 0; font-size: var(--step-0); color: rgba(255,255,255,.88); }
 .foot-follow {
   display: block !important; width: fit-content; margin: 28px auto 0; padding: 11px 26px !important;
   border: 1px solid rgba(255,255,255,.55); border-radius: 999px;
-  font-size: 14.5px; font-weight: 600; color: #fff !important; text-decoration: none;
+  font-size: var(--step-s); font-weight: 600; color: #fff !important; text-decoration: none;
   transition: background .16s ease, border-color .16s ease;
 }
 .foot-follow:hover { background: rgba(255,255,255,.14); border-color: #fff; text-decoration: none !important; }
@@ -432,7 +433,7 @@ img, video { max-width: 100%; display: block; }
 .foot a { color: rgba(255,255,255,.88); text-decoration: none; display: block; padding: 4px 0; }
 .foot a:hover { color: #fff; text-decoration: underline; }
 .foot-rule { height: 1px; background: rgba(255,255,255,.26); margin: 34px 0 18px; }
-.foot-fine { font-size: 12.5px; color: rgba(255,255,255,.78); display: flex; gap: 18px;
+.foot-fine { font-size: var(--step-xs); color: rgba(255,255,255,.78); display: flex; gap: 18px;
   flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .foot-fine nav { display: flex; gap: 18px; flex-wrap: wrap; }
 .foot-fine nav a { display: inline; padding: 0; }
@@ -458,7 +459,7 @@ img, video { max-width: 100%; display: block; }
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 14px;
+  font-size: var(--step-s);
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.92);
 }
@@ -466,10 +467,10 @@ img, video { max-width: 100%; display: block; }
    pseudo-elements that used to live here were a rounded border each, which
    read as stray brackets rather than as a wreath. */
 .foot-awards .laurel { flex: none; opacity: .9; }
-.foot-awards li b { font-weight: 700; font-size: 16px; }
+.foot-awards li b { font-weight: 700; font-size: var(--step-0); }
 @media (max-width: 560px) {
   .foot-awards { gap: 8px 18px; }
-  .foot-awards li { font-size: 13px; }
+  .foot-awards li { font-size: var(--step-xs); }
 }
 
 /* ── make a payment ───────────────────────────────────────────────────
@@ -498,23 +499,23 @@ img, video { max-width: 100%; display: block; }
    you can scan to find the one clause you came for. */
 .prose-page { padding-block: var(--section) var(--section); max-width: 760px; }
 /* .prose-head h1 uses the h1 from the scale. */
-.prose-updated { margin: 0; font-size: 13.5px; color: #8a8a93; }
+.prose-updated { margin: 0; font-size: var(--step-xs); color: #8a8a93; }
 .prose { margin-top: var(--block); }
 .prose h2 {
-  margin: 34px 0 10px; font-size: 19px; line-height: 1.25; letter-spacing: -0.012em;
+  margin: 34px 0 10px; font-size: var(--step-1); line-height: 1.25; letter-spacing: -0.012em;
   padding-top: 20px; border-top: 1px solid rgba(0,0,0,.09);
 }
 .prose h2:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-.prose p { margin: 0 0 13px; font-size: 16px; line-height: 1.65; color: #35353c; max-width: var(--measure); }
+.prose p { margin: 0 0 13px; font-size: var(--step-0); line-height: 1.65; color: #35353c; max-width: var(--measure); }
 .prose ul { margin: 0 0 15px; padding-left: 22px; display: grid; gap: 7px; max-width: var(--measure); }
-.prose li { font-size: 16px; line-height: 1.6; color: #35353c; }
+.prose li { font-size: var(--step-0); line-height: 1.6; color: #35353c; }
 .prose b { font-weight: 650; color: #1d1d1f; }
 .prose a { color: #2B4A9B; }
 .prose-foot {
   margin-top: var(--section); padding: 22px 24px; border-radius: 16px; background: rgba(0,0,0,.04);
 }
-.prose-foot h2 { margin: 0 0 7px; font-size: 16px; }
-.prose-foot p { margin: 0; font-size: 15px; line-height: 1.6; color: #3c3c43; }
+.prose-foot h2 { margin: 0 0 7px; font-size: var(--step-0); }
+.prose-foot p { margin: 0; font-size: var(--step-s); line-height: 1.6; color: #3c3c43; }
 
 /* ── contact ─────────────────────────────────────────────────────────── */
 .contact { padding-block: var(--section) var(--section); max-width: 920px; }
@@ -527,43 +528,43 @@ img, video { max-width: 100%; display: block; }
   box-shadow: 0 0 0 1px rgba(0,0,0,.07); transition: box-shadow .16s, transform .16s;
 }
 .contact-card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(0,0,0,.1), 0 10px 26px -16px rgba(0,0,0,.4); }
-.contact-kicker { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #E8352A; }
-.contact-card strong { font-size: 18px; letter-spacing: -0.01em; word-break: break-word; }
-.contact-sub { font-size: 14px; color: #6b6b73; }
+.contact-kicker { font-size: var(--step-xs); font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #E8352A; }
+.contact-card strong { font-size: var(--step-1); letter-spacing: -0.01em; word-break: break-word; }
+.contact-sub { font-size: var(--step-s); color: #6b6b73; }
 .contact-hours { display: grid; gap: var(--block); margin-top: var(--section); grid-template-columns: 1fr; }
 @media (min-width: 680px) { .contact-hours { grid-template-columns: 1fr 1fr; gap: 44px; } }
-.contact-hours h2 { font-size: 17px; margin: 0 0 12px; letter-spacing: -0.01em; }
+.contact-hours h2 { font-size: var(--step-0); margin: 0 0 12px; letter-spacing: -0.01em; }
 .contact-hours dl { margin: 0; display: grid; gap: 9px; }
 .contact-hours dl > div { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 9px; border-bottom: 1px solid rgba(0,0,0,.08); }
-.contact-hours dt { font-size: 15px; color: #6b6b73; }
-.contact-hours dd { margin: 0; font-size: 15px; font-weight: 600; text-align: right; }
-.contact-hours p { font-size: 15px; line-height: 1.6; color: #3c3c43; margin: 0 0 10px; }
-.contact-fine { font-size: 13.5px; color: #6b6b73; margin-top: 12px; }
+.contact-hours dt { font-size: var(--step-s); color: #6b6b73; }
+.contact-hours dd { margin: 0; font-size: var(--step-s); font-weight: 600; text-align: right; }
+.contact-hours p { font-size: var(--step-s); line-height: 1.6; color: #3c3c43; margin: 0 0 10px; }
+.contact-fine { font-size: var(--step-xs); color: #6b6b73; margin-top: 12px; }
 .contact-link { color: #2B4A9B; font-weight: 600; text-decoration: none; }
 .contact-cta { margin-top: var(--section); padding: 28px 26px; border-radius: 16px; background: #E8352A; color: #fff; }
-.contact-cta h2 { margin: 0; font-size: 22px; letter-spacing: -0.015em; }
-.contact-cta p { margin: 8px 0 18px; font-size: 16px; opacity: .92; }
+.contact-cta h2 { margin: 0; font-size: var(--step-2); letter-spacing: -0.015em; }
+.contact-cta p { margin: 8px 0 18px; font-size: var(--step-0); opacity: .92; }
 .contact-btn {
-  display: inline-block; background: #fff; color: #E8352A; font-weight: 700; font-size: 15px;
+  display: inline-block; background: #fff; color: #E8352A; font-weight: 700; font-size: var(--step-s);
   padding: 11px 20px; border-radius: 999px; text-decoration: none;
 }
 
 /* ── summer camp and the annual function ─────────────────────────────── */
 .camp { padding-block: var(--section) var(--section); max-width: 920px; }
 /* .camp-head h1 uses the h1 from the scale. */
-.camp-note { margin-top: var(--s5); font-size: 14.5px; line-height: 1.55; color: #6b6b73; max-width: 54ch; }
+.camp-note { margin-top: var(--s5); font-size: var(--step-s); line-height: 1.55; color: #6b6b73; max-width: 54ch; }
 .camp-what { margin-top: var(--section); }
-.camp-what h2 { font-size: 20px; letter-spacing: -0.015em; margin: 0 0 18px; }
+.camp-what h2 { font-size: var(--step-2); letter-spacing: -0.015em; margin: 0 0 18px; }
 .camp-grid { display: grid; gap: var(--s3); grid-template-columns: 1fr; }
 @media (min-width: 640px) { .camp-grid { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 980px) { .camp-grid { grid-template-columns: 1fr 1fr 1fr; } }
 .camp-card { padding: 20px 22px; background: #fff; border-radius: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.07); }
-.camp-card h3 { margin: 0 0 6px; font-size: 16.5px; letter-spacing: -0.01em; }
-.camp-card p { margin: 0; font-size: 14.5px; line-height: 1.55; color: #55555e; }
+.camp-card h3 { margin: 0 0 6px; font-size: var(--step-0); letter-spacing: -0.01em; }
+.camp-card p { margin: 0; font-size: var(--step-s); line-height: 1.55; color: #55555e; }
 .camp-facts { margin-top: var(--section); padding: 24px 26px; background: rgba(0,0,0,.04); border-radius: 16px; }
 .camp-facts dl { margin: 0; display: grid; gap: 10px; }
 .camp-facts dl > div { display: flex; justify-content: space-between; gap: 18px; padding-bottom: 10px; border-bottom: 1px solid rgba(0,0,0,.08); }
 .camp-facts dl > div:last-child { border-bottom: 0; padding-bottom: 0; }
-.camp-facts dt { font-size: 15px; color: #6b6b73; }
-.camp-facts dd { margin: 0; font-size: 15px; font-weight: 600; text-align: right; }
+.camp-facts dt { font-size: var(--step-s); color: #6b6b73; }
+.camp-facts dd { margin: 0; font-size: var(--step-s); font-weight: 600; text-align: right; }
 .camp-facts a { color: #2B4A9B; }
