@@ -23,7 +23,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const art = mediaUrl(found.card.artwork_path);
   return {
     title: found.card.title,
-    description: found.card.blurb || `${found.card.title} at EuroKids JMD Enclave, Undri.`,
+    // The fallback was "<Title> at EuroKids JMD Enclave, Undri." — 41
+    // characters, which is a description in name only: too thin for a
+    // search result and nothing for an answer engine to extract. If the
+    // hub has not been given a blurb, say something that stands on its own.
+    description:
+      found.card.blurb ||
+      `${found.card.title} at EuroKids JMD Enclave, the preschool and day care in Undri, Pune. Photos from the day, and what the children did.`,
     openGraph: {
       title: found.card.title,
       description: found.card.blurb || undefined,
@@ -96,6 +102,20 @@ export default async function CardPage({ params }: { params: Promise<{ slug: str
           </p>
         )}
       </div>
+
+      {/* An event page is where a parent lands from a shared photo link.
+          Without this it is a dead end — for them, and for a crawler that
+          has just found fourteen pages with no route to the rest of the
+          site. */}
+      <aside className="event-more wrap">
+        <h2>About the school</h2>
+        <p>
+          EuroKids JMD Enclave is a <a href="/preschool-in-undri">preschool in Undri, Pune</a>,
+          with <a href="/daycare-in-undri">day care until 6:30 PM</a> in the same building.
+          Admissions are open for 26&ndash;27 — <a href="/programmes">see the programmes</a>,{" "}
+          <a href="/faq">read what parents ask</a>, or walk in on any working morning.
+        </p>
+      </aside>
     </article>
   );
 }

@@ -16,7 +16,7 @@ import { SCHOOL } from "@/lib/local";
 export const metadata: Metadata = {
   title: "Which EuroKids in Undri? JMD Enclave, explained",
   description:
-    "There is more than one EuroKids near Undri. This is the JMD Enclave centre — Bungalow 1, off Hanewadi Road, beside the Corinthians Club. How to tell it apart and how to reach us.",
+    "There is more than one EuroKids near Undri. This is the JMD Enclave centre — Bungalow 1, beside the Corinthians Club. How to tell them apart.",
   alternates: { canonical: "/which-eurokids-in-undri" },
   keywords: [
     "EuroKids Undri",

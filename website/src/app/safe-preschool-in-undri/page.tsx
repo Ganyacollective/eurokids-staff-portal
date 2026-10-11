@@ -23,7 +23,7 @@ import { SCHOOL } from "@/lib/local";
 export const metadata: Metadata = {
   title: "A safe preschool in Undri — off the main road",
   description:
-    "Why being inside JMD Enclave rather than on the main Undri road matters for a three-year-old: no gate onto traffic, one supervised entrance, and 5,000 sq ft of enclosed outdoor play.",
+    "Why being off the main road matters for a three-year-old: no door onto traffic, one supervised entrance, and 5,000 sq ft of enclosed outdoor play.",
   alternates: { canonical: "/safe-preschool-in-undri" },
   keywords: [
     "safe preschool Undri",

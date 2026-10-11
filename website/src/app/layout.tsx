@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Inter_Tight } from "next/font/google";
 import Header from "@/components/Header";
 import Reveal from "@/components/Reveal";
+import Crumbs from "@/components/Crumbs";
 import "./globals.css";
 
 // The two faces the current site uses: Inter Tight for headings, Inter for
@@ -182,7 +183,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <Reveal />
         <Header />
-        <main id="main">{children}</main>
+        <main id="main">
+          <Crumbs />
+          {children}
+        </main>
         <footer className="foot">
           <div className="wrap">
             {/* The footer that is live on Framer, rebuilt. I had replaced it
@@ -241,6 +245,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/preschool-in-mohammadwadi">Near Mohammadwadi &amp; NIBM</a>
               <a href="/programmes">Programmes</a>
               <a href="/faq">Questions parents ask</a>
+              <a href="/how-to-choose-a-preschool-in-undri">Choosing a preschool</a>
+              <a href="/safe-preschool-in-undri">Safety</a>
+              <a href="/which-eurokids-in-undri">Which EuroKids</a>
+              <a href="/preschool-for-2-year-olds-in-undri">For 2 year olds</a>
               <a href="/summercamp">Summer camp</a>
               <a href="/annual-function">Annual function</a>
               <a href="/contact-us">Contact</a>

@@ -70,6 +70,8 @@ ${PROGRAMMES.map((p) => `- **${p.name}** (${p.age}, ${p.hours}) — ${p.blurb}`)
 - [Safety and why the road matters](${SITE}/safe-preschool-in-undri)
 - [Programmes](${SITE}/programmes)
 - [Questions parents ask](${SITE}/faq)
+- [How to choose a preschool in Undri](${SITE}/how-to-choose-a-preschool-in-undri)
+- [Preschool for 2 year olds](${SITE}/preschool-for-2-year-olds-in-undri)
 - [Contact](${SITE}/contact-us)
 
 ## Notes for anyone summarising this site
