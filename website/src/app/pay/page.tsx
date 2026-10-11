@@ -7,8 +7,8 @@
 // and a payment they already decided to make. Everything that was in that
 // list is on the Razorpay page anyway.
 //
-// The one thing kept is a single line under each button saying which is
-// which, because the original complaint was parents picking the wrong one.
+// The labels say the whole thing — "Pay for the admission form", "Pay for
+// day care or anything else" — so they need nothing underneath them.
 
 import type { Metadata } from "next";
 
@@ -32,12 +32,10 @@ export default function PayPage() {
 
       <div className="pay-buttons">
         <a className="pay-btn" href={ADMISSION} target="_blank" rel="noopener noreferrer">
-          Admission form fee
-          <small>For a new admission</small>
+          Pay for admission form
         </a>
         <a className="pay-btn" href={EVERYTHING_ELSE} target="_blank" rel="noopener noreferrer">
-          Fees &amp; day care
-          <small>Everything else</small>
+          Pay for daycare or others
         </a>
       </div>
 

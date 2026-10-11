@@ -359,21 +359,20 @@ img, video { max-width: 100%; display: block; }
    Two buttons. The cards, kickers, example chips and the four-point
    "before you pay" list are gone: all of it sat between a parent and a
    payment they had already decided to make, and Razorpay's own page says
-   the same things. The single line under each button stays, because the
-   complaint that started this was parents pressing the wrong one. */
+   the same things. The two labels now say which is which on their own, so
+   nothing sits under them. */
 .pay { padding: 72px 0 96px; max-width: 760px; }
 .pay h1 { font-size: clamp(32px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.025em; margin: 0; }
 .pay-buttons { display: grid; gap: 14px; margin-top: 36px; grid-template-columns: 1fr; }
 @media (min-width: 620px) { .pay-buttons { grid-template-columns: 1fr 1fr; gap: 16px; } }
 .pay-btn {
-  display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;
-  text-align: center; padding: 30px 24px; border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 32px 24px; border-radius: 18px; min-height: 108px;
   background: #E8352A; color: #fff; text-decoration: none;
-  font-size: 20px; font-weight: 700; letter-spacing: -0.015em;
+  font-size: clamp(18px, 2.4vw, 21px); font-weight: 700; letter-spacing: -0.015em; line-height: 1.25;
   transition: transform .16s ease, box-shadow .16s ease;
 }
 .pay-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -14px rgba(232,53,42,.75); }
-.pay-btn small { font-size: 14px; font-weight: 500; opacity: .85; letter-spacing: 0; }
 .pay-fine { margin: 26px 0 0; font-size: 15px; line-height: 1.5; color: #6b6b73; }
 .pay-fine a { color: #2B4A9B; font-weight: 600; }
 
