@@ -348,17 +348,10 @@ img, video { max-width: 100%; display: block; }
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.92);
 }
-/* The laurel, drawn in CSS rather than shipped as two images per claim. */
-.foot-awards li::before,
-.foot-awards li::after {
-  content: "";
-  width: 9px;
-  height: 20px;
-  flex: none;
-  border: 1.5px solid rgba(255, 255, 255, 0.5);
-  border-radius: 10px 0 10px 0;
-}
-.foot-awards li::after { transform: scaleX(-1); }
+/* The laurel is an inline SVG now — see <Laurel> in layout.tsx. The pair of
+   pseudo-elements that used to live here were a rounded border each, which
+   read as stray brackets rather than as a wreath. */
+.foot-awards .laurel { flex: none; opacity: .9; }
 .foot-awards li b { font-weight: 700; font-size: 16px; }
 @media (max-width: 560px) {
   .foot-awards { gap: 8px 18px; }

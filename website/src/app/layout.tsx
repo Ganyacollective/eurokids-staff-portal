@@ -97,6 +97,57 @@ const SCHOOL_JSONLD = {
   },
 };
 
+// Half a laurel wreath, drawn rather than shipped as an image.
+//
+// The first version of this was two CSS pseudo-elements with a rounded corner
+// each, which read as stray brackets around the text rather than as laurels.
+// A branch needs a stem and leaves, and that is a path, not a border radius.
+//
+// One component, mirrored with a transform for the right-hand side, so the two
+// sides can never drift apart.
+function Laurel({ flip = false }: { flip?: boolean }) {
+  // Six leaves climbing the outside of the stem. Each is the same ellipse,
+  // walked up the curve and turned to sit against it.
+  const leaves: Array<[number, number, number]> = [
+    [11.5, 37, -62],
+    [8.4, 31, -74],
+    [6.6, 24.5, -86],
+    [6.4, 18, -98],
+    [8, 11.8, -112],
+    [11, 6.4, -126],
+  ];
+  return (
+    <svg
+      className="laurel"
+      viewBox="0 0 22 44"
+      width="13"
+      height="26"
+      aria-hidden="true"
+      style={flip ? { transform: "scaleX(-1)" } : undefined}
+    >
+      <path
+        d="M16.5 42.5C8.5 37 5 29 5.6 20.5 6.1 12.6 10.4 6 16 1.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        opacity="0.9"
+      />
+      {leaves.map(([x, y, a], i) => (
+        <ellipse
+          key={i}
+          cx="0"
+          cy="0"
+          rx="4.1"
+          ry="1.85"
+          fill="currentColor"
+          transform={`translate(${x} ${y}) rotate(${a})`}
+        />
+      ))}
+    </svg>
+  );
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -134,10 +185,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 a parent comparing three preschools picks this one, so they
                 belong above the legal line rather than buried on a page. */}
             <ul className="foot-awards">
-              <li>Best Ambience Award</li>
-              <li><b>№1</b> Preschool In Undri</li>
-              <li>5000 Sqft Play Area</li>
-              <li>200+ 5-star reviews</li>
+              {[
+                <>Best Ambience Award</>,
+                <><b>№1</b> Preschool In Undri</>,
+                <>5000 Sqft Play Area</>,
+                <>200+ 5-star reviews</>,
+              ].map((claim, i) => (
+                <li key={i}>
+                  <Laurel />
+                  <span>{claim}</span>
+                  <Laurel flip />
+                </li>
+              ))}
             </ul>
 
             <a
