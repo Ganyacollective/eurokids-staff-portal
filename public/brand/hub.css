@@ -32,10 +32,17 @@
   --field:#F1F1F4; --field-focus:#fff;
   --shadow-card:0 0 0 1px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.04),0 6px 20px -12px rgba(0,0,0,.12);
   --c-fees:#0A7AFF; --c-comm:#AF52DE; --c-ref:#2AA198; --c-setup:#8E8E93;
-  --accent:#0A7AFF; --accent-dk:#0068E0; --accent-wash:rgba(10,122,255,.10);
-  --red:#E5343A; --red-wash:rgba(255,56,60,.10); --orange:#D9770A; --orange-wash:rgba(255,141,40,.14);
-  --green:#1F9D4A; --green-wash:rgba(52,199,89,.13);
-  --brand:#FF2217;
+  /* The school's own blue, taken from the JMD Enclave logo, not Apple's.
+     An admin tool in default iOS blue looks like every other admin tool;
+     this one belongs to a particular school and should say so. */
+  --accent:#2B4A9B; --accent-dk:#213B7E; --accent-wash:rgba(43,74,155,.10);
+  /* Right, wrong, warm, cold — read the way people already read colour, in
+     natural tones rather than the neon a dashboard reaches for. Each is dark
+     enough to put text on and muted enough to sit beside the others. */
+  --red:#C0392B; --red-wash:rgba(192,57,43,.10);
+  --orange:#B9741A; --orange-wash:rgba(185,116,26,.13);
+  --green:#1E7A45; --green-wash:rgba(30,122,69,.12);
+  --brand:#E8352A;
   --r-card:12px; --r-ctl:8px; --r-sheet:14px;
   --focus:0 0 0 3px rgba(10,122,255,.4);
   --sidebar:240px; --tbar:52px;
@@ -170,8 +177,8 @@ input[type=checkbox]:not(.sw){width:16px;height:16px;accent-color:var(--accent);
 .seg button.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04);font-weight:600}
 /* chips: status (static) and filter (pressable) */
 .chip{display:inline-flex;align-items:center;gap:5px;border:0;font-size:var(--fs-sub);font-weight:600;padding:2px 8px;border-radius:999px;line-height:1.4;white-space:nowrap}
-.c-good{background:var(--green-wash);color:#157A3A} .c-warn{background:var(--orange-wash);color:#8A4B00}
-.c-crit{background:var(--red-wash);color:#B3232A} .c-mute{background:var(--fill);color:var(--label-2)} .c-acc{background:var(--accent-wash);color:var(--accent)}
+.c-good{background:var(--green-wash);color:#176138} .c-warn{background:var(--orange-wash);color:#8A5410}
+.c-crit{background:var(--red-wash);color:#A32B20} .c-mute{background:var(--fill);color:var(--label-2)} .c-acc{background:var(--accent-wash);color:var(--accent)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips .chip{cursor:pointer;background:#fff;color:var(--label);font-weight:500;padding:5px 12px;min-height:30px;user-select:none;box-shadow:0 0 0 1px rgba(0,0,0,.1);font-size:var(--fs-co)}
 .chips .chip:hover{background:#F5F5F7}
