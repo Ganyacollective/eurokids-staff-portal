@@ -355,43 +355,27 @@ img, video { max-width: 100%; display: block; }
    buttons under two shouted headings, so they picked at random and rang the
    office. Different kickers, different words, plenty of air, and one action
    per card. */
-.pay { padding: 56px 0 88px; max-width: 920px; }
-.pay-head h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
-.pay-head p { margin: 14px 0 0; max-width: 56ch; font-size: 16px; line-height: 1.6; color: #4a4a52; }
-
-.pay-grid { display: grid; gap: 18px; margin-top: 34px; grid-template-columns: 1fr; }
-@media (min-width: 760px) { .pay-grid { grid-template-columns: 1fr 1fr; } }
-
-.pay-card {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 26px 24px 22px;
-  background: #fff; border-radius: 16px; text-decoration: none; color: inherit;
-  box-shadow: 0 0 0 1px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.03);
-  transition: box-shadow .16s ease, transform .16s ease;
+/* ── make a payment ───────────────────────────────────────────────────
+   Two buttons. The cards, kickers, example chips and the four-point
+   "before you pay" list are gone: all of it sat between a parent and a
+   payment they had already decided to make, and Razorpay's own page says
+   the same things. The single line under each button stays, because the
+   complaint that started this was parents pressing the wrong one. */
+.pay { padding: 72px 0 96px; max-width: 760px; }
+.pay h1 { font-size: clamp(32px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.025em; margin: 0; }
+.pay-buttons { display: grid; gap: 14px; margin-top: 36px; grid-template-columns: 1fr; }
+@media (min-width: 620px) { .pay-buttons { grid-template-columns: 1fr 1fr; gap: 16px; } }
+.pay-btn {
+  display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center;
+  text-align: center; padding: 30px 24px; border-radius: 18px;
+  background: #E8352A; color: #fff; text-decoration: none;
+  font-size: 20px; font-weight: 700; letter-spacing: -0.015em;
+  transition: transform .16s ease, box-shadow .16s ease;
 }
-.pay-card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(0,0,0,.09), 0 10px 28px -14px rgba(0,0,0,.3); }
-.pay-kicker { font-size: 12.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #E8352A; }
-.pay-card h2 { font-size: 22px; line-height: 1.2; letter-spacing: -0.015em; margin: 0; }
-.pay-card > p { margin: 0; font-size: 15px; line-height: 1.55; color: #4a4a52; }
-.pay-card ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.pay-card ul li {
-  font-size: 13px; padding: 3px 10px; border-radius: 999px;
-  background: rgba(0,0,0,.05); color: #3c3c43;
-}
-.pay-go {
-  margin-top: auto; padding-top: 16px;
-  display: inline-flex; align-items: center; gap: 7px;
-  font-size: 15px; font-weight: 700; color: #2B4A9B;
-}
-.pay-card:hover .pay-go svg { transform: translateX(3px); }
-.pay-go svg { transition: transform .16s ease; }
-
-.pay-note { margin-top: 42px; padding: 24px 24px 20px; background: rgba(0,0,0,.035); border-radius: 16px; }
-.pay-note h3 { margin: 0 0 12px; font-size: 16px; letter-spacing: -0.01em; }
-.pay-note ul { margin: 0; padding-left: 20px; display: grid; gap: 9px; }
-.pay-note li { font-size: 15px; line-height: 1.55; color: #3c3c43; }
-.pay-note b { font-weight: 650; color: #1d1d1f; }
-.pay-fine { margin: 16px 0 0; font-size: 13.5px; line-height: 1.5; color: #6b6b73; }
+.pay-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -14px rgba(232,53,42,.75); }
+.pay-btn small { font-size: 14px; font-weight: 500; opacity: .85; letter-spacing: 0; }
+.pay-fine { margin: 26px 0 0; font-size: 15px; line-height: 1.5; color: #6b6b73; }
+.pay-fine a { color: #2B4A9B; font-weight: 600; }
 
 /* ── written pages: terms, privacy, refunds ──────────────────────────────
    Nobody wants to read these and everybody has to, so the only kindness on
