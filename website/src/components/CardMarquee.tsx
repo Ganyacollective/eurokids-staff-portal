@@ -179,7 +179,7 @@ export default function CardMarquee({
               {art && (
                 <img
                   src={art}
-                  alt={ghost ? "" : c.title}
+                  alt={ghost ? "" : `${c.title} at EuroKids JMD Enclave preschool, Undri, Pune`}
                   loading={i < 4 ? "eager" : "lazy"}
                   decoding="async"
                   draggable={false}

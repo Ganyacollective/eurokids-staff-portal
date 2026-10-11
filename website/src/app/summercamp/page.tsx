@@ -59,7 +59,7 @@ export default function SummerCamp() {
           <div><dt>Timings</dt><dd>Half day or full day</dd></div>
           <div><dt>Day care</dt><dd>Available before and after camp</dd></div>
           <div><dt>Where</dt><dd>JMD Enclave, Undri — 5,000 sq ft of play area</dd></div>
-          <div><dt>Fees</dt><dd>Call the office on <a href="tel:+912069622686">020 6962 2686</a></dd></div>
+          <div><dt>Fees</dt><dd>Call the office on <a href="tel:+912269622686">022 6962 2686</a></dd></div>
         </dl>
       </section>
     </div>

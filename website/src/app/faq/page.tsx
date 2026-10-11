@@ -27,7 +27,7 @@ const QA: Array<{ q: string; a: React.ReactNode; plain: string; g?: string }> = 
   {
     q: "How much are the fees?",
     plain:
-      "Fees depend on the programme and whether day care is included. Call the office on 020 6962 2686 and we will give you the exact figure for your child's year, with nothing added later.",
+      "Fees depend on the programme and whether day care is included. Call the office on 022 6962 2686 and we will give you the exact figure for your child's year, with nothing added later.",
     a: (
       <>
         It depends on the programme and whether you need day care. Call the office on{" "}
@@ -123,8 +123,8 @@ const QA: Array<{ q: string; a: React.ReactNode; plain: string; g?: string }> = 
   },
   // ── Safety ──
   { g:"Safety", q:"Is the school on the main road?",
-    plain:"No. EuroKids JMD Enclave is inside the JMD Enclave residential society, off Hanewadi Road in Undri. You turn off the main road to reach it.",
-    a:<>No. We are inside the JMD Enclave society off Hanewadi Road, so no door opens onto traffic. More on <a href="/safe-preschool-in-undri">why that matters</a>.</> },
+    plain:"No. EuroKids JMD Enclave is off the main road — you turn off Hanewadi Road in Undri to reach it, so no classroom door opens onto traffic.",
+    a:<>No. You turn off Hanewadi Road to reach us, so no door opens onto traffic. More on <a href="/safe-preschool-in-undri">why that matters</a>.</> },
   { g:"Safety", q:"Can I visit without telling you first?",
     plain:"Yes. Walk in on any working morning between 8:30 AM and 12:30 PM. You can ask to see the kitchen and the toilets without notice.",
     a:<>Yes, and you should. Walk in on a working morning and ask to see the kitchen and the toilets with no notice. A school that minds is telling you something.</> },
@@ -134,12 +134,19 @@ const QA: Array<{ q: string; a: React.ReactNode; plain: string; g?: string }> = 
   { g:"Safety", q:"What happens if my child is hurt?",
     plain:"Staff deal with it immediately and the office calls the parent the same day, not at pick-up time.",
     a:<>We deal with it, then we ring you — the same day, not when you arrive at collection. You should hear it from us first.</> },
+  // ── The school ──
+  { g:"The school", q:"Who runs EuroKids JMD Enclave?",
+    plain:"Neeta Saxena is the founder of EuroKids JMD Enclave in Undri, Pune. She is usually in the building on a working morning.",
+    a:<>The founder is <b>Neeta Saxena</b>. She is usually in the building on a working morning — if you want to ask somebody the hard questions about the school, ask her rather than us.</> },
+  { g:"The school", q:"How long has the school been open?",
+    plain:"EuroKids JMD Enclave opened in 2017 in Undri, Pune.",
+    a:<>Since {SCHOOL.founded}. Long enough that the first children through the door have finished primary school.</> },
   // ── Which EuroKids ──
   { g:"Which EuroKids", q:"Is this the same as the other EuroKids in Undri?",
     plain:"No. There is more than one EuroKids near Undri. This is the JMD Enclave centre, beside the Corinthians Club. Each EuroKids is run by its own partner in its own building.",
     a:<>No — there are several near Undri and they are separately owned. We are the <a href="/which-eurokids-in-undri">JMD Enclave centre, beside the Corinthians Club</a>.</> },
   { g:"Which EuroKids", q:"I found a phone number online — is it yours?",
-    plain:"Our number is 020 6962 2686. Directory listings frequently mix up the Undri EuroKids branches.",
+    plain:"Our number is 022 6962 2686. Directory listings frequently mix up the Undri EuroKids branches.",
     a:<>Ours is <a href={SCHOOL.phoneHref}>{SCHOOL.phone}</a>. Directory sites mix the Undri branches up constantly — if you reached someone else, ring us and we will point you at the right centre.</> },
   // ── Admissions ──
   { g:"Admissions", q:"When do admissions for 26–27 open?",
@@ -175,7 +182,7 @@ const QA: Array<{ q: string; a: React.ReactNode; plain: string; g?: string }> = 
     plain:"No. Admission, tuition and day care fees are non-refundable. The full terms are on the refund policy page.",
     a:<>No. Fees are non-refundable once paid — the <a href="/refund-cancellation-policy">full policy</a> spells out each case. We would rather you read it before paying than after.</> },
   { g:"Fees", q:"Is there a sibling discount?",
-    plain:"Ask the office on 020 6962 2686. Arrangements for siblings are handled case by case.",
+    plain:"Ask the office on 022 6962 2686. Arrangements for siblings are handled case by case.",
     a:<>Ask the office on <a href={SCHOOL.phoneHref}>{SCHOOL.phone}</a> — siblings are handled case by case rather than by a fixed rule.</> },
   // ── Day care ──
   { g:"Day care", q:"How late can I collect?",

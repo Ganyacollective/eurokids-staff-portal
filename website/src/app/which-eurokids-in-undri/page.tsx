@@ -73,10 +73,9 @@ export default function WhichEuroKids() {
       <h2>What is particular about this one</h2>
       <ul>
         <li>
-          <b>It is inside a residential enclave, not on a main road.</b> You turn off
-          Hanewadi Road into JMD Enclave and the school is inside. No child is ever let out
-          of a gate onto passing traffic, and the noise and dust of a main road do not reach
-          the classrooms.
+          <b>It is off the main road, not on it.</b> You turn off Hanewadi Road to reach us,
+          so no classroom door has traffic on the other side of it, and the noise and dust of
+          an arterial road do not reach the rooms.
         </li>
         <li>
           <b>{SCHOOL.playArea} of outdoor play area.</b> That is a function of being inside

@@ -81,7 +81,7 @@ export default async function CardPage({ params }: { params: Promise<{ slug: str
                   {m.kind === "video" ? (
                     <video src={src} controls preload="metadata" playsInline />
                   ) : (
-                    <img src={src} alt={m.caption || ""} loading="lazy" decoding="async" />
+                    <img src={src} alt={m.caption || `${card.title} at EuroKids JMD Enclave preschool, Undri, Pune`} loading="lazy" decoding="async" />
                   )}
                   {m.caption && <figcaption>{m.caption}</figcaption>}
                 </figure>

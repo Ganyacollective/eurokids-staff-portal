@@ -72,7 +72,7 @@ const SCHOOL_JSONLD = {
   alternateName: "EuroKids Undri",
   url: "https://eurokidsjmdenclave.org",
   logo: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/eurokids-logo.png",
-  telephone: "+91-20-6962-2686",
+  telephone: "+91-22-6962-2686",
   email: "admin@eurokidsjmdenclave.org",
   foundingDate: "2017",
   parentOrganization: { "@type": "Organization", name: "EuroKids International" },
@@ -92,6 +92,17 @@ const SCHOOL_JSONLD = {
   hasMap:
     "https://www.google.com/maps/search/?api=1&query=EuroKids+JMD+Enclave+Undri+Pune",
   award: "Best Ambience Award",
+  // The founder as a real entity, so an answer engine asked "who runs
+  // EuroKids JMD Enclave" has a named person to return rather than
+  // guessing from a directory listing. Name and role only — there is no
+  // published biography to draw on and inventing one for a named person
+  // is not something a school's own website should do.
+  founder: {
+    "@type": "Person",
+    name: "Neeta Saxena",
+    jobTitle: "Founder",
+    worksFor: { "@type": "Preschool", name: "EuroKids JMD Enclave" },
+  },
   slogan: "Choose the best.",
   sameAs: ["https://www.instagram.com/eurokidsjmdenclave/"],
   numberOfEmployees: { "@type": "QuantitativeValue", minValue: 10 },

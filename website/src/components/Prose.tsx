@@ -30,7 +30,7 @@ export default function Prose({
       <aside className="prose-foot">
         <h2>Still not sure?</h2>
         <p>
-          Call the office on <a href="tel:+912069622686">020 6962 2686</a> or write to{" "}
+          Call the office on <a href="tel:+912269622686">022 6962 2686</a> or write to{" "}
           <a href="mailto:admin@eurokidsjmdenclave.org">admin@eurokidsjmdenclave.org</a>. We
           would rather answer a question than have you guess.
         </p>

@@ -7,7 +7,7 @@ import { SCHOOL } from "@/lib/local";
 // easier to write about curriculum.
 //
 // What is on this page is only what can be verified from where the school
-// physically is: inside a residential society, off the main road, behind
+// physically is: off the main road, off the main road, behind
 // the society gate. Those are facts about the address.
 //
 // What is deliberately NOT here: any claim to be "certified safest", any
@@ -39,9 +39,9 @@ export default function SafePreschool() {
     <LocalPage
       eyebrow="Safety"
       title="The safest thing about this school is where it is"
-      lead="Every preschool will tell you it is safe. The difference you can actually verify by standing outside is the road. We are inside a residential enclave, through a society gate, with no classroom door that opens onto traffic."
+      lead="Every preschool will tell you it is safe. The difference you can actually verify by standing outside is the road. We are off the main road, through a society gate, with no classroom door that opens onto traffic."
       facts={[
-        { k: "Location", v: "Inside JMD Enclave, a residential society" },
+        { k: "Location", v: "Off the main road, inside JMD Enclave" },
         { k: "Main road", v: "Not on one — you turn off Hanewadi Road" },
         { k: "Outdoor play", v: `${SCHOOL.playArea}, enclosed` },
         { k: "Entrance", v: "One, supervised at drop-off and collection" },
@@ -55,10 +55,9 @@ export default function SafePreschool() {
         is the ten seconds between a door and a car.
       </p>
       <p>
-        A school in a commercial unit on the main Undri or NIBM road manages that risk with
-        supervision, because it has no other option. Here the risk is largely designed out:
-        you turn off the main road, through the enclave, and the school is inside. A child
-        who got out of a door would be in a residential society, not in a traffic lane.
+        A school in a unit on the main Undri or NIBM road manages that risk with supervision,
+        because it has no other option. Here it is largely designed out: you turn off the main
+        road to reach us, so there is no classroom door with traffic on the other side of it.
       </p>
 
       <h2>What that also buys</h2>
