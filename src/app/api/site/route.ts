@@ -32,6 +32,30 @@ const EXT: Record<string, string> = {
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 
+
+// Telling the website that something changed.
+//
+// Its pages are cached at the edge, so an edit used to appear up to ten
+// minutes later — long after the person who made it had decided the feature
+// did not work. Fire-and-forget: a card is saved whether or not the website
+// answers, and the ten-minute expiry still catches anything this misses.
+async function nudgeSite(slug?: string | null) {
+  const base = process.env.NEXT_PUBLIC_WEBSITE_URL || "https://eurokids-website.vercel.app";
+  const secret = process.env.SITE_REVALIDATE_SECRET;
+  if (!secret) return { ok: false, why: "SITE_REVALIDATE_SECRET is not set on this deployment." };
+  try {
+    const r = await fetch(`${base}/api/revalidate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
+      body: JSON.stringify({ slug: slug || null }),
+      signal: AbortSignal.timeout(8000),
+    });
+    return r.ok ? { ok: true } : { ok: false, why: `the website answered ${r.status}` };
+  } catch (e) {
+    return { ok: false, why: (e as Error).message };
+  }
+}
+
 async function gate(req: NextRequest) {
   const auth = req.headers.get("authorization") || "";
   if (!auth.toLowerCase().startsWith("bearer ")) return { error: "Not signed in.", status: 401 as const };
@@ -134,12 +158,12 @@ export async function POST(req: NextRequest) {
     if (id) {
       const { error } = await tbl.from("site_card").update(patch).eq("id", id);
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-      return NextResponse.json({ ok: true, id });
+      return NextResponse.json({ ok: true, id, site: await nudgeSite(patch.slug as string) });
     }
     patch.created_by = name;
     const { data, error } = await tbl.from("site_card").insert(patch).select("id").maybeSingle();
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, id: data?.id });
+    return NextResponse.json({ ok: true, id: data?.id, site: await nudgeSite(patch.slug as string) });
   }
 
   if (action === "delete_card") {
@@ -159,13 +183,13 @@ export async function POST(req: NextRequest) {
     await tbl.from("site_card_media").delete().eq("card_id", id);
     const { error } = await tbl.from("site_card").delete().eq("id", id);
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, site: await nudgeSite() });
   }
 
   if (action === "reorder") {
     const ids: number[] = Array.isArray(b.ids) ? b.ids.map(Number).filter(Boolean) : [];
     for (let i = 0; i < ids.length; i++) await tbl.from("site_card").update({ sort: i + 1 }).eq("id", ids[i]);
-    return NextResponse.json({ ok: true, count: ids.length });
+    return NextResponse.json({ ok: true, count: ids.length, site: await nudgeSite() });
   }
 
   // ── photos and videos on a card ──────────────────────────────────────────
@@ -180,7 +204,7 @@ export async function POST(req: NextRequest) {
       card_id, kind, path, caption: String(b.caption || "").trim() || null, sort: (last?.sort ?? 0) + 1,
     });
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, site: await nudgeSite() });
   }
 
   if (action === "delete_media") {
@@ -190,7 +214,7 @@ export async function POST(req: NextRequest) {
     if (m?.path) await admin.storage.from(BUCKET).remove([m.path]);
     const { error } = await tbl.from("site_card_media").delete().eq("id", id);
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, site: await nudgeSite() });
   }
 
   // ── the knobs ────────────────────────────────────────────────────────────
@@ -202,7 +226,7 @@ export async function POST(req: NextRequest) {
       key, value, updated_by: name, updated_at: new Date().toISOString(),
     }, { onConflict: "key" });
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, site: await nudgeSite() });
   }
 
   return NextResponse.json({ ok: false, error: "Unknown action." }, { status: 400 });

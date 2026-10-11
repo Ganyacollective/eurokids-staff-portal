@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getCard, listCards, mediaUrl, embedUrl } from "@/lib/site";
 
-export const revalidate = 600;
+// A safety net, not the mechanism. The hub calls /api/revalidate the moment
+// a card changes, so an edit shows up at once; this is only here to catch
+// anything that misses that call. It used to be 600, which meant an edit
+// could take ten minutes to appear — long enough for the person who made it
+// to conclude the whole thing was broken.
+export const revalidate = 60;
 
 // Every published card gets a page built ahead of time, so Watch now opens
 // instantly rather than waiting on a round trip to the database.

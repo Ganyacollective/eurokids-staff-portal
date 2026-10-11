@@ -1246,6 +1246,15 @@ function openCard(id){
       ...(vidPath !== undefined ? { video_path: vidPath } : {}),
     });
     if (!r.ok) { btn.disabled = false; btn.textContent = 'Save'; return el('sc-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`; }
+    // Whether the website actually picked it up. Saving to the database and
+    // appearing on the site are two different things, and the gap between
+    // them is what made this look broken.
+    if (r.site && !r.site.ok) {
+      el('sc-msg').innerHTML = `<div class="err">Saved, but the website was not refreshed (${esc(r.site.why || 'unknown')}). It will catch up within a minute.</div>`;
+      btn.disabled = false; btn.textContent = 'Save';
+      setTimeout(() => { closeDrawer(true); tabWebsite(); }, 2600);
+      return;
+    }
     closeDrawer(true); tabWebsite();
   };
 }

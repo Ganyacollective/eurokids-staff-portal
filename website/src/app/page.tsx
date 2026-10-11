@@ -3,7 +3,12 @@ import IntakeHead from "@/components/IntakeHead";
 import EnquiryForm from "@/components/EnquiryForm";
 import { listCards, getSetting } from "@/lib/site";
 
-export const revalidate = 600;
+// A safety net, not the mechanism. The hub calls /api/revalidate the moment
+// a card changes, so an edit shows up at once; this is only here to catch
+// anything that misses that call. It used to be 600, which meant an edit
+// could take ten minutes to appear — long enough for the person who made it
+// to conclude the whole thing was broken.
+export const revalidate = 60;
 
 export default async function Home() {
   const [cards, seconds] = await Promise.all([
