@@ -297,20 +297,33 @@ img, video { max-width: 100%; display: block; }
 /* ── footer ──────────────────────────────────────────────────────────── */
 .foot { background: var(--brand); color: rgba(255,255,255,.88); padding: clamp(38px,6vw,60px) 0 36px;
   font-size: 14px; }
-.foot-top { display: grid; gap: 26px; align-items: start; }
-@media (min-width: 768px) { .foot-top { grid-template-columns: 1.3fr 1fr 1fr; gap: 44px; } }
+/* Centred, because this is a closing statement rather than a directory.
+   The three-column grid that was here served a link list that no longer
+   exists. */
+.foot-top { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0; }
+.foot-name { margin: 18px 0 0; font-size: 15px; letter-spacing: .01em; color: #fff; }
+.foot-cta { margin: 6px 0 0; font-size: clamp(26px, 4.6vw, 38px); line-height: 1.12;
+  letter-spacing: -0.02em; color: #fff; font-weight: 700; }
+.foot-sub { margin: 8px 0 0; font-size: 17px; color: rgba(255,255,255,.88); }
+.foot-follow {
+  display: block !important; width: fit-content; margin: 28px auto 0; padding: 11px 26px !important;
+  border: 1px solid rgba(255,255,255,.55); border-radius: 999px;
+  font-size: 14.5px; font-weight: 600; color: #fff !important; text-decoration: none;
+  transition: background .16s ease, border-color .16s ease;
+}
+.foot-follow:hover { background: rgba(255,255,255,.14); border-color: #fff; text-decoration: none !important; }
 .foot-logo { background: #fff; border-radius: 12px; padding: 14px 16px; display: inline-block; }
 .foot-logo img { height: 52px; width: auto; }
 .foot strong { color: #fff; }
 .foot a { color: rgba(255,255,255,.88); text-decoration: none; display: block; padding: 4px 0; }
 .foot a:hover { color: #fff; text-decoration: underline; }
-.foot h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .09em; color: #fff;
-  margin: 0 0 10px; font-family: inherit; font-weight: 700; }
-.foot-rule { height: 1px; background: rgba(255,255,255,.26); margin: 30px 0 18px; }
+.foot-rule { height: 1px; background: rgba(255,255,255,.26); margin: 34px 0 18px; }
 .foot-fine { font-size: 12.5px; color: rgba(255,255,255,.78); display: flex; gap: 18px;
   flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .foot-fine nav { display: flex; gap: 18px; flex-wrap: wrap; }
 .foot-fine nav a { display: inline; padding: 0; }
+.foot-fine span { line-height: 1.5; }
+@media (max-width: 640px) { .foot-fine { justify-content: center; text-align: center; gap: 12px; } }
 
 /* ── the four claims the school closes with ───────────────────────────────
    A parent comparing three preschools in Undri decides on these. They sat on
@@ -323,6 +336,9 @@ img, video { max-width: 100%; display: block; }
   display: flex;
   flex-wrap: wrap;
   gap: 10px 28px;
+  /* Centred with the rest of the footer. It was flex-start, which was right
+     when a three-column link directory sat above it and wrong now. */
+  justify-content: center;
 }
 .foot-awards li {
   display: flex;
@@ -373,8 +389,6 @@ img, video { max-width: 100%; display: block; }
   transition: transform .16s ease, box-shadow .16s ease;
 }
 .pay-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -14px rgba(232,53,42,.75); }
-.pay-fine { margin: 26px 0 0; font-size: 15px; line-height: 1.5; color: #6b6b73; }
-.pay-fine a { color: #2B4A9B; font-weight: 600; }
 
 /* ── written pages: terms, privacy, refunds ──────────────────────────────
    Nobody wants to read these and everybody has to, so the only kindness on

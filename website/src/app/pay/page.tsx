@@ -7,8 +7,10 @@
 // and a payment they already decided to make. Everything that was in that
 // list is on the Razorpay page anyway.
 //
-// The labels say the whole thing — "Pay for the admission form", "Pay for
-// day care or anything else" — so they need nothing underneath them.
+// The labels say the whole thing — "Pay for admission form", "Pay for
+// daycare or others" — so they need nothing underneath them, and there is
+// no "not sure? call us" line either: most people paying this are standing
+// in the office with somebody who can answer them.
 
 import type { Metadata } from "next";
 
@@ -38,10 +40,6 @@ export default function PayPage() {
           Pay for daycare or others
         </a>
       </div>
-
-      <p className="pay-fine">
-        Not sure which? Call us on <a href="tel:+912069622686">020 6962 2686</a>.
-      </p>
     </div>
   );
 }

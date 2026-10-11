@@ -111,38 +111,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main id="main">{children}</main>
         <footer className="foot">
           <div className="wrap">
+            {/* The footer that is live on Framer, rebuilt. I had replaced it
+                with a three-column link directory — address, "Come and see
+                us", "More" — which is a sitemap, not a closing argument. The
+                real one closes with the thing a parent is deciding about:
+                admissions are open, here is why us, follow us. */}
             <div className="foot-top">
-              <div>
-                {/* On white, because the logo's own lettering is EuroKids blue
-                    and it disappears into the red otherwise. */}
-                <span className="foot-logo">
-                  <img
-                    src="https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/eurokids-logo.png"
-                    alt="EuroKids Pre-School"
-                  />
-                </span>
-                <p style={{ margin: "16px 0 0", maxWidth: "32ch" }}>
-                  <strong>EuroKids JMD Enclave</strong>
-                  <br />
-                  JMD Enclave, Undri, Pune 411060
-                  <br />
-                  Est. 2017 · Trusted by 3,000+ parents
-                </p>
-              </div>
-              <div>
-                <h4>Come and see us</h4>
-                <a href="tel:+912069622686">020 6962 2686</a>
-                <a href="mailto:admin@eurokidsjmdenclave.org">admin@eurokidsjmdenclave.org</a>
-                <a href="/contact-us">Where we are</a>
-                <a href="#enquire">Book a visit</a>
-              </div>
-              <div>
-                <h4>More</h4>
-                <a href="/summercamp">Summer camp</a>
-                <a href="/annual-function">Annual function</a>
-                <a href="/pay">Make a payment</a>
-                <a href="https://admin.eurokidsjmdenclave.org/staff">For teachers</a>
-              </div>
+              {/* On white, because the logo's own lettering is EuroKids blue
+                  and it disappears into the red otherwise. */}
+              <span className="foot-logo">
+                <img
+                  src="https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/eurokids-logo.png"
+                  alt="EuroKids Pre-School"
+                />
+              </span>
+              <p className="foot-name">Eurokids JMD Enclave</p>
+              <h2 className="foot-cta">Admissions Open 26-27</h2>
+              <p className="foot-sub">Choose the best.</p>
             </div>
 
             {/* The four claims the old site closed with. They are the reason
@@ -150,20 +135,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 belong above the legal line rather than buried on a page. */}
             <ul className="foot-awards">
               <li>Best Ambience Award</li>
-              <li><b>№1</b> Preschool in Undri</li>
-              <li>5,000 sq ft play area</li>
-              <li>200+ five-star reviews</li>
+              <li><b>№1</b> Preschool In Undri</li>
+              <li>5000 Sqft Play Area</li>
+              <li>200+ 5-star reviews</li>
             </ul>
+
+            <a
+              className="foot-follow"
+              href="https://www.instagram.com/eurokidsjmdenclave/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Follow Us
+            </a>
 
             <div className="foot-rule" />
             <div className="foot-fine">
               <span>
-                © {new Date().getFullYear()} Veena Educational Services. An authorised franchise of
-                EuroKids International.
+                © {new Date().getFullYear()} Veena Educational Services.
+                <br />
+                An authorized franchise of EuroKids International.
               </span>
               <nav>
-                <a href="/terms-conditions">Terms &amp; Conditions</a>
-                <a href="/refund-cancellation-policy">Refund &amp; Cancellation</a>
+                <a href="/terms-conditions">Terms and Conditions</a>
+                <a href="/refund-cancellation-policy">Refund Policy</a>
                 <a href="/privacy-policy">Privacy Policy</a>
                 <a href="/contact-us">Contact Us</a>
               </nav>
