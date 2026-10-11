@@ -19,7 +19,9 @@ export const SCHOOL = {
   whatsapp: "+91 78750 96690",
   whatsappHref: "https://wa.me/917875096690",
   email: "admin@eurokidsjmdenclave.org",
-  street: "JMD Enclave, Undri",
+  // The address exactly as it reads on the Google Business Profile —
+  // which is the version parents are navigating by.
+  street: "Bungalow No 1, JMD Enclave, Undri",
   locality: "Pune",
   region: "Maharashtra",
   postcode: "411060",
@@ -29,8 +31,14 @@ export const SCHOOL = {
   lng: 73.9165,
   playArea: "5,000 sq ft",
   families: "3,000+",
-  reviews: "200+",
+  reviews: "250+",
   award: "Best Ambience Award",
+  // 250+, per Abhinav, from the Google Business Profile. Deliberately NOT
+  // emitted as schema.org aggregateRating: Google disallows self-serving
+  // review markup — a rating about the business, on the business's own
+  // site — for LocalBusiness, and marking it up is a structured-data
+  // manual action rather than a rich result. The number belongs in the
+  // copy, where it reads as the school's own claim, which is what it is.
   instagram: "https://www.instagram.com/eurokidsjmdenclave/",
   maps:
     "https://www.google.com/maps/search/?api=1&query=EuroKids+JMD+Enclave+Undri+Pune",
@@ -55,7 +63,9 @@ export const NEARBY = [
 ] as const;
 
 export const LANDMARKS = [
-  "Corinthian Club",
+  "Corinthians Club",
+  "Marvel Isola",
+  "Nyati County",
   "Nyati Evara",
   "Nyati Eternity",
   "Godrej Greens",

@@ -201,7 +201,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <>Best Ambience Award</>,
                 <><b>№1</b> Preschool In Undri</>,
                 <>5000 Sqft Play Area</>,
-                <>200+ 5-star reviews</>,
+                <>250+ 5-star reviews</>,
               ].map((claim, i) => (
                 <li key={i}>
                   <Laurel />

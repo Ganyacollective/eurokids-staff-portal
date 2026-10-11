@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     "best preschool in Undri",
     "playschool Undri Pune",
     "nursery admission Undri",
-    "preschool near Corinthian Club",
+    "preschool near Corinthians Club",
     "EuroKids Undri",
   ],
 };
@@ -33,7 +33,7 @@ export default function PreschoolInUndri() {
     >
       <h2>Where we are, and how far that is from you</h2>
       <p>
-        We are inside JMD Enclave, just off Hanewadi Road, beside the Corinthian Club. For
+        We are inside JMD Enclave, just off Hanewadi Road, beside the Corinthians Club. For
         most of Undri that is a five to eight minute drive: a few minutes from{" "}
         <b>Nyati Evara</b>, <b>Nyati Eternity</b> and <b>Godrej Greens</b>, around ten from{" "}
         <b>NIBM Road</b> and <b>Mohammadwadi</b>, and fifteen from <b>Pisoli</b> and{" "}

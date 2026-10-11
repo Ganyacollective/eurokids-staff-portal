@@ -53,7 +53,7 @@ export default function PreschoolNearMohammadwadi() {
       <h2>Getting here from Mohammadwadi and NIBM</h2>
       <p>
         Come down towards Undri and turn at Hanewadi Road — we are inside JMD Enclave,
-        beside the Corinthian Club. School drop-off is 8:30; traffic on that stretch is
+        beside the Corinthians Club. School drop-off is 8:30; traffic on that stretch is
         reasonable before nine and heavier after.
       </p>
       <p>
