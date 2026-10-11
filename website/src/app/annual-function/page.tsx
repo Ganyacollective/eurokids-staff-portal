@@ -61,7 +61,7 @@ export default function AnnualFunction() {
           <div><dt>Who performs</dt><dd>Every child on the roll</dd></div>
           <div><dt>Rehearsals</dt><dd>During school hours</dd></div>
           <div><dt>Date</dt><dd>To be announced</dd></div>
-          <div><dt>Questions</dt><dd><a href="tel:+912269622686">022 6962 2686</a></dd></div>
+          <div><dt>Questions</dt><dd><a href="tel:+912269622686">022 696 22 686</a></dd></div>
         </dl>
       </section>
     </div>

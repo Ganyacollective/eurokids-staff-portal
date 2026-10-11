@@ -14,7 +14,7 @@ export const SCHOOL = {
   name: "EuroKids JMD Enclave",
   legal: "Veena Educational Services",
   founded: "2017",
-  phone: "022 6962 2686",
+  phone: "022 696 22 686",
   phoneHref: "tel:+912269622686",
   whatsapp: "+91 78750 96690",
   whatsappHref: "https://wa.me/917875096690",

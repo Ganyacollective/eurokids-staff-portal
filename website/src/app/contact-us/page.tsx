@@ -12,7 +12,7 @@ import PageHead from "@/components/PageHead";
 export const metadata: Metadata = {
   title: "Contact Us",
   description:
-    "EuroKids JMD Enclave — JMD Enclave, Undri, Pune 411060. Call 022 6962 2686, Mon to Sat. Visits welcome; no appointment needed.",
+    "EuroKids JMD Enclave — JMD Enclave, Undri, Pune 411060. Call 022 696 22 686, Mon to Sat. Visits welcome; no appointment needed.",
   alternates: { canonical: "/contact-us" },
 };
 
@@ -31,7 +31,7 @@ export default function ContactUs() {
       <div className="contact-grid" data-reveal>
         <a className="contact-card" href="tel:+912269622686">
           <span className="contact-kicker">Call the school</span>
-          <strong>022 6962 2686</strong>
+          <strong>022 696 22 686</strong>
           <span className="contact-sub">Mon to Sat, 8:00 AM – 6:30 PM</span>
         </a>
 

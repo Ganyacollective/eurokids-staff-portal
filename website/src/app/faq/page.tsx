@@ -27,7 +27,7 @@ const QA: Array<{ q: string; a: React.ReactNode; plain: string; g?: string }> = 
   {
     q: "How much are the fees?",
     plain:
-      "Fees depend on the programme and whether day care is included. Call the office on 022 6962 2686 and we will give you the exact figure for your child's year, with nothing added later.",
+      "Fees depend on the programme and whether day care is included. Call the office on 022 696 22 686 and we will give you the exact figure for your child's year, with nothing added later.",
     a: (
       <>
         It depends on the programme and whether you need day care. Call the office on{" "}
@@ -146,7 +146,7 @@ const QA: Array<{ q: string; a: React.ReactNode; plain: string; g?: string }> = 
     plain:"No. There is more than one EuroKids near Undri. This is the JMD Enclave centre, beside the Corinthians Club. Each EuroKids is run by its own partner in its own building.",
     a:<>No — there are several near Undri and they are separately owned. We are the <a href="/which-eurokids-in-undri">JMD Enclave centre, beside the Corinthians Club</a>.</> },
   { g:"Which EuroKids", q:"I found a phone number online — is it yours?",
-    plain:"Our number is 022 6962 2686. Directory listings frequently mix up the Undri EuroKids branches.",
+    plain:"Our number is 022 696 22 686. Directory listings frequently mix up the Undri EuroKids branches.",
     a:<>Ours is <a href={SCHOOL.phoneHref}>{SCHOOL.phone}</a>. Directory sites mix the Undri branches up constantly — if you reached someone else, ring us and we will point you at the right centre.</> },
   // ── Admissions ──
   { g:"Admissions", q:"When do admissions for 26–27 open?",
@@ -182,7 +182,7 @@ const QA: Array<{ q: string; a: React.ReactNode; plain: string; g?: string }> = 
     plain:"No. Admission, tuition and day care fees are non-refundable. The full terms are on the refund policy page.",
     a:<>No. Fees are non-refundable once paid — the <a href="/refund-cancellation-policy">full policy</a> spells out each case. We would rather you read it before paying than after.</> },
   { g:"Fees", q:"Is there a sibling discount?",
-    plain:"Ask the office on 022 6962 2686. Arrangements for siblings are handled case by case.",
+    plain:"Ask the office on 022 696 22 686. Arrangements for siblings are handled case by case.",
     a:<>Ask the office on <a href={SCHOOL.phoneHref}>{SCHOOL.phone}</a> — siblings are handled case by case rather than by a fixed rule.</> },
   // ── Day care ──
   { g:"Day care", q:"How late can I collect?",
