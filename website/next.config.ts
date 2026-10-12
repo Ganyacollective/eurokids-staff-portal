@@ -27,15 +27,20 @@ const LEGACY: Array<{ source: string; destination: string; why: string }> = [
   { source: "/events/ej-literacy-day", destination: "/events/literacy-day", why: "Framer slug" },
 
   // Pages that were only ever a link.
+  // These two were bare Razorpay links on Framer, and the printed QR
+  // codes point at them. They now land on the annual function page, which
+  // carries both tickets and says which is which — one extra tap, and the
+  // parent who scanned the wrong code can fix it themselves instead of
+  // finding out at the till.
   {
     source: "/single-child",
-    destination: "https://rzp.io/rzp/rSsbrdz",
-    why: "printed QR — fees for one child",
+    destination: "/annual-function",
+    why: "printed QR — single-child ticket",
   },
   {
     source: "/sigblings",
-    destination: "https://rzp.io/rzp/Z6sWK3Uv",
-    why: "printed QR — fees for siblings (spelling is theirs, and is printed)",
+    destination: "/annual-function",
+    why: "printed QR — sibling ticket (spelling is theirs, and is printed)",
   },
   {
     source: "/teachers",
