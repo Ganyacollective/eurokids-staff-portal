@@ -3487,7 +3487,7 @@ async function tabReimbursements(){
           ? `<span class="chip c-good">Sent</span><div class="hint" style="font-size:10.5px">${shortDate(i.sent_at)}</div>`
           : onHold ? '<span class="chip c-crit">Held</span>' : '<span class="chip c-warn">Ready</span>'}</td>
         <td style="white-space:nowrap">
-          <a style="cursor:pointer" onclick="dcPreview(${i.id})">Open</a>
+          <a style="cursor:pointer" onclick="dcPreview(${i.id})">Open</a> <a style="cursor:pointer" onclick="dcDownload(${i.id})">Save</a>
           ${i.status === 'draft' ? ` · <a style="cursor:pointer" onclick="dcEdit(${i.id})">Edit</a> · <a style="cursor:pointer" onclick="dcSend(${i.id}, this)">Send</a>` : ''}
           · <a style="cursor:pointer" onclick="dcDuplicate(${i.id}, this)">Duplicate</a></td>
       </tr>`;
@@ -3622,7 +3622,7 @@ async function dcOpenCustomer(id){
         <div class="l" style="flex:1"><strong style="color:var(--ink)">${esc(i.number || 'draft')}</strong>
           — ${esc(dcChild(i.child_id)?.name || '')}, ${dcMonth(i.period_start)}
           <span class="sub">${dcStateLabel(i)}</span></div>
-        <a style="cursor:pointer;white-space:nowrap" onclick="dcPreview(${i.id})">Open</a>
+        <a style="cursor:pointer;white-space:nowrap" onclick="dcPreview(${i.id})">Open</a> <a style="cursor:pointer;white-space:nowrap" onclick="dcDownload(${i.id})">Save</a>
       </div>`).join('') || '<div class="rowx hint">Nothing issued yet.</div>'}
     </div></div>
 
@@ -4074,6 +4074,7 @@ async function dcInvoiceSheet(id){
 
     <div class="grp"><div class="box">
       <button class="linkrow" onclick="dcPreview(${id})">Open the PDF</button>
+      <button class="linkrow" onclick="dcDownload(${id})">Save the PDF</button>
       ${i.status === 'draft' ? `<button class="linkrow" onclick="dcEdit(${id})">Edit this draft</button>
         <button class="linkrow" id="iv-send">Send it</button>` : ''}
       ${i.status === 'sent' ? `<button class="linkrow" id="iv-resend">Send it again</button>` : ''}
@@ -4203,12 +4204,48 @@ async function dcPayDrawer(id){
   };
 }
 
-async function dcPreview(id){
+// The server already names the file — "Fee receipt - Aarav Shah - REM-000001.pdf"
+// — in the Content-Disposition header. That name was being thrown away here:
+// the response was read into a blob and opened as a blob: URL, and a blob URL
+// carries no name, so every PDF saved out of the preview tab landed in
+// Downloads called "unknown.pdf". Four of those in a folder and nobody can
+// tell which invoice is which.
+//
+// So the header is read and the name carried through: opening still uses the
+// blob (the request needs an Authorization header, so the tab cannot just be
+// pointed at the URL), and saving goes through an <a download> that carries
+// the real name.
+function dcFilename(res, fallback){
+  const cd = res.headers.get('content-disposition') || '';
+  // filename*=UTF-8''… wins when it is there — it is the one that keeps the
+  // accents and the em dash.
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  if (star) { try { return decodeURIComponent(star[1]); } catch (_) {} }
+  const plain = /filename="([^"]+)"/i.exec(cd);
+  return (plain && plain[1]) || fallback;
+}
+
+async function dcPdf(id){
   const { data: { session: s } } = await getSb().auth.getSession();
   const r = await fetch(`/api/daycare/pdf?id=${id}`, { headers: { Authorization: `Bearer ${s.access_token}` } });
-  if (!r.ok) { const j = await r.json().catch(() => ({})); return alert(j.error || 'That invoice could not be opened.'); }
-  const url = URL.createObjectURL(await r.blob());
+  if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || 'That invoice could not be opened.'); return null; }
+  const inv = (_dc.invoices || []).find(x => x.id === id);
+  return { blob: await r.blob(), name: dcFilename(r, `${(inv && inv.number) || 'document'}.pdf`) };
+}
+
+async function dcPreview(id){
+  const got = await dcPdf(id); if (!got) return;
+  const url = URL.createObjectURL(got.blob);
   window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function dcDownload(id){
+  const got = await dcPdf(id); if (!got) return;
+  const url = URL.createObjectURL(got.blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = got.name;
+  document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 

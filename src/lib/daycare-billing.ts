@@ -154,9 +154,19 @@ export async function sendInvoice(a: Db, invoiceId: number, by: string, toOverri
   const to = String(toOverride || party?.email || "").trim();
   if (!to) return { ok: false as const, error: "There is no email address for this family.", status: 400 };
 
+  // Two books, two series. A day care bill is INV-; a reimbursement claim is
+  // REM-. They used to share one sequence, which meant the number told you
+  // nothing about which kind of document you were holding — and since a
+  // reimbursement claim is the thing a parent hands to an employer, telling
+  // the two apart at a glance is most of the point of numbering them.
+  //
+  // The sequence is chosen from the row's own kind rather than from anything
+  // the caller passes in, so there is no way to send a reimbursement that
+  // takes a billing number by mistake.
   let number = inv.number;
   if (!number) {
-    const { data: n, error } = await a.rpc("next_document_number", { p_kind: "daycare_invoice" });
+    const seq = inv.kind === "reimbursement" ? "daycare_reimbursement" : "daycare_invoice";
+    const { data: n, error } = await a.rpc("next_document_number", { p_kind: seq });
     if (error || !n) return { ok: false as const, error: error?.message || "Could not take a number.", status: 500 };
     number = String(n);
     await a.from("daycare_invoice").update({ number }).eq("id", invoiceId);
