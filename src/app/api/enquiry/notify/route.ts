@@ -53,17 +53,35 @@ export async function GET(req: NextRequest) {
   }
   // The address is on the auth record, not the profile — profiles carries the
   // name and the role and nothing you could send an email to.
-  const [{ data: authList }, { data: profs }, { data: prefs }] = await Promise.all([
+  const [{ data: authList }, { data: profs }, { data: prefs }, { data: links }, { data: grants }] = await Promise.all([
     db.auth.admin.listUsers({ perPage: 200 }),
     db.from("profiles").select("id, full_name, role"),
     db.schema("eurokids").from("enquiry_notify").select("user_id, sources"),
+    db.from("teacher_links").select("user_id"),
+    db.from("module_access").select("user_id"),
   ]);
 
   const by = new Map((prefs || []).map(p => [p.user_id, p.sources || []]));
   const prof = new Map((profs || []).map(p => [p.id, p]));
 
+  // Hub users only — the same people Users & Access lists.
+  //
+  // This listed every account in auth, which is 26 rows, 23 of them teachers
+  // created in the Staff Portal along with a few old test accounts. Nobody is
+  // ever going to tell a nursery teacher's personal Gmail about a walk-in, so
+  // every one of those lines was noise around the three that matter, and the
+  // list got longer every time somebody was hired.
+  //
+  // Both conditions, not either. A teacher is excluded even if somebody grants
+  // them a module one day, and an account with no grants is excluded even if
+  // it was never linked to a teacher — which is what the leftover test
+  // accounts are. If the two ever disagree, the quiet answer is to leave the
+  // person out of a list about families.
+  const teacher = new Set((links || []).map(l => l.user_id));
+  const hasGrant = new Set((grants || []).map(g => g.user_id));
+
   const people = (authList?.users || [])
-    .filter(u => u.email)
+    .filter(u => u.email && !teacher.has(u.id) && hasGrant.has(u.id))
     .map(u => ({
       id: u.id,
       name: prof.get(u.id)?.full_name || u.email!,
@@ -92,6 +110,21 @@ export async function POST(req: NextRequest) {
   const b = await req.json().catch(() => ({}));
   const userId = String(b.user_id || "");
   if (!userId) return NextResponse.json({ ok: false, error: "Which person?" }, { status: 400 });
+
+  // The same test the list applies, applied again on the way in. The GET
+  // deciding who is offered is a matter of presentation; this is the one that
+  // decides, and a request that never went through the screen is exactly the
+  // one that would put a teacher's personal address on the list.
+  const [{ data: link }, { data: grant }] = await Promise.all([
+    db.from("teacher_links").select("user_id").eq("user_id", userId).maybeSingle(),
+    db.from("module_access").select("user_id").eq("user_id", userId).limit(1).maybeSingle(),
+  ]);
+  if (link || !grant) {
+    return NextResponse.json(
+      { ok: false, error: "Only people with hub access can be notified. Grant them access in Users & Access first." },
+      { status: 400 },
+    );
+  }
 
   // Only sources we actually have. An unknown string here would be a row that
   // silently never matches, which looks identical to being switched off.

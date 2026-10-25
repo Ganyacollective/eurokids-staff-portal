@@ -539,7 +539,7 @@ window.addEventListener('message',function(e){if(e.data&&e.data.ekEnquireHeight)
     </div></div>
 
     <div class="grp"><h3>Who gets told</h3><div class="box" id="nt-box"><div class="rowx hint">Loading the people…</div></div>
-      <div class="foot">The email names the family and opens their card directly. Nobody is emailed a source they have not ticked.</div></div>
+      <div class="foot">Everyone with hub access, from Users &amp; Access. Teachers are not here — those accounts belong to the Staff Portal. The email names the family and opens their card directly, and nobody is emailed a source they have not ticked.</div></div>
   </div>`;
   renderNotify();
 }
@@ -547,12 +547,17 @@ window.addEventListener('message',function(e){if(e.data&&e.data.ekEnquireHeight)
 /* ── who hears about a new enquiry ─────────────────────────────
    Not a box you type addresses into. Addresses typed into settings go stale
    the day somebody leaves; an account is closed when they go and the emails
-   stop with it. So these are the hub's own users, each choosing their sources. */
+   stop with it. So these are the hub's own users, each choosing their sources.
+
+   The hub's own users, specifically: the people in Users & Access, not every
+   account that can sign in to anything. This listed all 26 auth accounts, 23
+   of them teachers created in the Staff Portal, so the three lines that
+   matter were buried and the list grew with every hire. */
 async function renderNotify(){
   const box = el('nt-box'); if (!box) return;
   const j = await enqApi('/api/enquiry/notify');
   if (!j.ok) return box.innerHTML = `<div class="rowx"><div class="err">${esc(j.error)}</div></div>`;
-  if (!j.people.length) return box.innerHTML = '<div class="rowx hint">No accounts with an email address yet.</div>';
+  if (!j.people.length) return box.innerHTML = '<div class="rowx hint">Nobody has hub access yet. Add them in Fees &amp; Children &rarr; Users &amp; Access and they will appear here.</div>';
 
   const nobody = j.people.every(p => !p.sources.length);
   box.innerHTML =

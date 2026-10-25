@@ -27,19 +27,28 @@ const LEGACY: Array<{ source: string; destination: string; why: string }> = [
   { source: "/events/ej-literacy-day", destination: "/events/literacy-day", why: "Framer slug" },
 
   // Pages that were only ever a link.
-  // These two were bare Razorpay links on Framer, and the printed QR
-  // codes point at them. They now land on the annual function page, which
-  // carries both tickets and says which is which — one extra tap, and the
-  // parent who scanned the wrong code can fix it themselves instead of
-  // finding out at the till.
+  //
+  // On Framer these two are a page whose entire body is one Razorpay link,
+  // and the printed QR codes point at them. I had changed them to land on
+  // /annual-function instead, reasoning that a parent who scanned the wrong
+  // code could fix it themselves. That is a tap a QR code should not need,
+  // on exactly the flow where somebody is standing there trying to pay, and
+  // it is a change to behaviour that is already printed on paper. They go
+  // straight through, as they do today.
+  //
+  // Checked, because getting these wrong is somebody's money: rzp.io/rzp/
+  // rSsbrdz resolves to pages.razorpay.com/pl_S6RLD0DB5WvTDI/view and
+  // Z6sWK3Uv to pl_S6RBy0DnAYeBdT/view — the same two pages the live Framer
+  // site sends them to. /annual-function still carries both tickets for
+  // anybody who arrives by browsing rather than by scanning.
   {
     source: "/single-child",
-    destination: "/annual-function",
+    destination: "https://rzp.io/rzp/rSsbrdz",
     why: "printed QR — single-child ticket",
   },
   {
     source: "/sigblings",
-    destination: "/annual-function",
+    destination: "https://rzp.io/rzp/Z6sWK3Uv",
     why: "printed QR — sibling ticket (spelling is theirs, and is printed)",
   },
   {
