@@ -21,11 +21,23 @@ export async function GET(req: NextRequest) {
 
   const kiosk = process.env.ENQUIRY_KIOSK_KEY || "";
   const ivr = process.env.IVR_WEBHOOK_KEY || "";
+  // The form does not live here. It is a page on the public website, and the
+  // key goes in as ?kiosk=. This used to hand out
+  // admin.eurokidsjmdenclave.org/enquire?src=walkin&k=… — a path that has
+  // never existed on this host, with a parameter the endpoint does not read,
+  // so anybody who set a tablet up from the Setup page got a 404 and anybody
+  // who worked around it got a tablet that was not a tablet.
+  //
+  // /kiosk is the installable one: open it once on the device, then Chrome's
+  // Install app (or Safari's Add to Home Screen). The key is remembered on
+  // that device, which is what makes the icon still be the tablet when the
+  // manifest launches it without a query string.
+  const WEB = (process.env.NEXT_PUBLIC_WEBSITE_URL || "https://eurokidsjmdenclave.org").replace(/\/$/, "");
   return NextResponse.json({
-    ok: true, site: SITE,
+    ok: true, site: SITE, website: WEB,
     kiosk_key_set: !!kiosk,
-    kiosk_url: kiosk ? `${SITE}/enquire?src=walkin&k=${encodeURIComponent(kiosk)}` : null,
-    embed_url: `${SITE}/enquire?src=website&embed=1`,
+    kiosk_url: kiosk ? `${WEB}/kiosk?kiosk=${encodeURIComponent(kiosk)}` : null,
+    embed_url: `${WEB}/#enquire`,
     ivr_key_set: !!ivr,
     ivr_url: ivr ? `${SITE}/api/public/ivr-webhook?key=${encodeURIComponent(ivr)}` : null,
     whatsapp_configured: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
