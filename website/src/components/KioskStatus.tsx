@@ -2,7 +2,7 @@
 
 import { useKiosk } from "./useKiosk";
 
-// Is this device actually the reception tablet?
+// Is this device the reception tablet?
 //
 // It matters, and until now there was no way to tell. Without the kiosk key
 // the form still works perfectly — it just records every family as a website
@@ -11,21 +11,13 @@ import { useKiosk } from "./useKiosk";
 //
 // The failure is easy to walk into: install the app from the plain address
 // rather than the kiosk link, clear the browser's data, or set the tablet up
-// as a new user. So the page says which it is, quietly, at the bottom where a
-// family will not read it but whoever sets the tablet up will.
+// as a new user. So the tablet says so, quietly, under the form.
+//
+// Nothing at all on anybody else's device. This is the public home page: a
+// parent on their own phone must not be told they are not a reception
+// tablet, and must not be shown anything that invites them to become one.
 export default function KioskStatus() {
   const key = useKiosk();
-  return (
-    <p className={`kiosk-state ${key ? "is-on" : "is-off"}`}>
-      {key ? (
-        <>Reception tablet &middot; walk-in</>
-      ) : (
-        <>
-          Not set up as the reception tablet. Open the kiosk link once on this
-          device (the address ending <code>?kiosk=&hellip;</code>) and it will be
-          remembered.
-        </>
-      )}
-    </p>
-  );
+  if (!key) return null;
+  return <p className="kiosk-state">Reception tablet &middot; walk-in</p>;
 }

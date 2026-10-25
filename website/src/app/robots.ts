@@ -1,12 +1,8 @@
-// The kiosk form is the one thing that must never be indexed: it carries the
-// reception tablet's key in its address, and a search result for it would put
-// that key in front of anybody who looked.
-//
-// It lives at /kiosk. This file disallowed /enquire, which is the id of the
-// form's section on the home page and has never been a path — so the rule
-// protected nothing. /kiosk is kept here as well as in the page's own
-// noindex, because the two work differently: noindex needs the page to be
-// crawled to be read, and this stops it being crawled at all.
+// The reception tablet is the home page with ?kiosk=<key> on it, not a page
+// of its own, so there is nothing here to keep out of the index — the key
+// lives in a query string Google is never handed. This file used to disallow
+// /enquire, which is the id of the form's section on the home page and has
+// never been a path on this site at all.
 
 import type { MetadataRoute } from "next";
 
@@ -34,11 +30,11 @@ const AI_AGENTS = [
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
-      { userAgent: "*", allow: "/", disallow: ["/api/", "/kiosk"] },
+      { userAgent: "*", allow: "/", disallow: ["/api/"] },
       ...AI_AGENTS.map((userAgent) => ({
         userAgent,
         allow: "/",
-        disallow: ["/api/", "/kiosk"],
+        disallow: ["/api/"],
       })),
     ],
     sitemap: "https://eurokidsjmdenclave.org/sitemap.xml",

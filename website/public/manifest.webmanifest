@@ -1,11 +1,11 @@
 {
   "name": "EuroKids JMD Enclave",
   "short_name": "EuroKids",
-  "description": "Enquiry desk and website for EuroKids JMD Enclave, Undri.",
+  "description": "EuroKids JMD Enclave, Undri. The school's site, and the enquiry desk at reception.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#FCF8F6",
   "theme_color": "#FF2217",
   "icons": [

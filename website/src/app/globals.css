@@ -668,43 +668,11 @@ img, video { max-width: 100%; display: block; }
 .event-more p { margin: 0; font-size: var(--step-0); line-height: 1.65; color: #3c3c43; }
 .event-more a { color: #2B4A9B; }
 
-/* ── the reception tablet (/kiosk) ───────────────────────────────────── */
-/* One page on the site is not a page of the site: the tablet on the counter
-   shows the form and nothing else. Rather than restructure the layout into
-   route groups for a single route, the page declares itself and the three
-   pieces of site furniture stand down. :has does the work in CSS, so there
-   is no frame where a family sees a navigation bar before it disappears. */
-body:has(.kioskpage) .nav,
-body:has(.kioskpage) .crumbs,
-body:has(.kioskpage) .foot { display: none; }
-/* No rubber-banding at the edges. On a tablet that is handed over all day,
-   a page that bounces reads as something the family has broken. */
-html:has(.kioskpage), body:has(.kioskpage) { overscroll-behavior: none; }
-
-.kioskpage {
-  background: #FCF8F6;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding: clamp(24px, 4vw, 56px) 0 clamp(40px, 6vw, 72px);
-  display: flex; align-items: center;
-}
-.kioskpage .tf-wrap { width: 100%; }
-/* The counter is at adult standing height and the tablet is flat on it, so
-   this is read from further away and at a worse angle than a phone in a
-   hand. Everything comes up a size. */
-@media (min-width: 760px) {
-  .kioskpage .tf-title { font-size: clamp(30px, 3.2vw, 40px); }
-  .kioskpage .tf-q { font-size: clamp(26px, 2.9vw, 36px); }
-  .kioskpage input, .kioskpage textarea, .kioskpage select { font-size: 20px; }
-}
-
-/* Whether this device is actually the tablet. Small and grey when it is, so
-   it reads as a label; plain and legible when it is not, because then it is
-   an instruction to whoever is setting the thing up. */
+/* ── is this device the reception tablet? ────────────────────────────── */
+/* Shown only when the tablet is actually holding the kiosk key, so a parent
+   on their own phone never sees it. */
 .kiosk-state {
   margin: var(--s7) 0 0; text-align: center;
   font-size: var(--step-xs); line-height: 1.5;
+  color: #a8968f; letter-spacing: .04em; text-transform: uppercase;
 }
-.kiosk-state.is-on { color: #a8968f; letter-spacing: .04em; text-transform: uppercase; }
-.kiosk-state.is-off { color: #8a5a52; max-width: 44ch; margin-inline: auto; }
-.kiosk-state code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .95em; }
