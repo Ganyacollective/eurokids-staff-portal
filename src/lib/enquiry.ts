@@ -157,11 +157,22 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
 // If nobody has chosen anything yet, the old address still gets it. An empty
 // table means the feature has not been set up, not that the office should stop
 // being told.
+//
+// "Nobody has chosen anything" has to mean no row has a single source ticked,
+// not merely that the table has no rows. A row with sources: [] is exactly
+// what you get from opening the notification settings and saving without
+// ticking a box, and for two months that silently turned off every enquiry
+// email — website, walk-in and all — because the table was not empty so the
+// fallback never fired, and no user wanted any source so the list came back
+// empty. Enquiries were being saved and nobody was being told about them.
+const fallbackRecipients = () =>
+  (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
+
 export async function notifyRecipients(admin: SupabaseClient, source: Source): Promise<string[]> {
   const { data, error } = await admin.schema("eurokids").from("enquiry_notify").select("user_id, sources");
-  if (error || !data?.length) {
-    return (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
-  }
+  if (error || !data?.length) return fallbackRecipients();
+  // Has anybody expressed a preference at all?
+  if (!data.some(r => (r.sources || []).length)) return fallbackRecipients();
   const wants = new Set(data.filter(r => (r.sources || []).includes(source)).map(r => r.user_id));
   if (!wants.size) return [];
   // Addresses live on the auth record, not on profiles.

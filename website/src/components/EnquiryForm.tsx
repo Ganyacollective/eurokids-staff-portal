@@ -212,6 +212,34 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [done, kiosk]);
 
+  // And an abandoned form clears itself too.
+  //
+  // The reset above only fires after a successful submit. The commoner thing
+  // at a counter is a family who starts, gets called in to see the school,
+  // and never comes back — leaving somebody else's child's name and date of
+  // birth on question four for the next family to walk up to and type over.
+  // Five minutes of nobody touching it and the tablet goes back to the first
+  // question. Only on the tablet: a parent at home who wanders off to find
+  // their child's birth certificate should find their answers where they
+  // left them.
+  useEffect(() => {
+    if (!kiosk || done) return;
+    if (step === 0 && !started.current) return;
+    let id = 0;
+    const arm = () => {
+      window.clearTimeout(id);
+      id = window.setTimeout(startAgain, 5 * 60 * 1000);
+    };
+    const events: (keyof WindowEventMap)[] = ["pointerdown", "keydown", "touchstart"];
+    events.forEach((e) => window.addEventListener(e, arm, { passive: true }));
+    arm();
+    return () => {
+      window.clearTimeout(id);
+      events.forEach((e) => window.removeEventListener(e, arm));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kiosk, done, step]);
+
   if (done) {
     return (
       <div className="tf">
