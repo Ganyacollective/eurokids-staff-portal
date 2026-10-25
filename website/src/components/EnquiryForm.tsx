@@ -417,7 +417,45 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
           >↓</button>
         </div>
       </div>
+
+      <KioskLine kiosk={kiosk} cam={cam} />
     </div>
+  );
+}
+
+// What the tablet says about itself, under the form.
+//
+// Nothing at all on anybody else's device: this is the public home page, and
+// a parent on their own phone must never be told they are not a reception
+// tablet, nor be invited to become one.
+//
+// On the tablet it answers the two questions that otherwise have no answer
+// until somebody reads the records months later: is this device recording
+// walk-ins as walk-ins, and is the camera actually going to take the
+// photograph at submit. Both can fail with the form still working perfectly.
+function KioskLine({
+  kiosk, cam,
+}: {
+  kiosk: boolean;
+  cam: { state: "off" | "starting" | "ready" | "denied"; reason: string | null; retry: () => void };
+}) {
+  if (!kiosk) return null;
+  if (cam.state === "denied") {
+    return (
+      <p className="kiosk-state is-off">
+        Reception tablet &middot; <strong>no photograph will be taken.</strong>{" "}
+        {cam.reason}{" "}
+        <button type="button" className="kiosk-retry" onClick={cam.retry}>
+          Try the camera again
+        </button>
+      </p>
+    );
+  }
+  return (
+    <p className="kiosk-state">
+      Reception tablet &middot; walk-in &middot;{" "}
+      {cam.state === "ready" ? "camera ready" : "starting the camera"}
+    </p>
   );
 }
 

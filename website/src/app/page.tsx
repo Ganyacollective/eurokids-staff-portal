@@ -1,7 +1,6 @@
 import CardMarquee from "@/components/CardMarquee";
 import IntakeHead from "@/components/IntakeHead";
 import EnquiryForm from "@/components/EnquiryForm";
-import KioskStatus from "@/components/KioskStatus";
 import { listCards, getSetting } from "@/lib/site";
 
 // A safety net, not the mechanism. The hub calls /api/revalidate the moment
@@ -29,8 +28,6 @@ export default async function Home() {
         <div className="tf-wrap">
           <IntakeHead />
           <EnquiryForm />
-          {/* Renders nothing unless this device is holding the kiosk key. */}
-          <KioskStatus />
         </div>
       </section>
     </>

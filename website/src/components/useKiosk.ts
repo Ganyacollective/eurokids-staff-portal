@@ -71,14 +71,28 @@ export function useIntakeCamera(enabled: boolean) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [state, setState] = useState<"off" | "starting" | "ready" | "denied">("off");
+  // Why it failed, in the browser's own words. Not decoration: the camera
+  // can be refused by the person, by the device having none, or by a
+  // Permissions-Policy header that stops the prompt ever appearing — and the
+  // last of those is invisible from the tablet unless something says so.
+  const [reason, setReason] = useState<string | null>(null);
+  // Asking again. A refusal is not always final: the permission can be
+  // granted from the address bar afterwards, and Safari wants a tap before
+  // it will open a camera at all.
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => setAttempt((n) => n + 1);
 
   useEffect(() => {
     if (!enabled) return;
     let dead = false;
     setState("starting");
+    setReason(null);
 
     (async () => {
       try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("This browser offers no camera here (an insecure page, or an old browser).");
+        }
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
@@ -92,9 +106,19 @@ export function useIntakeCamera(enabled: boolean) {
         await v.play().catch(() => {});
         videoRef.current = v;
         setState("ready");
-      } catch {
+      } catch (e) {
         // No camera, or permission refused. The form still works: an enquiry
-        // without a photograph is worth far more than no enquiry.
+        // without a photograph is worth far more than no enquiry. But it no
+        // longer fails invisibly — the tablet is told, so whoever set it up
+        // can fix it rather than discovering months of photoless walk-ins.
+        const err = e as { name?: string; message?: string };
+        setReason(
+          err?.name === "NotAllowedError"
+            ? "The camera was refused. Allow it from the address bar, or check the site's permissions."
+            : err?.name === "NotFoundError"
+              ? "This device reports no camera."
+              : err?.message || "The camera would not start.",
+        );
         setState("denied");
       }
     })();
@@ -105,7 +129,7 @@ export function useIntakeCamera(enabled: boolean) {
       streamRef.current = null;
       videoRef.current = null;
     };
-  }, [enabled]);
+  }, [enabled, attempt]);
 
   const frameRef = useRef<string | null>(null);
 
@@ -143,5 +167,5 @@ export function useIntakeCamera(enabled: boolean) {
     }
   };
 
-  return { state, latest };
+  return { state, latest, reason, retry };
 }
