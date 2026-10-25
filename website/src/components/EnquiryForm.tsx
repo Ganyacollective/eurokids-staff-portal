@@ -146,6 +146,25 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
     // broken. So the page moves first and the save happens behind it. If it
     // fails we come back and say so, which is the only case where the delay
     // was ever worth waiting for.
+    // The photograph is chosen first, before anything on screen moves.
+    //
+    // Not taken — chosen. The camera has been sampling into a rolling buffer
+    // the whole time the form was being filled in, and this picks the best
+    // frame from the seconds before this tap. Taking one here instead would
+    // photograph the hand coming off the button and the tablet already being
+    // turned back towards the desk, which is a picture of a ceiling.
+    //
+    // It is read before setDone so the "seconds before the tap" are measured
+    // from the tap, not from whenever React got round to re-rendering.
+    const photo = kiosk ? cam.best() : null;
+
+    // Up, and submitted, the instant the button is pressed.
+    //
+    // The request takes a second or two and the family is standing at the
+    // counter — making them watch a spinner for it is the thing that felt
+    // broken. So the page moves first and the save happens behind it. If it
+    // fails we come back and say so, which is the only case where the delay
+    // was ever worth waiting for.
     setBusy(true);
     setErr(null);
     setDone(true);
@@ -155,9 +174,6 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
       ? `${get("dob_y")}-${String(get("dob_m")).padStart(2, "0")}-${String(get("dob_d")).padStart(2, "0")}`
       : "";
     const withCode = (cc: string, n: string) => (n.trim() ? `${cc} ${n.trim()}` : "");
-    // Already in hand: the camera keeps a recent frame warm, so Submit does
-    // not stop to draw a canvas and encode a JPEG while somebody waits.
-    const photo = kiosk ? cam.latest() : null;
 
     try {
       const r = await fetch(API, {
@@ -199,6 +215,10 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
   // A clean form for the next family. The tablet is handed over all morning,
   // so it also resets itself if it is simply left sitting there.
   const startAgain = () => {
+    // Drop the held frames with the answers. The tablet goes from family to
+    // family, and one family's photograph must never be able to end up on
+    // the next family's enquiry.
+    cam.forget();
     setA({ father_cc: "+91", mother_cc: "+91" });
     setStep(0);
     setDone(false);
