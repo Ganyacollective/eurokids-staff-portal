@@ -540,8 +540,61 @@ window.addEventListener('message',function(e){if(e.data&&e.data.ekEnquireHeight)
 
     <div class="grp"><h3>Who gets told</h3><div class="box" id="nt-box"><div class="rowx hint">Loading the people…</div></div>
       <div class="foot">Everyone with hub access, from Users &amp; Access. Teachers are not here — those accounts belong to the Staff Portal. The email names the family and opens their card directly, and nobody is emailed a source they have not ticked.</div></div>
+
+    <div class="grp"><h3>Bring in the Coda database</h3><div class="box">
+      <div class="rowx"><div class="hint" style="margin-bottom:10px">
+        In Coda, open the <strong>Enquiry Database</strong> table &rarr; <strong>&ctdot;</strong> &rarr; <em>Download as CSV</em>, then drop the file here.
+        Export the whole table, not the filtered view — the hub does its own filtering, and the enquiry list already hides last year and anything lost.
+        Families already here are left exactly as they are: this only adds the ones that are missing, so running it again every few weeks is safe.
+      </div>
+      <input type="file" id="cd-file" accept=".csv,text/csv" class="in" style="padding:9px">
+      <div id="cd-out" style="margin-top:10px"></div>
+      </div></div>
+      <div class="foot">Notes from Neeta, Diya and Sunita come across as timeline notes under their own names.</div></div>
   </div>`;
   renderNotify();
+  wireCodaImport();
+}
+
+/* ── the Coda import ───────────────────────────────────────────────
+   This used to be a Python script and the service-role key, which is exactly
+   why the hub sat four hundred families behind the sheet everybody was
+   actually using. Preview first, always: four hundred families is not a
+   thing to discover after the fact. */
+function wireCodaImport(){
+  const f = el('cd-file'), out = el('cd-out'); if (!f) return;
+  let csv = null;
+  const say = h => out.innerHTML = h;
+
+  const post = async (commit) => {
+    say('<span class="hint">Reading…</span>');
+    const j = await enqApi('/api/enquiry/import', { csv, commit });
+    if (!j.ok) return say(`<div class="err">${esc(j.error)}</div>`);
+    const warn = (j.unparsed_dates || []).length
+      ? `<div class="hint" style="margin-top:6px">Dates it could not read (left blank): ${esc(j.unparsed_dates.join(' · '))}</div>` : '';
+    if (j.dry_run) {
+      say(`<div class="hint"><strong>${j.in_file}</strong> families in the file ·
+            <strong>${j.already_here}</strong> already here, untouched ·
+            <strong>${j.to_add}</strong> would be added, with ${j.notes_in_file} notes.</div>
+           ${j.sample.length ? `<div class="hint" style="margin-top:6px">First few: ${j.sample.map(r => esc(r.child || r.phone || '—')).join(', ')}…</div>` : ''}
+           ${warn}
+           <div style="margin-top:10px">${j.to_add
+             ? `<button class="btn" id="cd-go">Add ${j.to_add} families</button>`
+             : '<span class="chip c-good">Already up to date</span>'}</div>`);
+      if (el('cd-go')) el('cd-go').onclick = () => { el('cd-go').disabled = true; el('cd-go').textContent = 'Adding…'; post(true); };
+    } else {
+      say(`<div class="chip c-good">Added ${j.added} families and ${j.notes_added} notes.</div>
+           <div class="hint" style="margin-top:6px">${j.already_here} were already here and were not touched.</div>${warn}`);
+    }
+  };
+
+  f.onchange = () => {
+    const file = f.files && f.files[0]; if (!file) return;
+    const r = new FileReader();
+    r.onload = () => { csv = String(r.result || ''); post(false); };
+    r.onerror = () => say('<div class="err">That file could not be read.</div>');
+    r.readAsText(file);
+  };
 }
 
 /* ── who hears about a new enquiry ─────────────────────────────
