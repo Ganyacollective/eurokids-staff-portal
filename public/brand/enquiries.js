@@ -344,14 +344,25 @@ function eqRun(){
       <td class="eq-src">${chipList(r.sources)}</td>
       <td class="hint">${esc(r.father_name || r.mother_name || '—')}</td>
       <td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '<span class="hint">—</span>'}</td>
-      <td><input type="datetime-local" class="in eq-edit" data-f="visit_at" value="${toInputDT(r.visit_at)}" style="width:172px"></td>
+      <td><input type="datetime-local" class="in eq-edit${toInputDT(r.visit_at) ? '' : ' is-empty'}" data-f="visit_at" value="${toInputDT(r.visit_at)}" style="width:172px"></td>
       <td>${sel('call_status', r.call_status, ENQ_CALLS)}<div class="hint">${r.call_date ? longDate(r.call_date) : ''}</div></td>
-      <td><input type="date" class="in eq-edit" data-f="follow_up_on" value="${r.follow_up_on || ''}" style="width:140px"></td>
-      <td class="eq-open" style="cursor:pointer;white-space:normal;max-width:260px">${r.latest_note ? `${esc(String(r.latest_note).slice(0, 90))}<div class="hint">${esc(r.latest_note_by || '')} · ${r.note_count} note${r.note_count === 1 ? '' : 's'}</div>` : '<span class="hint">add a note ›</span>'}</td>
-      <td class="hint">${whenAgo(r.updated_at)}<div class="hint">${esc(r.updated_by || '')}</div></td>
+      <td><input type="date" class="in eq-edit${r.follow_up_on ? '' : ' is-empty'}" data-f="follow_up_on" value="${r.follow_up_on || ''}" style="width:140px"></td>
+      <td class="eq-open eq-note" style="cursor:pointer;white-space:normal">${r.latest_note ? `<div class="eq-note-t">${esc(String(r.latest_note).slice(0, 120))}</div><div class="hint">${esc(r.latest_note_by || '')} · ${r.note_count} note${r.note_count === 1 ? '' : 's'}</div>` : '<span class="hint">add a note ›</span>'}</td>
+      <td class="hint eq-trail" title="Who worked on this, and when">
+        <span class="eq-trail-when">${whenAgo(r.updated_at)}</span>
+        <div class="hint">${esc(r.updated_by || '')}</div></td>
     </tr>`).join('') || `<tr><td colspan="13"><div class="empty"><div class="ic">📭</div><h3>Nothing matches</h3><div>Change the filter, or reset it to this academic year.</div></div></td></tr>`;
 
   el('eq-rows').querySelectorAll('.eq-open').forEach(td => td.onclick = () => openEnquiry(Number(td.closest('tr').dataset.id)));
+
+  // "Last worked" was a dead label saying "16 d ago · EPMS sync", which
+  // raises the question it does not answer: worked on by whom, doing what.
+  // Every edit already writes an enquiry_event with an actor and a time, and
+  // the drawer already renders that trail — it was just three clicks away.
+  // Clicking the cell opens the family and goes straight to the history.
+  el('eq-rows').querySelectorAll('.eq-trail').forEach(td => td.onclick = () => {
+    openEnquiry(Number(td.closest('tr').dataset.id), { trail: true });
+  });
   el('eq-rows').querySelectorAll('.eq-edit').forEach(x => x.onchange = async () => {
     const id = Number(x.closest('tr').dataset.id), f = x.dataset.f;
     let v = x.value || null;
@@ -736,7 +747,7 @@ async function renderDupeBanner(){
 }
 
 /* ── the enquiry sheet ───────────────────────────────────────── */
-async function openEnquiry(id){
+async function openEnquiry(id, opts = {}){
   const s = getSb().schema('eurokids');
   const body = openDrawer('Enquiry', '');
   const [{ data: e }, { data: events }, { data: notes }, { data: calls }] = await Promise.all([
@@ -935,6 +946,12 @@ async function openEnquiry(id){
           ${x.noteId ? `<a href="#" class="en-delnote" data-id="${x.noteId}" style="margin-left:auto">Remove</a>` : ''}</div>
         <div class="note-body">${esc(x.summary || x.kind)}${x.rec ? ` <a href="${esc(x.rec)}" target="_blank" rel="noopener">▶︎ recording</a>` : ''}</div>
       </div>`).join('') || '<div class="note-item hint">Nothing yet.</div>';
+    // Asked for from the "Last worked" column: land on the trail rather
+    // than at the top of a long record.
+    if (opts.trail) {
+      const t = el('en-timeline');
+      if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     el('en-timeline').querySelectorAll('.en-delnote').forEach(a => a.onclick = async ev => { ev.preventDefault(); if (!confirm('Remove this note?')) return; await s.from('enquiry_note').delete().eq('id', Number(a.dataset.id)); enqRefresh(); openEnquiry(id); });
   };
   drawTimeline();

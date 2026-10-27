@@ -439,6 +439,49 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 
    The box comes back on hover, on focus and on keyboard focus, so the
    affordance is there the moment the pointer is. */
+/* Date cells get the same treatment as the selects, and for a worse reason.
+   An empty datetime-local does not render empty — the browser draws its own
+   greyed template, "27/10/2026, 12:30", in every row that has no visit
+   booked. Eight rows of identical ghost dates read as eight families with a
+   visit at half past twelve, which is the opposite of the truth. Boxing
+   them made it worse by making the emptiness look filled in.
+
+   So an empty one is a faint dash-width placeholder until you reach for it.
+   The browser still owns the picker; we are only deciding when it looks
+   like a control. */
+#eq-table td input.in[type="date"],
+#eq-table td input.in[type="datetime-local"]{
+  background:transparent;border-color:transparent;box-shadow:none;color:var(--label)}
+#eq-table td input.in[type="date"]:not([value=""]),
+#eq-table td input.in[type="datetime-local"]:not([value=""]){color:var(--label)}
+#eq-table td input.in.is-empty{color:transparent}
+/* And the picker icon with it, or an empty cell still carries a little grey
+   calendar floating in the middle of nothing. It comes back with the row. */
+#eq-table td input.in.is-empty::-webkit-calendar-picker-indicator{opacity:0}
+#eq-table tr:hover td input.in.is-empty::-webkit-calendar-picker-indicator{opacity:.5}
+#eq-table tr:hover td input.in.is-empty{color:var(--label-3)}
+#eq-table tr:hover td input.in[type="date"],
+#eq-table tr:hover td input.in[type="datetime-local"],
+#eq-table td input.in[type="date"]:hover,
+#eq-table td input.in[type="datetime-local"]:hover,
+#eq-table td input.in[type="date"]:focus,
+#eq-table td input.in[type="datetime-local"]:focus{
+  border-color:var(--sep);background:var(--bg);color:var(--label)}
+#eq-table td input.in[type="date"]:focus,
+#eq-table td input.in[type="datetime-local"]:focus{box-shadow:var(--focus);border-color:var(--accent)}
+
+/* The notes column was setting the height of every row. Two lines, then an
+   ellipsis; the whole note is in the drawer, which is where you are going if
+   you care about it. */
+#eq-table td.eq-note{max-width:230px}
+#eq-table td.eq-note .eq-note-t{
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;line-height:1.35}
+
+/* "Last worked" is a link into the history, not a label. */
+#eq-table td.eq-trail{cursor:pointer}
+#eq-table td.eq-trail:hover .eq-trail-when{text-decoration:underline}
+
 #eq-table td select.in{
   background:transparent;border-color:transparent;box-shadow:none;
   color:var(--label);font-weight:500}
