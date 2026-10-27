@@ -320,11 +320,17 @@ function eqRun(){
   el('eq-rows').innerHTML = list.map(r => `<tr data-id="${r.id}" class="${r.follow_up_due ? 't-warn' : r.status === 'won' ? 't-good' : r.status === 'lost' ? 't-crit' : ''}">
       <td class="eq-open" style="cursor:pointer"><strong>${esc(enqName(r))}</strong>${r.on_roster ? ' <span class="chip c-good">on roll</span>' : ''}<div class="hint">${esc(r.academic_year)} · ${whenAgo(r.created_at)}</div></td>
       <td style="min-width:132px">${(() => {
+        // An unset keenness draws an empty track, not a half-full one. The
+        // slider still sits at the middle so dragging it starts somewhere
+        // sensible, but the filled portion is zero and the colour is grey,
+        // because "nobody has judged this family yet" and "5 out of 10" are
+        // not the same thing and the bar was saying the second.
+        const unset = r.sentiment === null || r.sentiment === undefined;
         const v = r.sentiment ?? 5;
-        const c = v >= 7 ? 'var(--green)' : v >= 4 ? 'var(--orange)' : 'var(--red)';
+        const c = unset ? 'var(--fill-2)' : v >= 7 ? 'var(--green)' : v >= 4 ? 'var(--orange)' : 'var(--red)';
         return `<span style="display:inline-flex;align-items:center;gap:8px">
           <input type="range" class="keen-range eq-heat" min="0" max="10" value="${v}"
-                 style="--kc:${c};--kp:${v * 10}%;width:86px" title="${r.sentiment ?? '—'} / 10">
+                 style="--kc:${c};--kp:${unset ? 0 : v * 10}%;width:86px" title="${unset ? 'Not set' : r.sentiment + ' / 10'}">
           <b class="keen-n" style="--kc:${c}">${r.sentiment ?? '—'}</b></span>`;
       })()}</td>
       <td>${chipList(r.programs, 'c-acc')}</td>

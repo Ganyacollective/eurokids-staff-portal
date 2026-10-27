@@ -429,6 +429,34 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
    floors, not fixed widths: the table still scrolls sideways, it just stops
    doing it by shredding the words. */
 #eq-table select.in{min-width:150px;padding-right:30px;text-overflow:ellipsis}
+
+/* ══ the inline editors read as text until you reach for them ══
+   Status and Stage are <select>s on every row, and a bordered, shadowed,
+   white box repeated eight times down two columns is the loudest thing on
+   the screen — louder than the child's name, which is the only part anybody
+   scans for. They are still selects and still one click from changing; they
+   just stop shouting while you are reading.
+
+   The box comes back on hover, on focus and on keyboard focus, so the
+   affordance is there the moment the pointer is. */
+#eq-table td select.in{
+  background:transparent;border-color:transparent;box-shadow:none;
+  color:var(--label);font-weight:500}
+#eq-table tr:hover td select.in{border-color:var(--sep);background:var(--bg)}
+#eq-table td select.in:hover,
+#eq-table td select.in:focus{border-color:var(--sep);background:var(--bg)}
+#eq-table td select.in:focus{box-shadow:var(--focus);border-color:var(--accent)}
+
+/* The keenness bar is a judgement somebody made, so an unset one shows an
+   empty track rather than a half-filled bar sitting next to a dash — which
+   is what it did, and which reads as "5 out of 10" rather than "nobody has
+   said". Thinner track and a smaller thumb: eight sliders down a column were
+   competing with the data. */
+#eq-table .keen-range{width:72px !important}
+#eq-table .keen-range::-webkit-slider-runnable-track{height:4px}
+#eq-table .keen-range::-moz-range-track{height:4px}
+#eq-table .keen-range::-webkit-slider-thumb{width:13px;height:13px;margin-top:-4.5px}
+#eq-table .keen-range::-moz-range-thumb{width:13px;height:13px}
 #eq-table select.eq-stage{min-width:184px}
 /* Sources are chips and there can be two of them ("Walk In", "Website"), so
    they wrap onto a second line rather than being clipped. */
