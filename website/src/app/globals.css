@@ -393,8 +393,16 @@ img, video { max-width: 100%; display: block; }
    down a size to match. One column still on a phone, where side by side
    would wrap every label. */
 .tf-opts { display: grid; gap: 9px; max-width: 560px; }
+/* Two up from 340px, which is every phone in use. Six options in one column is 894px of content on a 844px screen —
+   the OK button sat below the fold and the question looked unanswerable.
+   The long label ("Summer / Evening club") wraps to two lines at this width
+   and that is fine; a wrapped label is readable, a button you cannot find
+   is not. */
+@media (min-width: 340px) {
+  .tf-opts { grid-template-columns: 1fr 1fr; gap: 9px; }
+}
 @media (min-width: 620px) {
-  .tf-opts { grid-template-columns: 1fr 1fr; gap: 10px; max-width: 640px; }
+  .tf-opts { gap: 10px; max-width: 640px; }
 }
 .tf-opt {
   display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
