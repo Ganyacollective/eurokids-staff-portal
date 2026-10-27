@@ -98,7 +98,7 @@ const QUESTIONS: Q[] = [
 type Answers = Record<string, string | string[]>;
 
 export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
-  const kioskKey = useKiosk();
+  const { key: kioskKey, linkedNow } = useKiosk();
   const kiosk = !!kioskKey;
   const cam = useIntakeCamera(kiosk);
   const [step, setStep] = useState(0);
@@ -469,7 +469,7 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
         </div>
       </div>
 
-      <KioskLine kiosk={kiosk} cam={cam} />
+      <KioskLine kiosk={kiosk} linkedNow={linkedNow} cam={cam} />
     </div>
   );
 }
@@ -485,12 +485,16 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
 // walk-ins as walk-ins, and is the camera actually going to take the
 // photograph at submit. Both can fail with the form still working perfectly.
 function KioskLine({
-  kiosk, cam,
+  kiosk, linkedNow, cam,
 }: {
   kiosk: boolean;
+  linkedNow: boolean;
   cam: { state: "off" | "starting" | "ready" | "denied"; reason: string | null; retry: () => void };
 }) {
-  if (!kiosk) return null;
+  // Only on the load that carried the key — that is setup. Once the tablet
+  // is installed and launching from its icon, a family sees the form and
+  // nothing else.
+  if (!kiosk || !linkedNow) return null;
   if (cam.state === "denied") {
     return (
       <p className="kiosk-state is-off">

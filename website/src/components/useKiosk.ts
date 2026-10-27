@@ -23,10 +23,22 @@ import { useEffect, useRef, useState } from "react";
 // device, and clearing the browser's storage undoes it.
 const REMEMBERED = "ek-kiosk-key";
 
+// Returns the key, and whether it arrived in the address bar on this load.
+//
+// That second part is what decides whether the tablet says anything about
+// itself. Setting the device up means opening the kiosk link — key in the
+// URL — so that is the one moment the status line is wanted and the one
+// moment a family is not watching. Every launch after that comes from the
+// home-screen icon with no query string, and shows nothing: a parent at the
+// counter should be reading the question, not "RECEPTION TABLET · WALK-IN ·
+// CAMERA READY", which means nothing to them and makes the school look like
+// a kiosk at an airport.
 export function useKiosk() {
   const [key, setKey] = useState<string | null>(null);
+  const [linkedNow, setLinkedNow] = useState(false);
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("kiosk");
+    if (fromUrl && fromUrl !== "off") setLinkedNow(true);
 
     // ?kiosk=off takes a device out of reception duty. There has to be a way
     // back that is not "clear the browser's site data".
@@ -44,7 +56,7 @@ export function useKiosk() {
       if (saved) setKey(saved);
     } catch { /* storage unavailable; the form still works, without a photo */ }
   }, []);
-  return key;
+  return { key, linkedNow };
 }
 
 // Taking a device out of reception duty — run from the address bar on that
