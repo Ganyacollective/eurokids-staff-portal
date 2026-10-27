@@ -102,20 +102,6 @@ export default async function CardPage({ params }: { params: Promise<{ slug: str
           </p>
         )}
       </div>
-
-      {/* An event page is where a parent lands from a shared photo link.
-          Without this it is a dead end — for them, and for a crawler that
-          has just found fourteen pages with no route to the rest of the
-          site. */}
-      <aside className="event-more wrap">
-        <h2>About the school</h2>
-        <p>
-          EuroKids JMD Enclave is a <a href="/preschool-in-undri">preschool in Undri, Pune</a>,
-          with <a href="/daycare-in-undri">day care until 6:30 PM</a> in the same building.
-          Admissions are open for 26&ndash;27 — <a href="/programmes">see the programmes</a>,{" "}
-          <a href="/faq">read what parents ask</a>, or walk in on any working morning.
-        </p>
-      </aside>
     </article>
   );
 }

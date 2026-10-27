@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { mediaUrl, type Card } from "@/lib/site";
+import CardPlayer, { hasVideo } from "./CardPlayer";
 
 // The posters drifting across the home page.
 //
@@ -28,6 +29,15 @@ export default function CardMarquee({
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
+  // Which film is playing over the page, if any.
+  const [playing, setPlaying] = useState<number | null>(null);
+  const withVideo = cards.filter(hasVideo);
+  const nextVideo = () => {
+    if (playing === null) return;
+    const here = withVideo.findIndex((c) => c.id === cards[playing].id);
+    const next = withVideo[(here + 1) % withVideo.length];
+    setPlaying(cards.findIndex((c) => c.id === next.id));
+  };
 
   useEffect(() => {
     const track = trackRef.current;
@@ -175,6 +185,17 @@ export default function CardMarquee({
               aria-hidden={ghost || undefined}
               tabIndex={ghost ? -1 : undefined}
               draggable={false}
+              // A card with a film plays it here. A card without one still
+              // goes to its page, where the photographs are — and the href
+              // stays on both, so the link is real, crawlable, and works on
+              // a middle click or "open in new tab".
+              onClick={(e) => {
+                if (ghost || !hasVideo(c)) return;
+                // A drag that ends on a card never reaches here: the marquee
+                // already swallows that click in the capture phase.
+                e.preventDefault();
+                setPlaying(i % cards.length);
+              }}
             >
               {art && (
                 <img
@@ -186,14 +207,21 @@ export default function CardMarquee({
                 />
               )}
               <span className="card-watch" aria-hidden={ghost || undefined}>
-                WATCH
-                <br />
-                NOW
+                {hasVideo(c) ? <>WATCH<br />NOW</> : <>SEE<br />PHOTOS</>}
               </span>
             </Link>
           );
         })}
       </div>
+
+      {playing !== null && (
+        <CardPlayer
+          cards={cards}
+          index={playing}
+          onClose={() => setPlaying(null)}
+          onNext={nextVideo}
+        />
+      )}
     </section>
   );
 }

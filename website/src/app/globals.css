@@ -745,3 +745,58 @@ img, video { max-width: 100%; display: block; }
   font: inherit; color: #2B4A9B; text-decoration: underline;
   cursor: pointer;
 }
+
+
+/* ── the video, over the page ────────────────────────────────────────── */
+/* Opened from a poster on the home page. The old site navigated to a page
+   per event to do this, which is a page load and a lost scroll position
+   between a parent and twelve seconds of their child dancing. */
+.vplay {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(10, 6, 5, .94);
+  display: flex; flex-direction: column;
+  animation: vplay-in .18s var(--ease);
+}
+@keyframes vplay-in { from { opacity: 0 } to { opacity: 1 } }
+
+.vplay-bar {
+  flex: none; display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s4) var(--s5);
+  color: rgba(255,255,255,.92);
+}
+.vplay-title {
+  flex: 1; text-align: center; min-width: 0;
+  font-size: var(--step-0); font-weight: 600; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vplay-btn {
+  flex: none; display: inline-flex; align-items: center; gap: 9px;
+  font: inherit; font-size: var(--step-s); font-weight: 600;
+  color: #fff; background: rgba(255,255,255,.12);
+  border: 0; border-radius: 999px; padding: 11px 18px; cursor: pointer;
+  transition: background .14s var(--ease);
+}
+.vplay-btn:hover { background: rgba(255,255,255,.22); }
+.vplay-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* The film fills what is left, letterboxed rather than cropped — these are
+   somebody's child, not a background texture. */
+.vplay-stage {
+  flex: 1; min-height: 0; display: grid; place-items: center;
+  padding: 0 var(--s5) var(--s5);
+}
+.vplay-stage video,
+.vplay-stage iframe {
+  width: 100%; height: 100%;
+  max-width: min(100%, calc((100vh - 140px) * 16 / 9));
+  border: 0; border-radius: 12px; background: #000;
+  object-fit: contain;
+}
+
+/* On a phone the bar wraps to two lines if the title is long, and the
+   buttons stay thumb-sized rather than shrinking with the type. */
+@media (max-width: 560px) {
+  .vplay-bar { padding: var(--s3) var(--s3); gap: var(--s2); }
+  .vplay-title { order: 3; flex-basis: 100%; text-align: left; }
+  .vplay-stage { padding: 0 var(--s3) var(--s3); }
+}
