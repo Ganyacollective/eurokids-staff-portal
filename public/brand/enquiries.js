@@ -266,8 +266,9 @@ async function tabEnqList(){
       <div class="fdesc" id="eq-fdesc"></div>
       <div id="dupe-bar"></div>
       <div class="panel"><div class="tw"><table id="eq-table"><thead><tr>
-        <th>Child</th><th>Sentiment</th><th>Program</th><th>Status</th><th>Stage</th><th>Source</th>
-        <th>Father</th><th>Phone</th><th>Visit</th><th>Call</th><th>Follow-up</th><th>Notes</th><th>Last worked</th></tr></thead>
+        <th scope="col">Child</th><th scope="col" class="eq-hv">Heat</th><th scope="col">Programme</th>
+        <th scope="col">Status</th><th scope="col">Follow-up</th><th scope="col">Phone</th>
+        <th scope="col">Latest note</th><th scope="col" class="eq-r">Last worked</th></tr></thead>
         <tbody id="eq-rows"></tbody></table></div></div>`;
   el('enq-new').onclick = () => openNewEnquiry();
   el('eq-filter').onclick = openEnqFilter;
@@ -317,41 +318,44 @@ function eqRun(){
   // Editable where it saves a trip into the record: status, sentiment, call
   // status, and the two dates the coordinator lives by.
   const sel = (id, v, opts, label) => `<select class="in eq-edit" data-f="${id}" style="width:auto;max-width:160px"><option value=""></option>${opts.map(o => `<option value="${esc(o)}" ${v === o ? 'selected' : ''}>${esc(label ? label(o) : o)}</option>`).join('')}</select>`;
-  el('eq-rows').innerHTML = list.map(r => `<tr data-id="${r.id}" class="${r.follow_up_due ? 't-warn' : r.status === 'won' ? 't-good' : r.status === 'lost' ? 't-crit' : ''}">
-      <td class="eq-open" style="cursor:pointer"><strong>${esc(enqName(r))}</strong>${r.on_roster ? ' <span class="chip c-good">on roll</span>' : ''}<div class="hint">${esc(r.academic_year)} · ${whenAgo(r.created_at)}</div></td>
-      <td style="min-width:132px">${(() => {
-        // An unset keenness draws an empty track, not a half-full one. The
-        // slider still sits at the middle so dragging it starts somewhere
-        // sensible, but the filled portion is zero and the colour is grey,
-        // because "nobody has judged this family yet" and "5 out of 10" are
-        // not the same thing and the bar was saying the second.
-        const unset = r.sentiment === null || r.sentiment === undefined;
-        const v = r.sentiment ?? 5;
-        const c = unset ? 'var(--fill-2)' : v >= 7 ? 'var(--green)' : v >= 4 ? 'var(--orange)' : 'var(--red)';
-        return `<span style="display:inline-flex;align-items:center;gap:8px">
-          <input type="range" class="keen-range eq-heat" min="0" max="10" value="${v}"
-                 style="--kc:${c};--kp:${unset ? 0 : v * 10}%;width:86px" title="${unset ? 'Not set' : r.sentiment + ' / 10'}">
-          <b class="keen-n" style="--kc:${c}">${r.sentiment ?? '—'}</b></span>`;
-      })()}</td>
-      <td>${chipList(r.programs, 'c-acc')}</td>
-      <td>${sel('status', r.status, ENQ_STATUSES.map(s => s[0]), v => ENQ_STATUS[v]?.l || v)}</td>
-      <td style="white-space:normal;min-width:184px">
-        <select class="in eq-stage" style="width:100%;font-size:var(--fs-sub)">
-          <option value="">— add a stage —</option>
-          ${ENQ_STAGES.map(st => `<option value="${esc(st)}" ${(r.stages || []).includes(st) ? 'selected' : ''}>${esc(st)}</option>`).join('')}
-        </select>
-        ${(r.stages || []).length > 1 ? `<div class="hint" style="margin-top:3px">${esc((r.stages || []).slice(0, -1).join(' → '))}</div>` : ''}</td>
-      <td class="eq-src">${chipList(r.sources)}</td>
-      <td class="hint">${esc(r.father_name || r.mother_name || '—')}</td>
+  el('eq-rows').innerHTML = list.map(r => {
+    // Heat is a number, not a slider.
+    //
+    // Eight draggable range inputs down a column competed with the data they
+    // were annotating, and an enquiry nobody has judged drew its bar at five
+    // of ten — a value nobody had entered. The number says it in one glyph
+    // and a dash says "not set" without pretending otherwise. Dragging it
+    // lives in the drawer, where there is room.
+    //
+    // Class .hv, not .heat: hub.css already owns .heat as a 64x7px pill with
+    // overflow hidden, which clipped the digit to seven pixels and made the
+    // number look like it simply was not there.
+    const unset = r.sentiment === null || r.sentiment === undefined;
+    const hc = unset ? '' : r.sentiment >= 7 ? 'var(--green)' : r.sentiment >= 4 ? 'var(--orange)' : 'var(--red)';
+    const heat = unset
+      ? '<span class="hv none">&mdash;</span>'
+      : `<span class="hv" style="color:${hc}">${r.sentiment}</span>`;
+
+    // One axis of row colour. Green is won, red is lost, and that is all it
+    // ever means now — "a follow-up is overdue" used to borrow the same
+    // stripe in orange, which is a different question wearing the same
+    // clothes. Overdue says the word instead.
+    const k = r.status === 'won' ? 'won' : r.status === 'lost' ? 'lost' : '';
+    const due = r.follow_up_due ? ' <span class="eq-flag">OVERDUE</span>' : '';
+
+    return `<tr data-id="${r.id}" class="${k}">
+      <td class="eq-open" style="cursor:pointer"><strong>${esc(enqName(r))}</strong>${r.on_roster ? ' <span class="chip c-good">on roll</span>' : ''}<div class="hint">${esc(r.academic_year)} &middot; ${whenAgo(r.created_at)}</div></td>
+      <td class="eq-hv">${heat}</td>
+      <td class="hint">${esc((r.programs || []).join(', ') || '—')}</td>
+      <td class="eq-st ${k}">${sel('status', r.status, ENQ_STATUSES.map(x => x[0]), v => ENQ_STATUS[v]?.l || v)}</td>
+      <td class="eq-fu${r.follow_up_due ? ' is-due' : ''}"><input type="date" class="in eq-edit${r.follow_up_on ? '' : ' is-empty'}" data-f="follow_up_on" value="${r.follow_up_on || ''}">${due}</td>
       <td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '<span class="hint">—</span>'}</td>
-      <td><input type="datetime-local" class="in eq-edit${toInputDT(r.visit_at) ? '' : ' is-empty'}" data-f="visit_at" value="${toInputDT(r.visit_at)}" style="width:172px"></td>
-      <td>${sel('call_status', r.call_status, ENQ_CALLS)}<div class="hint">${r.call_date ? longDate(r.call_date) : ''}</div></td>
-      <td><input type="date" class="in eq-edit${r.follow_up_on ? '' : ' is-empty'}" data-f="follow_up_on" value="${r.follow_up_on || ''}" style="width:140px"></td>
-      <td class="eq-open eq-note" style="cursor:pointer;white-space:normal">${r.latest_note ? `<div class="eq-note-t">${esc(String(r.latest_note).slice(0, 120))}</div><div class="hint">${esc(r.latest_note_by || '')} · ${r.note_count} note${r.note_count === 1 ? '' : 's'}</div>` : '<span class="hint">add a note ›</span>'}</td>
-      <td class="hint eq-trail" title="Who worked on this, and when">
+      <td class="eq-open eq-note" style="cursor:pointer">${r.latest_note ? `<div class="eq-note-t">${esc(String(r.latest_note).slice(0, 120))}</div><div class="hint">${esc(r.latest_note_by || '')} &middot; ${r.note_count} note${r.note_count === 1 ? '' : 's'}</div>` : '<span class="hint">add a note &rsaquo;</span>'}</td>
+      <td class="hint eq-trail eq-r" title="Who worked on this, and when">
         <span class="eq-trail-when">${whenAgo(r.updated_at)}</span>
         <div class="hint">${esc(r.updated_by || '')}</div></td>
-    </tr>`).join('') || `<tr><td colspan="13"><div class="empty"><div class="ic">📭</div><h3>Nothing matches</h3><div>Change the filter, or reset it to this academic year.</div></div></td></tr>`;
+    </tr>`;
+  }).join('') || `<tr><td colspan="8"><div class="empty"><div class="ic">📭</div><h3>Nothing matches</h3><div>Change the filter, or reset it to this academic year.</div></div></td></tr>`;
 
   el('eq-rows').querySelectorAll('.eq-open').forEach(td => td.onclick = () => openEnquiry(Number(td.closest('tr').dataset.id)));
 

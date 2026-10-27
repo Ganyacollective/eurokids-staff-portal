@@ -421,7 +421,57 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 .heat{display:inline-block;width:64px;height:7px;border-radius:4px;background:var(--fill-2);overflow:hidden;vertical-align:middle}
 .heat i{display:block;height:100%;border-radius:4px}
 .heatn{font-size:var(--fs-sub);color:var(--label-2);margin-left:6px;font-weight:600}
-#eq-table td{vertical-align:top}
+#eq-table td{vertical-align:middle}
+#eq-table td.eq-open{vertical-align:top}
+
+/* ══ eight columns, one meaning per colour ══
+   This was thirteen columns scrolling sideways with a pinned name, two
+   bordered selects and two date boxes per row, a draggable slider in every
+   row, and a row tint that encoded status and "follow-up overdue" at once —
+   two different questions wearing the same colour, with nothing on screen
+   saying so. Everything dropped from here still exists in the drawer.
+
+   Colour now says one thing: green won, red lost. Overdue says the word. */
+#eq-table tr.won  td:first-child{box-shadow:inset 3px 0 0 var(--green), 1px 0 0 var(--sep)}
+#eq-table tr.lost td:first-child{box-shadow:inset 3px 0 0 var(--red),   1px 0 0 var(--sep)}
+#eq-table tr.won  td{background:rgba(30,122,69,.055)}
+#eq-table tr.lost td{background:rgba(192,57,43,.05)}
+#eq-table tr.won:hover  td{background:rgba(30,122,69,.1)}
+#eq-table tr.lost:hover td{background:rgba(192,57,43,.09)}
+
+/* Heat: .hv, because .heat is already a 64x7px pill in this stylesheet and
+   it clipped the digit to seven pixels. The number is the value; a dash is
+   an honest "nobody has said". */
+/* Widths. These used to live on the sticky first-column rule; removing the
+   pinning took them with it and the name column grew until the table
+   scrolled sideways again — which was the whole thing we were fixing.
+   Rendering the real markup rather than the mockup is what caught it. */
+#eq-table{table-layout:auto;width:100%}
+#eq-table th:first-child,#eq-table td:first-child{min-width:170px;max-width:220px}
+#eq-table th.eq-hv,#eq-table td.eq-hv{width:56px}
+#eq-table td.eq-note,#eq-table th:nth-child(7){max-width:220px;width:220px}
+/* The flag sits under the date, not beside it. Beside it the column needed
+   247px — a date box plus a pill plus the gap — and that alone was what
+   kept the table scrolling sideways at 1200px. */
+#eq-table td.eq-fu{width:150px;white-space:normal}
+#eq-table td.eq-fu .eq-flag{margin:4px 0 0;display:inline-block}
+
+/* The status is ghosted into plain text, so it carries its meaning in colour
+   and weight the way the old chip did — green won, red lost. */
+#eq-table td.eq-st{width:140px}
+#eq-table td.eq-st select.in{font-weight:600;max-width:134px;min-width:0}
+#eq-table td.eq-st.won  select.in{color:#176138}
+#eq-table td.eq-st.lost select.in{color:#A32B20}
+#eq-table .hv{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+#eq-table .hv.none{color:var(--label-3);font-weight:500;font-size:15px}
+
+/* Overdue is a word, not a tint — colour is never the only encoding. */
+#eq-table .eq-flag{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:999px;
+  background:var(--orange-wash);color:#8A5410;font-size:var(--fs-fn);font-weight:700;vertical-align:middle}
+
+#eq-table td.eq-fu.is-due input.in{color:#8A5410;font-weight:600}
+#eq-table td.eq-fu input.in{width:128px}
+#eq-table th.eq-r,#eq-table td.eq-r{text-align:right}
 /* Columns that were cut mid-word.
    "1st Premi", "Leadsqua" — the native select had no minimum width, so in a
    table with thirteen columns it collapsed until the dropdown arrow sat on
@@ -474,9 +524,9 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
    ellipsis; the whole note is in the drawer, which is where you are going if
    you care about it. */
 #eq-table td.eq-note{max-width:230px}
+#eq-table td.eq-note{white-space:normal}
 #eq-table td.eq-note .eq-note-t{
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  overflow:hidden;line-height:1.35}
+  display:block;overflow:hidden;line-height:1.4;max-height:2.9em}
 
 /* "Last worked" is a link into the history, not a label. */
 #eq-table td.eq-trail{cursor:pointer}
@@ -506,33 +556,7 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 #eq-table td.eq-src{white-space:normal;min-width:132px}
 #eq-table .chip{margin:1px 2px 1px 0}
 
-/* The child's name stays put.
-   Thirteen columns fit on no screen, so the table scrolls sideways — and four
-   columns along you are reading a row with no idea whose it is. The first
-   column pins to the left edge, because the name is the one part of a row
-   that answers "who is this?". A sticky cell is transparent by default and
-   the scrolling columns slide visibly underneath it, so it needs its own
-   background; the shadow on its right edge is what makes it read as pinned
-   rather than as a rendering fault.
 
-   The status stripe lives on this same cell as an inset box-shadow, and this
-   rule carries a higher specificity than the stripe's (an id beats two
-   classes), so the stripe has to be repeated here per status or pinning the
-   column would silently delete the colour coding. */
-#eq-table th:first-child,
-#eq-table td:first-child{
-  position:sticky;left:0;z-index:2;
-  background:var(--bg-card);
-  box-shadow:1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18);
-  min-width:168px;max-width:230px}
-#eq-table thead th:first-child{z-index:3;background:var(--bg-grouped)}
-/* The washes are deliberately translucent, which a pinned cell cannot be —
-   the scrolling columns would show straight through it. Painting the wash as
-   a flat gradient layer on top of the solid card colour keeps the exact tint
-   while leaving the cell opaque. */
-#eq-table tr.t-crit td:first-child{box-shadow:inset 3px 0 0 var(--red),    1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--red-wash),var(--red-wash)) ,var(--bg-card)}
-#eq-table tr.t-warn td:first-child{box-shadow:inset 3px 0 0 var(--orange), 1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--orange-wash),var(--orange-wash)),var(--bg-card)}
-#eq-table tr.t-good td:first-child{box-shadow:inset 3px 0 0 var(--green),  1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--green-wash),var(--green-wash)) ,var(--bg-card)}
 
 /* ══ the sentiment slider ══
    It was the browser's default: one blue bar for a 2 and for a 9. The number
@@ -624,33 +648,7 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
   font-weight:600;cursor:pointer}
 .lnk:hover{text-decoration:underline;text-underline-offset:3px}
 
-/* The child's name stays put.
-   Thirteen columns fit on no screen, so the table scrolls sideways — and four
-   columns along you are reading a row with no idea whose it is. The first
-   column pins to the left edge, because the name is the one part of a row
-   that answers "who is this?". A sticky cell is transparent by default and
-   the scrolling columns slide visibly underneath it, so it needs its own
-   background; the shadow on its right edge is what makes it read as pinned
-   rather than as a rendering fault.
 
-   The status stripe lives on this same cell as an inset box-shadow, and this
-   rule carries a higher specificity than the stripe's (an id beats two
-   classes), so the stripe has to be repeated here per status or pinning the
-   column would silently delete the colour coding. */
-#eq-table th:first-child,
-#eq-table td:first-child{
-  position:sticky;left:0;z-index:2;
-  background:var(--bg-card);
-  box-shadow:1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18);
-  min-width:168px;max-width:230px}
-#eq-table thead th:first-child{z-index:3;background:var(--bg-grouped)}
-/* The washes are deliberately translucent, which a pinned cell cannot be —
-   the scrolling columns would show straight through it. Painting the wash as
-   a flat gradient layer on top of the solid card colour keeps the exact tint
-   while leaving the cell opaque. */
-#eq-table tr.t-crit td:first-child{box-shadow:inset 3px 0 0 var(--red),    1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--red-wash),var(--red-wash)) ,var(--bg-card)}
-#eq-table tr.t-warn td:first-child{box-shadow:inset 3px 0 0 var(--orange), 1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--orange-wash),var(--orange-wash)),var(--bg-card)}
-#eq-table tr.t-good td:first-child{box-shadow:inset 3px 0 0 var(--green),  1px 0 0 var(--sep), 6px 0 12px -8px rgba(0,0,0,.18); background:linear-gradient(var(--green-wash),var(--green-wash)) ,var(--bg-card)}
 
 /* the sheet can take the whole screen when a record needs room */
 .drawer.wide{width:min(1100px,100vw)}
