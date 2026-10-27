@@ -3,6 +3,7 @@ import { Inter, Inter_Tight } from "next/font/google";
 import Header from "@/components/Header";
 import Reveal from "@/components/Reveal";
 import Crumbs from "@/components/Crumbs";
+import { SCHOOL } from "@/lib/local";
 import "./globals.css";
 
 // The two faces the current site uses: Inter Tight for headings, Inter for
@@ -73,26 +74,33 @@ const SCHOOL_JSONLD = {
   alternateName: "EuroKids Undri",
   url: "https://eurokidsjmdenclave.org",
   logo: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/eurokids-logo.png",
-  telephone: "+91-22-6962-2686",
-  email: "admin@eurokidsjmdenclave.org",
-  foundingDate: "2017",
+  telephone: SCHOOL.phoneHref.replace("tel:", ""),
+  email: SCHOOL.email,
+  foundingDate: SCHOOL.founded,
   parentOrganization: { "@type": "Organization", name: "EuroKids International" },
+  // Taken from SCHOOL rather than retyped. This read "JMD Enclave, Undri"
+  // while local.ts — the single source for these facts, and the version that
+  // matches the Google Business Profile — says "Bungalow No 1, JMD Enclave,
+  // Undri". A local listing is matched to a site partly on how exactly the
+  // name, address and phone agree, so a short address here and the full one
+  // on the contact page is a weaker match for no reason at all. Retyping is
+  // how the drift happened; importing is how it stops.
   address: {
     "@type": "PostalAddress",
-    streetAddress: "JMD Enclave, Undri",
-    addressLocality: "Pune",
-    addressRegion: "Maharashtra",
-    postalCode: "411060",
+    streetAddress: SCHOOL.street,
+    addressLocality: SCHOOL.locality,
+    addressRegion: SCHOOL.region,
+    postalCode: SCHOOL.postcode,
     addressCountry: "IN",
   },
   areaServed: ["Undri", "NIBM", "Mohammadwadi", "Pisoli", "Kondhwa", "Hadapsar"],
   // Coordinates let a search engine place the school on a map instead of
   // inferring it from the address line, which is what the "near me"
   // searches are resolved against.
-  geo: { "@type": "GeoCoordinates", latitude: 18.4575, longitude: 73.9165 },
+  geo: { "@type": "GeoCoordinates", latitude: SCHOOL.lat, longitude: SCHOOL.lng },
   hasMap:
     "https://www.google.com/maps/search/?api=1&query=EuroKids+JMD+Enclave+Undri+Pune",
-  award: "Best Ambience Award",
+  award: SCHOOL.award,
   // The founder as a real entity, so an answer engine asked "who runs
   // EuroKids JMD Enclave" has a named person to return rather than
   // guessing from a directory listing. Name and role only — there is no
@@ -101,8 +109,18 @@ const SCHOOL_JSONLD = {
   founder: {
     "@type": "Person",
     name: "Neeta Saxena",
-    jobTitle: "Founder",
-    worksFor: { "@type": "Preschool", name: "EuroKids JMD Enclave" },
+    jobTitle: "Founder and Principal",
+    url: "https://eurokidsjmdenclave.org/neeta-saxena",
+    worksFor: { "@type": "Preschool", name: SCHOOL.name },
+  },
+  // The same person again as the one in charge, because founder and
+  // principal are different claims and an answer engine asked "who is the
+  // principal of EuroKids Undri" reads this one.
+  employee: {
+    "@type": "Person",
+    name: "Neeta Saxena",
+    jobTitle: "Principal",
+    url: "https://eurokidsjmdenclave.org/neeta-saxena",
   },
   slogan: "Choose the best.",
   sameAs: ["https://www.instagram.com/eurokidsjmdenclave/"],
@@ -247,6 +265,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/faq">Questions parents ask</a>
               <a href="/how-to-choose-a-preschool-in-undri">Choosing a preschool</a>
               <a href="/safe-preschool-in-undri">Safety</a>
+              <a href="/neeta-saxena">Neeta Saxena</a>
               <a href="/which-eurokids-in-undri">Which EuroKids</a>
               <a href="/preschool-for-2-year-olds-in-undri">For 2 year olds</a>
               <a href="/summercamp">Summer camp</a>

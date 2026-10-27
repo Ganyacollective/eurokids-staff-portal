@@ -7,13 +7,21 @@ import { useEffect, useState } from "react";
 // Teachers is not a page here. It is the way a member of staff gets to the
 // leave form and the rest of the staff portal, which lives on the admin
 // domain — so it leaves the site entirely.
+// Make A Payment sits second, right after Home.
+//
+// It was fifth, behind Summercamp, Teachers and Annual Function. A parent who
+// opens this site on their phone is, more often than not, standing there
+// trying to pay fees — that is the errand, and it was four items into a row
+// that pushes the last ones off a narrow screen. Teachers is a staff link
+// and goes last for the same reason: it is the only item here no parent will
+// ever want.
 const LINKS = [
   { href: "/", label: "Home" },
-  { href: "/summercamp", label: "Summercamp" },
-  { href: "https://admin.eurokidsjmdenclave.org/staff", label: "Teachers", external: true },
-  { href: "/annual-function", label: "Annual Function" },
   { href: "/makeapayment", label: "Make A Payment" },
+  { href: "/summercamp", label: "Summercamp" },
+  { href: "/annual-function", label: "Annual Function" },
   { href: "/contact-us", label: "Contact Us" },
+  { href: "https://admin.eurokidsjmdenclave.org/staff", label: "Teachers", external: true },
 ];
 
 export default function Header() {

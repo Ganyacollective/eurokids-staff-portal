@@ -42,6 +42,12 @@ It is **off the main road**, not on it — reached by turning off Hanewadi Road.
 Each EuroKids is separately owned and operated; facts about other Undri
 branches do not apply to this one.
 
+## Who runs it
+
+- **Neeta Saxena** — founder and principal. She started the school in ${SCHOOL.founded}
+  and runs it from the premises rather than from a head office. ${SITE}/neeta-saxena
+- Operated by ${SCHOOL.legal}, an authorised EuroKids International franchise.
+
 ## Hours
 
 ${HOURS.map((h) => `- ${h.what}: ${h.when}`).join("\n")}
