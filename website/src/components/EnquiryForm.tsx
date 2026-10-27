@@ -98,7 +98,7 @@ const QUESTIONS: Q[] = [
 type Answers = Record<string, string | string[]>;
 
 export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
-  const { key: kioskKey, linkedNow } = useKiosk();
+  const { key: kioskKey } = useKiosk();
   const kiosk = !!kioskKey;
   const cam = useIntakeCamera(kiosk);
   const [step, setStep] = useState(0);
@@ -469,74 +469,10 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
         </div>
       </div>
 
-      <KioskLine kiosk={kiosk} linkedNow={linkedNow} cam={cam} />
     </div>
   );
 }
 
-// What the tablet says about itself, under the form.
-//
-// Nothing at all on anybody else's device: this is the public home page, and
-// a parent on their own phone must never be told they are not a reception
-// tablet, nor be invited to become one.
-//
-// On the tablet it answers the two questions that otherwise have no answer
-// until somebody reads the records months later: is this device recording
-// walk-ins as walk-ins, and is the camera actually going to take the
-// photograph at submit. Both can fail with the form still working perfectly.
-function KioskLine({
-  kiosk, linkedNow, cam,
-}: {
-  kiosk: boolean;
-  linkedNow: boolean;
-  cam: { state: "off" | "starting" | "ready" | "denied"; reason: string | null; retry: () => void };
-}) {
-  // Only on the load that carried the key — that is setup. Once the tablet
-  // is installed and launching from its icon, a family sees the form and
-  // nothing else.
-  if (!kiosk || !linkedNow) return null;
-  if (cam.state === "denied") {
-    return (
-      <p className="kiosk-state is-off">
-        Reception tablet &middot; <strong>no photograph will be taken.</strong>{" "}
-        {cam.reason}{" "}
-        <button type="button" className="kiosk-retry" onClick={cam.retry}>
-          Try the camera again
-        </button>
-      </p>
-    );
-  }
-  return (
-    <p className="kiosk-state">
-      Reception tablet &middot; walk-in &middot;{" "}
-      {cam.state === "ready" ? "camera ready" : "starting the camera"}
-    </p>
-  );
-}
-
-// Day, month and year as three plain selects.
-//
-// A date picker is the wrong control here: a calendar opens on this month and
-// the answer is two or three years back, which is a lot of tapping backwards.
-// Three lists put the year one scroll away, and the year list only offers
-// years a preschooler could actually have been born in.
-// The phone question.
-//
-// It was a native <select> sitting next to a separate underlined input: two
-// controls, two underlines of different widths, and the browser's own stepper
-// arrows glued to the dial code. It read as two unrelated fields that happened
-// to be adjacent.
-//
-// Now it is one field with one underline, the country sitting inside it as a
-// quiet prefix the way it does on a phone. The select is still a real native
-// <select>, laid transparently over the prefix — so a tap opens the system
-// picker on a tablet, the keyboard reaches it, and screen readers announce it
-// — but the arrows are gone and the visible text is ours.
-//
-// Letters are not rejected after the fact, they simply never arrive: the
-// field keeps digits and nothing else, and stops at that country's length. A
-// parent cannot type a wrong-shaped number and find out about it a screen
-// later.
 function Tel({
   ccKey, numKey, get, set, inputRef,
 }: {
