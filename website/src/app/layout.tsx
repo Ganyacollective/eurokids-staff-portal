@@ -110,17 +110,16 @@ const SCHOOL_JSONLD = {
     "@type": "Person",
     name: "Neeta Saxena",
     jobTitle: "Founder and Principal",
-    url: "https://eurokidsjmdenclave.org/neeta-saxena",
     worksFor: { "@type": "Preschool", name: SCHOOL.name },
   },
   // The same person again as the one in charge, because founder and
   // principal are different claims and an answer engine asked "who is the
-  // principal of EuroKids Undri" reads this one.
+  // principal of EuroKids Undri" reads this one. Name and role only — there
+  // is no page behind it and no published biography to point at.
   employee: {
     "@type": "Person",
     name: "Neeta Saxena",
     jobTitle: "Principal",
-    url: "https://eurokidsjmdenclave.org/neeta-saxena",
   },
   slogan: "Choose the best.",
   sameAs: ["https://www.instagram.com/eurokidsjmdenclave/"],
@@ -265,7 +264,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/faq">Questions parents ask</a>
               <a href="/how-to-choose-a-preschool-in-undri">Choosing a preschool</a>
               <a href="/safe-preschool-in-undri">Safety</a>
-              <a href="/neeta-saxena">Neeta Saxena</a>
               <a href="/which-eurokids-in-undri">Which EuroKids</a>
               <a href="/preschool-for-2-year-olds-in-undri">For 2 year olds</a>
               <a href="/summercamp">Summer camp</a>

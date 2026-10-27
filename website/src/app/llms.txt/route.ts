@@ -45,7 +45,7 @@ branches do not apply to this one.
 ## Who runs it
 
 - **Neeta Saxena** — founder and principal. She started the school in ${SCHOOL.founded}
-  and runs it from the premises rather than from a head office. ${SITE}/neeta-saxena
+  and runs it from the premises rather than from a head office.
 - Operated by ${SCHOOL.legal}, an authorised EuroKids International franchise.
 
 ## Hours

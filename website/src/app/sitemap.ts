@@ -29,10 +29,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/preschool-for-2-year-olds-in-undri`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE}/summercamp`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${SITE}/annual-function`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
-    // The person who runs the school. A name query is low volume and very
-    // high intent — somebody searching "Neeta Saxena EuroKids" has already
-    // been told about the school by another parent.
-    { url: `${SITE}/neeta-saxena`, lastModified: now, changeFrequency: "yearly", priority: 0.7 },
     { url: `${SITE}/contact-us`, lastModified: now, changeFrequency: "yearly", priority: 0.7 },
     { url: `${SITE}/makeapayment`, lastModified: now, changeFrequency: "yearly", priority: 0.5 },
     { url: `${SITE}/terms-conditions`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
