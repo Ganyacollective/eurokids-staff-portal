@@ -386,10 +386,19 @@ img, video { max-width: 100%; display: block; }
 }
 .tf-sel:focus { outline: none; border-color: var(--brand); }
 
+/* Two columns once there is room. Six programmes stacked one per line in a
+   560px column pushed the OK button below the fold on the tablet, so the
+   question looked like it had no answer — the option list was taller than
+   the screen it was being read on. Three and three fits, and the bricks come
+   down a size to match. One column still on a phone, where side by side
+   would wrap every label. */
 .tf-opts { display: grid; gap: 9px; max-width: 560px; }
+@media (min-width: 620px) {
+  .tf-opts { grid-template-columns: 1fr 1fr; gap: 10px; max-width: 640px; }
+}
 .tf-opt {
-  display: flex; align-items: center; gap: 15px; width: 100%; text-align: left;
-  font: inherit; font-size: clamp(17px, 2vw, 20px); padding: 16px 18px; cursor: pointer;
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  font: inherit; font-size: clamp(16px, 1.7vw, 18px); padding: 13px 15px; cursor: pointer;
   background: #fff; color: var(--ink);
   border: 1.5px solid rgba(60,20,14,.16); border-radius: 10px;
   transition: border-color .14s, background .14s;
@@ -397,16 +406,20 @@ img, video { max-width: 100%; display: block; }
 .tf-opt:hover { border-color: rgba(60,20,14,.44); }
 .tf-opt[aria-pressed="true"] { border-color: var(--brand); background: #FFF6F5; }
 .tf-opt kbd {
-  font: inherit; font-size: var(--step-xs); font-weight: 600; width: 26px; height: 26px; flex: none;
+  font: inherit; font-size: var(--step-xs); font-weight: 600; width: 23px; height: 23px; flex: none;
   display: grid; place-items: center; border-radius: 6px;
   background: rgba(60,20,14,.06); color: #8A6A64;
 }
 .tf-opt[aria-pressed="true"] kbd { background: var(--brand); color: #fff; }
 .tf-opt > span:first-of-type { flex: 1; }
 .tf-check { color: var(--brand); font-weight: 700; font-size: var(--step-1); }
-.tf-multi-note { font-size: var(--step-s); color: #8A6A64; margin: 16px 0 0; }
+.tf-multi-note { font-size: var(--step-s); color: #8A6A64; margin: 12px 0 0; }
 
+/* The six-option question is the tallest in the form. 34px of air above the
+   button is right when there are two options and is what pushed OK off the
+   screen when there are six, so the multi question gets less of it. */
 .tf-actions { display: flex; align-items: center; gap: 18px; margin-top: 34px; flex-wrap: wrap; }
+.tf-opts ~ .tf-actions, .tf-multi-note + .tf-actions { margin-top: 22px; }
 .tf-ok {
   display: inline-flex; align-items: center; gap: 11px;
   font: inherit; font-weight: 600; font-size: var(--step-0);

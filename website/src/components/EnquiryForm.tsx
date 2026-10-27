@@ -43,12 +43,15 @@ const PROGRAMMES: [label: string, db: string][] = [
 //
 // Lengths are national-significant digits, trunk '0' excluded. Where a
 // country genuinely varies (the UAE, Germany) the range is the range; only
-// India gets a leading-digit rule, because that is the one worth being
-// strict about and a wrong guess about somebody else's country would block a
-// real parent.
-type Dial = { code: string; name: string; min: number; max: number; lead?: RegExp; hint: string };
+// No leading-digit rule. Indian mobiles are allocated 6-9 today, but a rule
+// that refuses a number outright has to be right about every case forever —
+// an older series, a number ported from somewhere, a parent typing the one
+// landline they actually answer. Being clever about the first digit buys a
+// little data hygiene and risks turning away a real family, which is the
+// wrong side of that trade. Length is enough.
+type Dial = { code: string; name: string; min: number; max: number; hint: string };
 const DIAL: Dial[] = [
-  { code: "+91",  name: "India",        min: 10, max: 10, lead: /^[6-9]/, hint: "98200 12345" },
+  { code: "+91",  name: "India",        min: 10, max: 10, hint: "98200 12345" },
   { code: "+971", name: "UAE",          min: 8,  max: 9,  hint: "50 123 4567" },
   { code: "+966", name: "Saudi Arabia", min: 9,  max: 9,  hint: "51 234 5678" },
   { code: "+974", name: "Qatar",        min: 8,  max: 8,  hint: "3312 3456" },
@@ -157,7 +160,6 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
       } else if (n.length < d.min || n.length > d.max) {
         return fail(`A mobile number in ${d.name} is ${d.min} to ${d.max} digits. You have typed ${n.length}.`);
       }
-      if (d.lead && !d.lead.test(n)) return fail("An Indian mobile number starts with 6, 7, 8 or 9.");
     }
     if (q.kind === "email" && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return fail("That email looks incomplete.");
     return true;

@@ -62,7 +62,31 @@ const enqRows = () => cached('enq:rows', async () => {
   const { data, error } = await getSb().schema('eurokids').from('v_enquiry').select('*').order('created_at', { ascending: false }).limit(5000);
   if (error) throw error; return data || [];
 });
-const enqRefresh = () => invalidate('enq');
+// Clearing the cache is not refreshing the screen.
+//
+// This only emptied the cache, and twelve call sites assumed that was enough.
+// It is not: the list is already rendered from rows held in memory, so
+// deleting a family cleared the cache, left the row sitting on screen, and
+// the next load — minutes later, or when somebody pressed reload — was the
+// first time the screen agreed with the database. "Why do I have to keep
+// reloading it" is this, and it was never one bug in one button.
+//
+// So refreshing now means both. The repaint is deferred to the end of the
+// current handler, because the callers do things in different orders —
+// close the drawer then refresh, refresh then reopen — and a repaint in the
+// middle of that fights whatever they do next. A drawer that is open is left
+// alone: the person is reading it, and pulling the page out from under them
+// is worse than a stale row behind it. It repaints when they close it.
+let _enqPaint = 0;
+const enqRefresh = () => {
+  invalidate('enq');
+  clearTimeout(_enqPaint);
+  _enqPaint = setTimeout(() => {
+    if (typeof app !== 'undefined' && app !== 'enquiries') return;
+    if (document.getElementById('drawer')?.classList.contains('on')) return;
+    if (typeof renderApp === 'function') renderApp();
+  }, 0);
+};
 const who = () => (profile?.full_name || session?.user?.email || '').split('@')[0];
 
 // Save one field and leave a trail, so "who changed this, and when" is answerable.
@@ -305,13 +329,13 @@ function eqRun(){
       })()}</td>
       <td>${chipList(r.programs, 'c-acc')}</td>
       <td>${sel('status', r.status, ENQ_STATUSES.map(s => s[0]), v => ENQ_STATUS[v]?.l || v)}</td>
-      <td style="white-space:normal;max-width:210px">
+      <td style="white-space:normal;min-width:184px">
         <select class="in eq-stage" style="width:100%;font-size:var(--fs-sub)">
           <option value="">— add a stage —</option>
           ${ENQ_STAGES.map(st => `<option value="${esc(st)}" ${(r.stages || []).includes(st) ? 'selected' : ''}>${esc(st)}</option>`).join('')}
         </select>
         ${(r.stages || []).length > 1 ? `<div class="hint" style="margin-top:3px">${esc((r.stages || []).slice(0, -1).join(' → '))}</div>` : ''}</td>
-      <td>${chipList(r.sources)}</td>
+      <td class="eq-src">${chipList(r.sources)}</td>
       <td class="hint">${esc(r.father_name || r.mother_name || '—')}</td>
       <td>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '<span class="hint">—</span>'}</td>
       <td><input type="datetime-local" class="in eq-edit" data-f="visit_at" value="${toInputDT(r.visit_at)}" style="width:172px"></td>

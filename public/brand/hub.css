@@ -422,6 +422,17 @@ td .in{min-height:26px;padding:2px 6px;font-size:var(--fs-co)}
 .heat i{display:block;height:100%;border-radius:4px}
 .heatn{font-size:var(--fs-sub);color:var(--label-2);margin-left:6px;font-weight:600}
 #eq-table td{vertical-align:top}
+/* Columns that were cut mid-word.
+   "1st Premi", "Leadsqua" — the native select had no minimum width, so in a
+   table with thirteen columns it collapsed until the dropdown arrow sat on
+   top of its own text. A control you cannot read is not a control. These are
+   floors, not fixed widths: the table still scrolls sideways, it just stops
+   doing it by shredding the words. */
+#eq-table select.in{min-width:150px;padding-right:30px;text-overflow:ellipsis}
+#eq-table select.eq-stage{min-width:184px}
+/* Sources are chips and there can be two of them ("Walk In", "Website"), so
+   they wrap onto a second line rather than being clipped. */
+#eq-table td.eq-src{white-space:normal;min-width:132px}
 #eq-table .chip{margin:1px 2px 1px 0}
 
 /* The child's name stays put.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useKiosk } from "./useKiosk";
 
 // Teachers is not a page here. It is the way a member of staff gets to the
 // leave form and the rest of the staff portal, which lives on the admin
@@ -26,6 +27,12 @@ const LINKS = [
 
 export default function Header() {
   const path = usePathname();
+  // The staff portal link has no business on the reception tablet. It is the
+  // one item in this row that is not for parents, and on a device handed
+  // across a counter it is an invitation to wander into the admin side.
+  // Everywhere else it stays — a teacher opening the site on her own phone
+  // still needs it.
+  const { key: kioskKey } = useKiosk();
   const [open, setOpen] = useState(false);
 
   // The sheet must not survive a navigation, or you tap a link and arrive at
@@ -44,6 +51,8 @@ export default function Header() {
     return () => { mq.removeEventListener("change", close); window.removeEventListener("keydown", esc); };
   }, [open]);
 
+  const links = LINKS.filter((l) => !(kioskKey && l.href.includes("/staff")));
+
   const item = (l: (typeof LINKS)[number]) =>
     l.external ? (
       <a key={l.href} href={l.href}>{l.label}</a>
@@ -61,7 +70,7 @@ export default function Header() {
             <span className="dot" aria-hidden />
             EuroKids JMD Enclave
           </Link>
-          <div className="nav-links">{LINKS.map(item)}</div>
+          <div className="nav-links">{links.map(item)}</div>
           <button
             className="nav-toggle"
             aria-expanded={open}
@@ -85,7 +94,7 @@ export default function Header() {
       </header>
       {open && (
         <div className="nav-sheet" id="nav-sheet">
-          {LINKS.map(item)}
+          {links.map(item)}
         </div>
       )}
     </>
