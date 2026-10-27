@@ -326,13 +326,57 @@ img, video { max-width: 100%; display: block; }
 .tf-field:focus { outline: none; border-bottom-color: var(--brand); }
 .tf-area { resize: none; line-height: 1.4; font-size: clamp(19px, 2.3vw, 25px); }
 
-.tf-phone { display: flex; gap: 14px; align-items: baseline; }
-.tf-cc {
-  font: inherit; font-size: clamp(19px, 2.3vw, 26px); padding: 8px 2px 12px;
-  background: transparent; border: 0; border-bottom: 2px solid rgba(60,20,14,.2);
-  color: var(--ink); cursor: pointer; flex: none;
+/* ── the phone question ──────────────────────────────────────────────
+   One field, one underline. This was a native select next to a separate
+   input: two underlines of different widths with the browser's stepper
+   arrows between them. The country now sits inside the field as a prefix,
+   with a real <select> laid transparently over it so taps, keyboard and
+   screen readers all still get the native picker. */
+.tf-tel { display: block; }
+.tf-tel-row {
+  display: flex; align-items: center; gap: 12px;
+  border-bottom: 2px solid rgba(60,20,14,.2);
+  transition: border-color .18s var(--ease);
+  max-width: 520px;
 }
-.tf-cc:focus { outline: none; border-bottom-color: var(--brand); }
+.tf-tel-row:focus-within { border-bottom-color: var(--brand); }
+
+.tf-tel-cc {
+  position: relative; display: inline-flex; align-items: center; gap: 7px;
+  flex: none; padding: 8px 12px 10px 0;
+  border-right: 1.5px solid rgba(60,20,14,.14);
+  color: #6b5551; cursor: pointer;
+}
+.tf-tel-code {
+  font-size: clamp(17px, 2vw, 21px); font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+.tf-tel-caret { width: 10px; height: 6px; flex: none; opacity: .5; }
+/* The real control, invisible and exactly on top of what it controls. */
+.tf-tel-cc select {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; font: inherit;
+  -webkit-appearance: none; appearance: none; border: 0; background: none;
+}
+.tf-tel-cc:focus-within { color: var(--ink); }
+
+.tf-tel-row input {
+  flex: 1 1 auto; min-width: 0;
+  font: inherit; font-size: clamp(19px, 2.3vw, 26px);
+  font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  padding: 8px 0 10px;
+  background: transparent; border: 0; color: var(--ink);
+}
+.tf-tel-row input:focus { outline: none; }
+.tf-tel-row input::placeholder { color: #c3ada8; letter-spacing: .02em; }
+
+/* Quiet until it matters — a count that shouts at somebody halfway through
+   typing is worse than no count. */
+.tf-tel-count {
+  display: block; margin-top: 8px;
+  font-size: var(--step-xs); color: #b2a09c;
+  font-variant-numeric: tabular-nums;
+}
 
 .tf-dob { display: flex; gap: 12px; flex-wrap: wrap; }
 .tf-sel {

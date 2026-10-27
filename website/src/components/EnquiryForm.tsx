@@ -32,7 +32,36 @@ const PROGRAMMES: [label: string, db: string][] = [
 // India first and selected, because almost everybody here is in India — but
 // changeable, because some parents are posted abroad and enquiring ahead of
 // a move, and a locked +91 makes their number unenterable.
-const DIAL = ["+91", "+1", "+44", "+61", "+65", "+971", "+966", "+974", "+968", "+49", "+33", "+81"];
+// Each dial code with the country it belongs to and how long a mobile number
+// is there, because "at least seven digits" is not a check.
+//
+// It let fifteen 8s through, and it let "888ggg88888" through, on the one
+// field the whole enquiry is useless without: a wrong number is a family
+// nobody can ring back. An Indian mobile is exactly ten digits and starts
+// 6, 7, 8 or 9 — that last part is what catches a landline typed in from
+// habit, which is the realistic mistake here.
+//
+// Lengths are national-significant digits, trunk '0' excluded. Where a
+// country genuinely varies (the UAE, Germany) the range is the range; only
+// India gets a leading-digit rule, because that is the one worth being
+// strict about and a wrong guess about somebody else's country would block a
+// real parent.
+type Dial = { code: string; name: string; min: number; max: number; lead?: RegExp; hint: string };
+const DIAL: Dial[] = [
+  { code: "+91",  name: "India",        min: 10, max: 10, lead: /^[6-9]/, hint: "98200 12345" },
+  { code: "+971", name: "UAE",          min: 8,  max: 9,  hint: "50 123 4567" },
+  { code: "+966", name: "Saudi Arabia", min: 9,  max: 9,  hint: "51 234 5678" },
+  { code: "+974", name: "Qatar",        min: 8,  max: 8,  hint: "3312 3456" },
+  { code: "+968", name: "Oman",         min: 8,  max: 8,  hint: "9212 3456" },
+  { code: "+65",  name: "Singapore",    min: 8,  max: 8,  hint: "8123 4567" },
+  { code: "+1",   name: "USA / Canada", min: 10, max: 10, hint: "201 555 0123" },
+  { code: "+44",  name: "UK",           min: 10, max: 10, hint: "7400 123456" },
+  { code: "+61",  name: "Australia",    min: 9,  max: 9,  hint: "412 345 678" },
+  { code: "+49",  name: "Germany",      min: 10, max: 11, hint: "1512 3456789" },
+  { code: "+33",  name: "France",       min: 9,  max: 9,  hint: "6 12 34 56 78" },
+  { code: "+81",  name: "Japan",        min: 10, max: 10, hint: "90 1234 5678" },
+];
+const dialOf = (code: string) => DIAL.find((d) => d.code === code) || DIAL[0];
 
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -50,7 +79,11 @@ type Q = {
 
 const QUESTIONS: Q[] = [
   { key: "child_name",   label: "What is your child's name?", kind: "text", required: true, placeholder: "First and last name" },
-  { key: "dob",          label: "When were they born?", hint: "Roughly is fine — it tells us which group they would join.", kind: "dob", required: true },
+  // No hint. It used to say "Roughly is fine", which is wrong — the date of
+  // birth decides the group a child is placed in and goes on the admission
+  // record, so it has to be the real one. Inviting an approximation on the
+  // one field that cannot be approximate.
+  { key: "dob",          label: "When were they born?", kind: "dob", required: true },
   { key: "sex",          label: "Boy or girl?", kind: "choice", required: true, options: [["Boy", "Boy"], ["Girl", "Girl"]] },
   { key: "programs",     label: "Which programmes interest you?", hint: "Choose as many as you like.", kind: "multi", required: true, options: PROGRAMMES },
   { key: "father_name",  label: "Father's name", kind: "text", required: true },
@@ -114,7 +147,18 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
     }
     const v = get(q.key).trim();
     if (q.required && !v) return fail("We do need this one.");
-    if (q.kind === "phone" && v && digits(v).length < 7) return fail("That number looks too short.");
+    if (q.kind === "phone" && v) {
+      const d = dialOf(get(q.key === "father_phone" ? "father_cc" : "mother_cc"));
+      const n = digits(v);
+      // "in India" rather than "an India mobile number" — phrasing it as a
+      // place avoids needing an adjective for every country in the list.
+      if (d.min === d.max) {
+        if (n.length !== d.min) return fail(`A mobile number in ${d.name} is ${d.min} digits. You have typed ${n.length}.`);
+      } else if (n.length < d.min || n.length > d.max) {
+        return fail(`A mobile number in ${d.name} is ${d.min} to ${d.max} digits. You have typed ${n.length}.`);
+      }
+      if (d.lead && !d.lead.test(n)) return fail("An Indian mobile number starts with 6, 7, 8 or 9.");
+    }
     if (q.kind === "email" && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return fail("That email looks incomplete.");
     return true;
   }
@@ -332,26 +376,13 @@ export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
           )}
 
           {q.kind === "phone" && (
-            <div className="tf-phone">
-              <select
-                className="tf-cc"
-                aria-label="Country code"
-                value={get(q.key === "father_phone" ? "father_cc" : "mother_cc")}
-                onChange={(e) => set(q.key === "father_phone" ? "father_cc" : "mother_cc", e.target.value)}
-              >
-                {DIAL.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <input
-                ref={inputRef as React.Ref<HTMLInputElement>}
-                className="tf-field"
-                type="tel"
-                inputMode="numeric"
-                autoComplete="tel"
-                placeholder="98200 12345"
-                value={get(q.key)}
-                onChange={(e) => set(q.key, e.target.value)}
-              />
-            </div>
+            <Tel
+              ccKey={q.key === "father_phone" ? "father_cc" : "mother_cc"}
+              numKey={q.key}
+              get={get}
+              set={set}
+              inputRef={inputRef as React.Ref<HTMLInputElement>}
+            />
           )}
 
           {q.kind === "dob" && <Dob get={get} set={set} />}
@@ -485,6 +516,83 @@ function KioskLine({
 // the answer is two or three years back, which is a lot of tapping backwards.
 // Three lists put the year one scroll away, and the year list only offers
 // years a preschooler could actually have been born in.
+// The phone question.
+//
+// It was a native <select> sitting next to a separate underlined input: two
+// controls, two underlines of different widths, and the browser's own stepper
+// arrows glued to the dial code. It read as two unrelated fields that happened
+// to be adjacent.
+//
+// Now it is one field with one underline, the country sitting inside it as a
+// quiet prefix the way it does on a phone. The select is still a real native
+// <select>, laid transparently over the prefix — so a tap opens the system
+// picker on a tablet, the keyboard reaches it, and screen readers announce it
+// — but the arrows are gone and the visible text is ours.
+//
+// Letters are not rejected after the fact, they simply never arrive: the
+// field keeps digits and nothing else, and stops at that country's length. A
+// parent cannot type a wrong-shaped number and find out about it a screen
+// later.
+function Tel({
+  ccKey, numKey, get, set, inputRef,
+}: {
+  ccKey: string;
+  numKey: string;
+  get: (k: string) => string;
+  set: (k: string, v: string | string[]) => void;
+  inputRef: React.Ref<HTMLInputElement>;
+}) {
+  const d = dialOf(get(ccKey));
+  const val = get(numKey);
+  const n = val.replace(/\D/g, "");
+
+  return (
+    <div className="tf-tel">
+      <div className="tf-tel-row">
+        <span className="tf-tel-cc">
+          {/* No flag emoji. They render as empty boxes wherever an emoji font
+              is missing, and Windows has no flag glyphs at all — it draws the
+              two letters instead. The dial code is the thing being chosen
+              anyway, and it looks the same on every device. */}
+          <span className="tf-tel-code">{d.code}</span>
+          <svg className="tf-tel-caret" viewBox="0 0 10 6" aria-hidden>
+            <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <select
+            aria-label="Country"
+            value={d.code}
+            onChange={(e) => {
+              const next = dialOf(e.target.value);
+              set(ccKey, next.code);
+              // A number already typed is trimmed to the new country's length
+              // rather than silently left too long for it.
+              if (n) set(numKey, n.slice(0, next.max));
+            }}
+          >
+            {DIAL.map((o) => (
+              <option key={o.code} value={o.code}>{o.name} ({o.code})</option>
+            ))}
+          </select>
+        </span>
+
+        <input
+          ref={inputRef}
+          type="tel"
+          inputMode="numeric"
+          autoComplete="tel-national"
+          placeholder={d.hint}
+          value={val}
+          maxLength={d.max}
+          onChange={(e) => set(numKey, e.target.value.replace(/\D/g, "").slice(0, d.max))}
+        />
+      </div>
+      <span className="tf-tel-count" aria-hidden>
+        {n.length}/{d.max}
+      </span>
+    </div>
+  );
+}
+
 function Dob({ get, set }: { get: (k: string) => string; set: (k: string, v: string) => void }) {
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: 9 }, (_, i) => thisYear - i);
