@@ -118,7 +118,12 @@ export async function POST(req: NextRequest) {
         // they have just filled a form online and will be rung; an automatic
         // "welcome" on top of that is noise, and it was the slowest thing
         // here. Only the office is told, so somebody picks the enquiry up.
-        await notifySchool(row, source, r.created);
+        // `admin` is what lets notifySchool read the per-person list. Without
+        // it the function silently used the old single office address, which
+        // is why Setup's "Who gets told" had no effect on anything arriving
+        // from the website or the tablet — the only two places enquiries
+        // actually come from.
+        await notifySchool(row, source, r.created, admin);
       } catch (e) {
         await admin.schema("eurokids").from("enquiry_event").insert({
           enquiry_id: row.id, kind: "note", actor: "system",

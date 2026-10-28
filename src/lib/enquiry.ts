@@ -216,13 +216,22 @@ export async function notifyRecipients(admin: SupabaseClient, source: Source): P
   return [...new Set([...users, ...plain])];
 }
 
-export async function notifySchool(e: EnquiryRow, source: Source, created: boolean, admin?: SupabaseClient) {
+// `admin` is required, not optional.
+//
+// It was optional, and the public enquiry route — the website form and the
+// reception tablet, which is where every real enquiry comes from — never
+// passed it. The optional parameter meant that omission compiled, ran, sent
+// an email, and reported success, while quietly addressing it to the old
+// office address and ignoring every choice made in Setup. Nobody could have
+// seen that from the outside: the mail arrived, just to one wrong place.
+//
+// Required, the compiler catches it. There is no sensible default for "who
+// should hear about this family", so there should never have been one.
+export async function notifySchool(e: EnquiryRow, source: Source, created: boolean, admin: SupabaseClient) {
   const site = process.env.NEXT_PUBLIC_SITE_URL || "https://admin.eurokidsjmdenclave.org";
   const who = e.child_name || e.father_name || e.father_phone || "someone";
   const line = `${source === "Walk In" ? "Walk-in" : source} · ${who}${e.programs?.length ? " · " + e.programs.join(", ") : ""}${e.father_phone ? " · " + e.father_phone : ""}${created ? "" : " (known family)"}`;
-  const to = admin
-    ? await notifyRecipients(admin, source)
-    : (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
+  const to = await notifyRecipients(admin, source);
   if (mailReady() && to.length) {
     const html = renderEmail({
       title: source === "Walk In" ? "A family just walked in" : `New enquiry — ${source}`, subtitle: who, theme: "celebration",
