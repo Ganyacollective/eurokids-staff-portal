@@ -67,10 +67,30 @@ export async function POST(req: NextRequest) {
     if (direction === "outbound" && !b.createIfUnknown) {
       return NextResponse.json({ ok: false, error: "No family has that number. Add them as an enquiry first, or tick to create one." }, { status: 404 });
     }
+    // Whose number it is, if whoever took the call knew.
+    //
+    // This used to file every call under father_phone and father_name
+    // regardless. Half the time it is the mother who rings, and often nobody
+    // asked — so the record asserted a fact about a family that we had simply
+    // made up, and the tablet then deferred to it.
+    //
+    // Unstated numbers are parked on the father's field because that is what
+    // phone_key reads, but phone_owner stays null to say nobody has claimed
+    // it. captureEnquiry moves it the moment a parent types it into their own
+    // box at reception.
+    const whose = b.whose === "mother" || b.whose === "father" ? b.whose : null;
     const r = await captureEnquiry(admin, {
-      source: "Call", father_phone: phone, father_name: b.caller_name || null,
+      source: "Call",
+      father_phone: whose === "mother" ? null : phone,
+      father_name: whose === "mother" ? null : (b.caller_name || null),
+      mother_phone: whose === "mother" ? phone : null,
+      mother_name: whose === "mother" ? (b.caller_name || null) : null,
+      phone_owner: whose,
       child_name: b.child_name || null, actor, at,
       message: note || null, sendWelcome: false, notifySchool: false,
+      // The call_log row below is the better line: it carries who took it and
+      // how long it lasted. "Called the school" above it says less, twice.
+      logArrival: false,
     });
     enquiryId = r.enquiry.id;
     created = r.created;
@@ -95,17 +115,13 @@ export async function POST(req: NextRequest) {
   }, { onConflict: "provider,provider_call_id" });
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
-  // The family's own history. captureEnquiry already writes one for a brand
-  // new record, so this would be the same sentence twice.
-  if (!created) {
-    await tbl.from("enquiry_event").insert({
-      enquiry_id: enquiryId, at, actor,
-      kind: direction === "outbound" ? "call_out" : status === "missed" ? "missed_call" : "call_in",
-      summary: `${direction === "outbound" ? "We called" : status === "missed" ? "Missed call" : "They called"}`
-        + `${minutes ? ` · ${minutes} min` : ""}${note ? ` — “${note.slice(0, 160)}”` : ""}`,
-      detail: { logged_by_hand: true, status },
-    });
-  }
+  // No enquiry_event for the call itself.
+  //
+  // The drawer already builds the timeline from call_log as well as
+  // enquiry_event, so the row written just above appears as "They called ·
+  // Sunita · 2 min" on its own. Writing an event too put the same call on
+  // screen twice — and that event repeated the note's text, which is already
+  // its own entry a line below. One call, one line.
 
   if (note) {
     await tbl.from("enquiry_note").insert({

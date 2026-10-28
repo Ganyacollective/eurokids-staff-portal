@@ -24,12 +24,20 @@ export type CaptureInput = {
   father_name?: string | null; father_phone?: string | null; father_email?: string | null;
   mother_name?: string | null; mother_phone?: string | null; mother_email?: string | null;
   address?: string | null;
+  // Which parent the number belongs to, when somebody actually asked. Null
+  // means it is parked, not claimed, and the family may move it themselves.
+  phone_owner?: "mother" | "father" | null;
   message?: string | null;
   actor?: string | null;
   at?: string | null;
   detail?: Record<string, unknown>;
   sendWelcome?: boolean;            // hello to the family
   notifySchool?: boolean;           // heads-up to the office
+  // Set false when the caller writes a better line of its own. A logged call
+  // already appears in the timeline from call_log, with who took it and how
+  // long it lasted; "Called the school" underneath that is the same fact
+  // twice, in less detail.
+  logArrival?: boolean;
 };
 
 export const phoneKey = (p?: string | null) => {
@@ -46,6 +54,8 @@ export type EnquiryRow = {
   mother_name: string | null; mother_phone: string | null; mother_email: string | null; address: string | null;
   first_visit_at: string | null; visit_at: string | null; welcome_email_sent_at: string | null; welcome_wa_sent_at: string | null;
   phone_key: string | null; dob: string | null; sex: string | null;
+  // Which parent the number belongs to, when somebody actually said so.
+  phone_owner: "mother" | "father" | null;
 };
 
 const EVENT_KIND: Record<Source, string> = {
@@ -58,6 +68,11 @@ const EVENT_LABEL: Record<Source, string> = {
 };
 // The admission stage Coda would have ticked for each way of arriving.
 const STAGE_FOR: Partial<Record<Source, string>> = { "Walk In": "1st Premise Visit", Call: "1st Call Contact", WhatsApp: "1st Whatsapp Contact", Leadsquare: "Leadsquare" };
+
+// Did the family type this themselves, or did we write it down for them?
+// The tablet at reception and the website form are the family's own words;
+// everything else is a member of staff's record of a conversation.
+const fromFamilySource = (s: Source) => s === "Walk In" || s === "Website";
 
 export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput) {
   const key = phoneKey(input.father_phone) || phoneKey(input.mother_phone);
@@ -74,20 +89,79 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
   }
 
   let row: EnquiryRow; let created = false;
+  // Conflicts found while merging, so they can be put on the record below.
+  const clashes: { field: string; was: string; now: string }[] = [];
   if (existing) {
-    // Fill blanks, never overwrite what a person typed earlier. Sources and
-    // stages accumulate, the way Coda's multi-selects did.
+    // Who typed it decides who wins.
+    //
+    // This used to fill blanks and never overwrite, on the reasoning that a
+    // person had typed the earlier value. True, but the wrong person: a name
+    // taken down over the phone is us hearing it, and we mishear. When the
+    // same family then stands at reception and types it themselves, theirs is
+    // the correct spelling of their own child's name — and it was being
+    // discarded in favour of our mishearing, silently.
+    //
+    // So: anything the family entered themselves wins. Anything a member of
+    // staff recorded only fills a blank, as before. Every field that
+    // disagreed is listed in the timeline and the record is marked for
+    // somebody to confirm, because an overwrite nobody can see is just a
+    // different way of losing the data.
+    const fromFamily = fromFamilySource(input.source);
     const patch: Record<string, unknown> = { updated_by: actor };
-    const fill = (k: keyof EnquiryRow, v: string | null | undefined) => { if (v && !existing![k]) patch[k] = v; };
-    fill("child_name", clean(input.child_name)); fill("dob", input.dob || null); fill("sex", input.sex || null);
-    fill("father_name", clean(input.father_name)); fill("father_email", clean(input.father_email)?.toLowerCase());
-    fill("mother_name", clean(input.mother_name)); fill("mother_phone", clean(input.mother_phone, 30));
-    fill("mother_email", clean(input.mother_email)?.toLowerCase()); fill("address", clean(input.address, 400));
+
+    // A parked number finds its owner.
+    //
+    // When a call came in and nobody asked whose number it was, it sits on
+    // father_phone with phone_owner null. If the family then types that same
+    // number into the mother's box at reception, it is hers — so it moves,
+    // and the father's field is emptied rather than left holding a number
+    // that was never his. Only ever a parked number: one somebody actually
+    // stated is left alone.
+    if (fromFamily && !existing.phone_owner) {
+      const same = (a?: string | null, b2?: string | null) => !!a && !!b2 && phoneKey(a) === phoneKey(b2);
+      const saidMother = clean(input.mother_phone, 30);
+      const saidFather = clean(input.father_phone, 30);
+      if (saidMother && same(saidMother, existing.father_phone) && !same(saidMother, saidFather)) {
+        patch.mother_phone = saidMother; patch.father_phone = saidFather || null;
+        if (!saidFather && existing.father_name && !existing.mother_name) {
+          patch.mother_name = existing.father_name; patch.father_name = null;
+        }
+        patch.phone_owner = "mother";
+      } else if (saidFather && same(saidFather, existing.mother_phone) && !same(saidFather, saidMother)) {
+        patch.father_phone = saidFather; patch.mother_phone = saidMother || null;
+        if (!saidMother && existing.mother_name && !existing.father_name) {
+          patch.father_name = existing.mother_name; patch.mother_name = null;
+        }
+        patch.phone_owner = "father";
+      } else if (saidMother || saidFather) {
+        patch.phone_owner = saidMother && !saidFather ? "mother" : "father";
+      }
+    }
+    const put = (k: keyof EnquiryRow, v: string | null | undefined, label: string) => {
+      if (!v) return;
+      const was = existing![k] as string | null;
+      if (!was) { patch[k] = v; return; }                 // a blank is always filled
+      if (String(was).trim() === String(v).trim()) return; // nothing to argue about
+      if (!fromFamily) return;                             // staff never overwrite staff
+      patch[k] = v;
+      clashes.push({ field: label, was: String(was), now: String(v) });
+    };
+    put("child_name", clean(input.child_name), "Child's name");
+    put("dob", input.dob || null, "Date of birth");
+    put("sex", input.sex || null, "Boy / Girl");
+    put("father_name", clean(input.father_name), "Father's name");
+    put("father_phone", clean(input.father_phone, 30), "Father's phone");
+    put("father_email", clean(input.father_email)?.toLowerCase(), "Father's email");
+    put("mother_name", clean(input.mother_name), "Mother's name");
+    put("mother_phone", clean(input.mother_phone, 30), "Mother's phone");
+    put("mother_email", clean(input.mother_email)?.toLowerCase(), "Mother's email");
+    put("address", clean(input.address, 400), "Address");
     patch.programs = uniq([...(existing.programs || []), ...programs]);
     patch.sources = uniq([...(existing.sources || []), input.source]);
     const st = STAGE_FOR[input.source];
     patch.stages = uniq([...(existing.stages || []), st || null]);
     if (input.source === "Walk In" && !existing.first_visit_at) patch.first_visit_at = at;
+    if (clashes.length) patch.needs_check = true;
     const { data } = await tbl.from("enquiry").update(patch).eq("id", existing.id).select("*").maybeSingle();
     row = (data as EnquiryRow) || existing;
   } else {
@@ -98,6 +172,9 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
       father_name: clean(input.father_name), father_phone: clean(input.father_phone, 30), father_email: clean(input.father_email)?.toLowerCase() || null,
       mother_name: clean(input.mother_name), mother_phone: clean(input.mother_phone, 30), mother_email: clean(input.mother_email)?.toLowerCase() || null,
       address: clean(input.address, 400),
+      // A family filling the form themselves has said which box is whose.
+      phone_owner: input.phone_owner
+        ?? (fromFamilySource(input.source) ? (clean(input.mother_phone, 30) && !clean(input.father_phone, 30) ? "mother" : clean(input.father_phone, 30) ? "father" : null) : null),
       first_contact_at: at, first_visit_at: input.source === "Walk In" ? at : null,
       updated_by: actor,
     }).select("*").maybeSingle();
@@ -105,15 +182,39 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
     row = data as EnquiryRow; created = true;
   }
 
-  const summary = `${EVENT_LABEL[input.source]}${created ? "" : " again"}${input.message ? ` — “${String(input.message).trim().slice(0, 160)}”` : ""}`;
-  // Both events in one insert. They used to be two awaited calls, which on a
-  // database a continent away is a round trip spent to save nothing.
-  const events: Record<string, unknown>[] = [{
-    enquiry_id: row.id, at, kind: created ? "created" : EVENT_KIND[input.source], summary, actor,
-    detail: { ...(input.detail || {}), source: input.source, message: clean(input.message, 2000) },
-  }];
-  if (created) events.push({ enquiry_id: row.id, at, kind: EVENT_KIND[input.source], summary: EVENT_LABEL[input.source], actor });
-  await tbl.from("enquiry_event").insert(events);
+  // One line per thing that actually happened.
+  //
+  // This wrote two events for a single arrival — "Called the school — “…”"
+  // and then "Called the school" again a line below — and the message was
+  // echoed into the first, while the same message was also saved as a note
+  // and shown in its own right. One logged call produced four entries in the
+  // timeline, three of them saying the same thing. The note is the note; the
+  // event is what happened.
+  //
+  // "again" also meant the wrong thing. It was appended whenever the record
+  // already existed, so a family who had only ever phoned and then walked in
+  // for the first time was recorded as having "Walked in again". It now means
+  // what it says: this is not the first time they have arrived THIS way.
+  const seenBefore = !created && (existing?.sources || []).includes(input.source);
+  const summary = `${EVENT_LABEL[input.source]}${seenBefore ? " again" : ""}`;
+  const events: Record<string, unknown>[] = [];
+  if (input.logArrival !== false) {
+    events.push({
+      enquiry_id: row.id, at, kind: created ? "created" : EVENT_KIND[input.source], summary, actor,
+      detail: { ...(input.detail || {}), source: input.source, message: clean(input.message, 2000) },
+    });
+  }
+  // What the family corrected, in their words and ours, so the old value is
+  // never simply gone.
+  if (clashes.length) {
+    events.push({
+      enquiry_id: row.id, at, kind: "conflict", actor,
+      summary: `The family corrected ${clashes.length === 1 ? "something" : clashes.length + " things"} we had down differently — `
+        + clashes.map(c => `${c.field}: “${c.was}” → “${c.now}”`).join("; "),
+      detail: { clashes, source: input.source },
+    });
+  }
+  if (events.length) await tbl.from("enquiry_event").insert(events);
 
   // ── hello to the family ────────────────────────────────────────────────
   const welcome: { email?: string; whatsapp?: string } = {};

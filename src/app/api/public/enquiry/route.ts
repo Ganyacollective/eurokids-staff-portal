@@ -38,10 +38,12 @@ async function storeIntakePhoto(
     const tbl = admin.schema("eurokids");
     await tbl.from("enquiry")
       .update({ intake_photo: path, intake_photo_at: now.toISOString() }).eq("id", enquiryId);
-    await tbl.from("enquiry_event").insert({
-      enquiry_id: enquiryId, kind: "note", actor: "reception tablet",
-      summary: "Photo taken at the tablet when the form was submitted",
-    });
+    // No timeline line for a photo that worked.
+    //
+    // The photo is on the record and visible on the family's card; announcing
+    // it in the history as well just pushed the walk-in itself further down.
+    // A photo that FAILED still says so below — that is the case somebody
+    // needs told about.
   } catch (e) {
     await admin.schema("eurokids").from("enquiry_event").insert({
       enquiry_id: enquiryId, kind: "note", actor: "reception tablet",

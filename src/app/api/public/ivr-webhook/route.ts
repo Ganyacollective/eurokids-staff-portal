@@ -70,7 +70,9 @@ export async function POST(req: NextRequest) {
   if (known) enquiryId = known.id;
   else if (direction === "inbound") {
     const r = await captureEnquiry(admin, { source: "Call", father_phone: caller, actor: "ivr", at,
-      detail: { agent, status, provider }, sendWelcome: false });
+      detail: { agent, status, provider }, sendWelcome: false,
+      // The call_log row written below already shows as its own timeline line.
+      logArrival: false });
     enquiryId = r.enquiry.id;
   }
 
@@ -81,14 +83,9 @@ export async function POST(req: NextRequest) {
   }, { onConflict: "provider,provider_call_id" });
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
-  if (enquiryId && known) {
-    await admin.schema("eurokids").from("enquiry_event").insert({
-      enquiry_id: enquiryId, at, actor: agent || "ivr",
-      kind: direction === "outbound" ? "call_out" : status === "missed" ? "missed_call" : "call_in",
-      summary: `${direction === "outbound" ? "We called" : status === "missed" ? "Missed call" : "Called the school"}${agent ? " · " + agent : ""}${duration ? " · " + Math.round(Number(duration)) + "s" : ""}`,
-      detail: { recording_url: recording, status },
-    });
-  }
+  // No enquiry_event: the call_log row above is already drawn in the family's
+  // timeline, with the agent, the duration and the recording. An event beside
+  // it was the same call written twice.
   return NextResponse.json({ ok: true, enquiry_id: enquiryId, status });
 }
 

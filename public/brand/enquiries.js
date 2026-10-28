@@ -124,13 +124,50 @@ function enqLive(){
 }
 
 // Save one field and leave a trail, so "who changed this, and when" is answerable.
-async function enqPatch(id, patch, note){
+//
+// `quiet` saves without repainting. Changing a status from the table used to
+// rebuild all 300 rows and send the page back to the top — the screen went
+// blank, shuddered, and you lost the row you were working on. The only thing
+// the repaint actually changed was that row, and eqRowPaint below does that
+// in place. The cache is still dropped either way, so the next real load is
+// fresh and nobody sees a stale list.
+async function enqPatch(id, patch, note, opts){
   const { error } = await getSb().schema('eurokids').from('enquiry')
     // Who and when, on every edit, without anybody having to type it.
     .update({ ...patch, updated_by: who(), updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { alert('Could not save: ' + error.message); return false; }
   if (note) await getSb().schema('eurokids').from('enquiry_event').insert({ enquiry_id: id, kind: note.kind || 'edit', summary: note.summary, actor: who() });
-  enqRefresh(); return true;
+  if (opts && opts.quiet) invalidate('enq'); else enqRefresh();
+  return true;
+}
+
+// The parts of a row that are derived rather than typed: the won/lost stripe,
+// the colour the status reads in, the OVERDUE word, and the "last worked"
+// corner. Re-deriving these four is the whole of what a repaint was for.
+function eqRowPaint(tr, row){
+  if (!tr || !row) return;
+  const k = row.status === 'won' ? 'won' : row.status === 'lost' ? 'lost' : '';
+  tr.className = k;
+  const st = tr.querySelector('td.eq-st');
+  if (st) st.className = 'eq-st' + (k ? ' ' + k : '');
+
+  // Overdue is recomputed from the date in the cell, so moving a follow-up
+  // into the future clears the flag without waiting for the server's view.
+  const fu = tr.querySelector('td.eq-fu');
+  if (fu) {
+    const d = fu.querySelector('input')?.value || '';
+    const over = !!d && d <= new Date().toISOString().slice(0, 10) && !['won', 'lost'].includes(row.status);
+    fu.classList.toggle('is-due', over);
+    fu.querySelector('.eq-flag')?.remove();
+    if (over) fu.insertAdjacentHTML('beforeend', ' <span class="eq-flag">OVERDUE</span>');
+    row.follow_up_due = over;
+  }
+
+  const tr8 = tr.querySelector('.eq-trail');
+  if (tr8) {
+    row.updated_at = new Date().toISOString(); row.updated_by = who();
+    tr8.innerHTML = `<span class="eq-trail-when">just now</span><div class="hint">${esc(who())}</div>`;
+  }
 }
 
 /* ── Today ───────────────────────────────────────────────────── */
@@ -394,7 +431,7 @@ function eqRun(){
     const due = r.follow_up_due ? ' <span class="eq-flag">OVERDUE</span>' : '';
 
     return `<tr data-id="${r.id}" class="${k}">
-      <td class="eq-open" style="cursor:pointer"><strong>${esc(enqName(r))}</strong>${r.on_roster ? ' <span class="chip c-good">on roll</span>' : ''}<div class="hint">${esc(r.academic_year)} &middot; ${whenAgo(r.created_at)}</div></td>
+      <td class="eq-open" style="cursor:pointer"><strong>${esc(enqName(r))}</strong>${r.on_roster ? ' <span class="chip c-good">on roll</span>' : ''}${r.needs_check ? ' <span class="eq-flag" title="The family corrected something we had down differently">CHECK</span>' : ''}<div class="hint">${esc(r.academic_year)} &middot; ${whenAgo(r.created_at)}</div></td>
       <td class="eq-hv">${heat}</td>
       <td class="hint">${esc((r.programs || []).join(', ') || '—')}</td>
       <td class="eq-st ${k}">${sel('status', r.status, ENQ_STATUSES.map(x => x[0]), v => ENQ_STATUS[v]?.l || v)}</td>
@@ -418,15 +455,22 @@ function eqRun(){
     openEnquiry(Number(td.closest('tr').dataset.id), { trail: true });
   });
   el('eq-rows').querySelectorAll('.eq-edit').forEach(x => x.onchange = async () => {
-    const id = Number(x.closest('tr').dataset.id), f = x.dataset.f;
+    const tr = x.closest('tr'), id = Number(tr.dataset.id), f = x.dataset.f;
     let v = x.value || null;
     if (f === 'visit_at' && v) v = new Date(v).toISOString();
     const patch = { [f]: v };
     if (f === 'call_status' && v) patch.call_date = new Date().toISOString().slice(0, 10);   // the date fills itself
     if (f === 'status' && v === 'won') patch.won_at = new Date().toISOString();
     x.style.boxShadow = '0 0 0 3px rgba(52,199,89,.4)';
-    const ok = await enqPatch(id, patch, { kind: f === 'status' ? 'status' : 'edit', summary: `${EQ_FIELDS.find(z => z.k === f)?.l || f} → ${v || '—'}` });
-    setTimeout(() => { x.style.boxShadow = ''; if (ok) { const row = _eq.rows.find(z => z.id === id); if (row) Object.assign(row, patch); } }, 700);
+    // Quiet: the row is repainted in place rather than the table rebuilt, so
+    // the page does not blink and you keep your place in the list.
+    const ok = await enqPatch(id, patch, { kind: f === 'status' ? 'status' : 'edit', summary: `${EQ_FIELDS.find(z => z.k === f)?.l || f} → ${v || '—'}` }, { quiet: true });
+    if (ok) {
+      const row = _eq.rows.find(z => z.id === id);
+      if (row) { Object.assign(row, patch); eqRowPaint(tr, row); }
+      x.classList.toggle('is-empty', !x.value);
+    }
+    setTimeout(() => { x.style.boxShadow = ''; }, 700);
   });
   // Adding a stage from the table itself. Opening a family's whole record to
   // tick "1st Premise Visit" was the commonest reason anybody opened it.
@@ -436,8 +480,9 @@ function eqRun(){
     const row = _eq.rows.find(z => z.id === id);
     const stages = [...new Set([...(row?.stages || []), st])];
     x.style.boxShadow = '0 0 0 3px rgba(52,199,89,.4)';
-    const ok = await enqPatch(id, { stages }, { kind: 'stage', summary: `Stage → ${st}` });
-    setTimeout(() => { x.style.boxShadow = ''; if (ok && row) row.stages = stages; }, 700);
+    const ok = await enqPatch(id, { stages }, { kind: 'stage', summary: `Stage → ${st}` }, { quiet: true });
+    if (ok && row) { row.stages = stages; eqRowPaint(tr, row); }
+    setTimeout(() => { x.style.boxShadow = ''; }, 700);
   });
 
   el('eq-rows').querySelectorAll('.eq-heat').forEach(x => {
@@ -448,9 +493,9 @@ function eqRun(){
       n.textContent = v; n.style.setProperty('--kc', c);
     };
     x.oninput = paint;
-    x.onchange = async () => { const id = Number(x.closest('tr').dataset.id);
-      await enqPatch(id, { sentiment: Number(x.value) }, { kind: 'sentiment', summary: `Sentiment → ${x.value}/10` });
-      const row = _eq.rows.find(z => z.id === id); if (row) row.sentiment = Number(x.value); };
+    x.onchange = async () => { const tr = x.closest('tr'), id = Number(tr.dataset.id);
+      await enqPatch(id, { sentiment: Number(x.value) }, { kind: 'sentiment', summary: `Sentiment → ${x.value}/10` }, { quiet: true });
+      const row = _eq.rows.find(z => z.id === id); if (row) { row.sentiment = Number(x.value); eqRowPaint(tr, row); } };
   });
 }
 
@@ -543,6 +588,11 @@ function openLogCall(preset = {}){
     <div class="grp" id="lc-newgrp" style="display:none"><h3>We do not know this number</h3><div class="box">
       ${row('Child', `<input class="in" id="lc-child" placeholder="child’s name">`)}
       ${row('Parent', `<input class="in" id="lc-parent" placeholder="who rang">`)}
+      ${row('Whose number is it', `<select class="in" id="lc-whose">
+          <option value="">We do not know yet</option>
+          <option value="mother">The mother’s</option>
+          <option value="father">The father’s</option>
+        </select>`, 'Leave it if they did not say. The tablet will sort it out when they walk in.')}
       <div class="rowx hint">Saving will start an enquiry for them.</div>
     </div></div>`;
   el('drawer-foot').innerHTML = `<div id="lc-msg"></div><button class="btn line" id="lc-cancel">Cancel</button><button class="btn" id="lc-save">Log the call</button>`;
@@ -583,6 +633,10 @@ function openLogCall(preset = {}){
       note: el('lc-note').value, follow_up_on: el('lc-follow').value || null,
       child_name: el('lc-child') ? el('lc-child').value : '',
       caller_name: el('lc-parent') ? el('lc-parent').value : '',
+      // Whose number it is, if whoever took the call knew. Blank is a real
+      // answer: the number is held without claiming a parent, and the first
+      // person to type it into their own box at the tablet settles it.
+      whose: el('lc-whose') ? el('lc-whose').value : '',
       // Only once the lookup has actually answered. It starts unanswered and
       // is debounced, so pasting a number and pressing Save at once used to
       // send "create it" for a number we in fact know — which for an outbound
@@ -894,6 +948,9 @@ async function openEnquiry(id, opts = {}){
         </div>
         <div class="snap-next ${overdue ? 'due' : ''}">${next}</div>
         <div class="snap-meta">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
+        ${e.needs_check ? `<div class="grp foot warn" style="margin:10px 0 0">
+          The family typed something at the tablet that we had down differently. Their version is what is saved here now; the old one is in the history below.
+          <a id="en-checked" style="cursor:pointer">These are right &rsaquo;</a></div>` : ''}
 
         <div class="snap-keen"><span class="cap">How keen</span>
           <input type="range" class="keen-range" id="en-sent" min="0" max="10" value="${keen}"
@@ -1129,6 +1186,16 @@ async function openEnquiry(id, opts = {}){
     if (!el('en-visited').value) el('en-visited').value = toInputDT(new Date().toISOString());
     if (!stages().includes('1st Premise Visit')) el('en-stages').querySelector('[data-v="1st Premise Visit"]')?.classList.add('on');
     el('en-save').click();
+  };
+
+  // Somebody has looked at what the family corrected and is happy with it.
+  // The history keeps the old values either way; this only takes the marker
+  // off, so the list stops asking.
+  const qaChecked = el('en-checked');
+  if (qaChecked) qaChecked.onclick = async () => {
+    qaChecked.textContent = 'Saving…';
+    const ok = await enqPatch(id, { needs_check: false }, { kind: 'edit', summary: 'Confirmed the details the family corrected' });
+    if (ok) openEnquiry(id);
   };
 
   const menu = el('en-menu');
