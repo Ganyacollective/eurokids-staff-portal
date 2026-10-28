@@ -311,10 +311,17 @@ async function tabEnqList(){
   wire('eq-sortbtn', 'eq-sortmenu'); wire('eq-morebtn', 'eq-moremenu');
   if (!window._eqMenuBound) { window._eqMenuBound = true; document.addEventListener('click', () => document.querySelectorAll('#eq-sortmenu.open,#eq-moremenu.open').forEach(m => m.classList.remove('open'))); }
   el('eq-reset').onclick = () => { _eq.conds = JSON.parse(JSON.stringify(EQ_DEFAULT)); eqSaveConds(); eqRun(); };
+  // The download is the filtered view, not the whole book — it always has
+  // been, and the file was called enquiries.csv either way. Open that three
+  // months later and there is nothing in it to say it was only 26-27 with
+  // lost hidden. The filename now carries the truth: how many rows, on what
+  // date, and whether a filter was on.
   el('eq-csv').onclick = () => {
     const cols = ['child_name', 'sentiment', 'programs', 'academic_year', 'created_at', 'dob', 'sex', 'father_name', 'father_phone', 'father_email', 'mother_name', 'mother_phone', 'mother_email', 'address', 'sources', 'stages', 'status', 'visit_at', 'call_status', 'call_date', 'follow_up_on', 'latest_note', 'updated_at', 'updated_by'];
     const csv = [cols.join(',')].concat(_eq.last.map(r => cols.map(c => `"${String(Array.isArray(r[c]) ? r[c].join(', ') : (r[c] ?? '')).replace(/"/g, '""')}"`).join(','))).join('\n');
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'enquiries.csv'; a.click();
+    const filtered = _eq.conds.length || (_eq.q || '').trim();
+    const name = `enquiries-${filtered ? 'filtered' : 'all'}-${_eq.last.length}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name; a.click();
   };
   el('eq-mail').onclick = () => {
     const to = _eq.last.map(r => r.father_email || r.mother_email).filter(Boolean);
@@ -342,6 +349,14 @@ function eqRun(){
   _eq.last = list;
   el('eq-fcount').textContent = _eq.conds.length ? String(_eq.conds.length) : '';
   el('eq-meta').innerHTML = `<strong>${list.length}</strong> of ${rows.length} · ${list.filter(r => !r.closed).length} open`;
+  // Both of these act on what is on screen, not on everything. Saying the
+  // number is the cheapest way to stop that being a surprise.
+  const csvBtn = el('eq-csv'); if (csvBtn) csvBtn.textContent = `Download these ${list.length}`;
+  const mailBtn = el('eq-mail');
+  if (mailBtn) {
+    const withEmail = new Set(list.map(r => r.father_email || r.mother_email).filter(Boolean)).size;
+    mailBtn.textContent = `Email these families (${withEmail})`;
+  }
   el('eq-fdesc').textContent = _eq.conds.length ? 'Where ' + _eq.conds.map(eqDescribe).join(', and ') : '';
   el('eq-sortmenu').innerHTML = EQ_FIELDS.map(x => `<button data-k="${x.k}"><span class="chk">${_eq.sort.field === x.k ? '✓' : ''}</span>${x.l}${_eq.sort.field === x.k ? `<span class="sub">${_eq.sort.dir === 'asc' ? '↑' : '↓'}</span>` : ''}</button>`).join('');
   el('eq-sortmenu').querySelectorAll('button').forEach(x => x.onclick = () => {
