@@ -89,6 +89,40 @@ const enqRefresh = () => {
 };
 const who = () => (profile?.full_name || session?.user?.email || '').split('@')[0];
 
+/* ── somebody else's work shows up without a reload ──────────────────
+   enqRefresh repaints after *your* action. It cannot know that Sunita just
+   wrote a note on the same family from her laptop — her write clears her
+   cache, not yours, so this tab went on showing a 45-second-old copy until
+   somebody pressed reload. Two people working the enquiry book could not see
+   each other, which is most of the point of there being one book.
+
+   Two cheap triggers, no new infrastructure: coming back to the window, and
+   a slow poll while the list is actually on screen. Both go through the same
+   guard — never pull the page out from under somebody who is reading a
+   drawer or typing into a cell. */
+function enqLive(){
+  if (window._enqLive) return;
+  window._enqLive = true;
+
+  const busy = () => {
+    if (document.getElementById('drawer')?.classList.contains('on')) return true;
+    const a = document.activeElement;
+    return !!(a && a !== document.body && a.closest?.('#eq-rows, .drawer'));
+  };
+  const pull = () => {
+    if (typeof app === 'undefined' || app !== 'enquiries') return;
+    if (document.hidden || busy()) return;
+    invalidate('enq');
+    if (typeof renderApp === 'function') renderApp();
+  };
+
+  window.addEventListener('focus', pull);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pull(); });
+  // Slower than the cache, so a poll that lands mid-window is a no-op rather
+  // than a wasted round trip.
+  setInterval(pull, 60000);
+}
+
 // Save one field and leave a trail, so "who changed this, and when" is answerable.
 async function enqPatch(id, patch, note){
   const { error } = await getSb().schema('eurokids').from('enquiry')
@@ -248,6 +282,7 @@ const eqDescribe = c => {
 };
 
 async function tabEnqList(){
+  enqLive();
   const b = el('body'); eqLoadConds();
   b.innerHTML = head('Enquiries', '', `<button class="btn" id="enq-new">New Enquiry…</button>`) + '<div class="loading">Loading…</div>';
   el('enq-new').onclick = () => openNewEnquiry();
