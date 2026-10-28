@@ -27,6 +27,16 @@ const ENQ_STAGES = ['1st Call Contact', '1st Whatsapp Contact', '1st Premise Vis
 const ENQ_PROGRAMS = ['P.G.', 'Nursery', 'Euro Junior', 'Euro Senior', 'Daycare', 'Summercamp', 'Evening Club', 'Bridge', 'Settler'];
 const ENQ_CALLS = ['Call Made', 'Tried Calling', 'Positive', 'Invalid Number', 'Not Reachable', 'Follow-up Call'];
 const EVENT_ICON = { call_in: '📞', call_out: '📲', missed_call: '📵', walk_in: '🚶', website: '🌐', form: '📝', visit: '🏫', stage: '➡️', status: '➡️', sentiment: '🌡', note: '🗒', email: '✉️', whatsapp: '💬', sms: '💬', won: '🎉', lost: '⏹', created: '✨', edit: '✏️', reminder: '⏰' };
+// The dot on the rail, so the shape of a family's history is visible before
+// a word of it is read: green when they came to us, blue when we spoke,
+// red when it went wrong, amber for our own bookkeeping.
+const TL_TONE = {
+  walk_in: 'var(--green)', visit: 'var(--green)', created: 'var(--green)', won: 'var(--green)', whatsapp: 'var(--green)',
+  call_in: 'var(--accent)', call_out: 'var(--accent)', website: 'var(--accent)', form: 'var(--accent)', email: 'var(--accent)', sms: 'var(--accent)',
+  missed_call: 'var(--red)', lost: 'var(--red)',
+  status: 'var(--orange)', stage: 'var(--orange)', sentiment: 'var(--orange)', conflict: 'var(--orange)', reminder: 'var(--orange)',
+  note: 'var(--label-3)', edit: 'var(--label-3)',
+};
 
 const enqName = e => e.child_name || (e.father_name ? `${e.father_name}’s child` : null) || (e.phone ? `Unknown · ${e.phone}` : 'Unknown caller');
 // 0–10, as a bar: a glance sorts hot from cold without reading a number.
@@ -464,7 +474,15 @@ function eqRun(){
     x.style.boxShadow = '0 0 0 3px rgba(52,199,89,.4)';
     // Quiet: the row is repainted in place rather than the table rebuilt, so
     // the page does not blink and you keep your place in the list.
-    const ok = await enqPatch(id, patch, { kind: f === 'status' ? 'status' : 'edit', summary: `${EQ_FIELDS.find(z => z.k === f)?.l || f} → ${v || '—'}` }, { quiet: true });
+    // Say it the way the screen says it. Every field already knows how to
+    // write its own value out — that is what its label() is for — and this
+    // line was skipping it, so changing status from the list wrote
+    // "Inquiry Status → in_progress" into the family's history while the
+    // very same change made from the sheet wrote "In progress → Won".
+    // The trail is read by people, not by Postgres.
+    const fd = EQ_FIELDS.find(z => z.k === f);
+    const shown = v == null || v === '' ? '—' : (fd?.label ? fd.label(v) : v);
+    const ok = await enqPatch(id, patch, { kind: f === 'status' ? 'status' : 'edit', summary: `${fd?.l || f} → ${shown}` }, { quiet: true });
     if (ok) {
       const row = _eq.rows.find(z => z.id === id);
       if (row) { Object.assign(row, patch); eqRowPaint(tr, row); }
@@ -1038,7 +1056,7 @@ async function openEnquiry(id, opts = {}){
         <div class="act"><span class="who" id="en-notewho"></span>
           <button class="btn sm" id="en-addnote" disabled>Add note</button></div>
       </div>
-      <div id="en-timeline"></div>
+      <div id="en-timeline" class="tl"></div>
     </div><div class="foot">Every note keeps its author and time.</div></div>`;
 
   el('drawer-foot').innerHTML = `<div id="pf-msg"></div>
@@ -1056,7 +1074,10 @@ async function openEnquiry(id, opts = {}){
         <div class="msep"></div>
         <button data-a="delete" style="color:var(--red)">Delete this enquiry…</button>
       </div></div>
-    <button class="btn" id="en-save">Save</button>`;
+    <span class="savest" id="en-savest" aria-live="polite"></span>
+    <!-- Kept, hidden: "Mark won", "Mark lost" and the keyboard shortcut all
+         set a field and then click this. They now mean "save right now". -->
+    <button id="en-save" hidden></button>`;
 
   const segOne = i => { const box = el(i); box.querySelectorAll('button').forEach(b2 => b2.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b2.classList.add('on'); }); return () => box.querySelector('.on')?.dataset.v ?? null; };
   const segMany = i => { const box = el(i); box.querySelectorAll('.chip').forEach(c => c.onclick = () => c.classList.toggle('on')); return () => [...box.querySelectorAll('.chip.on')].map(c => c.dataset.v); };
@@ -1116,17 +1137,75 @@ async function openEnquiry(id, opts = {}){
   ta.onkeydown = ev => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') el('en-addnote').click(); };
 
   const drawTimeline = () => {
+    // A note is somebody's account of a conversation with a family, and the
+    // trail is worth nothing if whoever dislikes a line can take it out.
+    // Removing one is an administrator's job; everyone else writes.
+    const canCull = typeof has === 'function' && has('epms_admin');
+    const CALLISH = k => k === 'call_in' || k === 'call_out' || k === 'missed_call';
+    // One phone call is one line. A logged call lands in call_log AND leaves
+    // an arrival event, so the same ring showed up twice — once as "Called
+    // the school" and once as "They called · HR Admin · 120s". The call_log
+    // row is the one worth keeping: it carries the length and the recording.
+    const minute = t => String(t || '').slice(0, 16);
+    const callMinutes = new Set((calls || []).map(c => minute(c.started_at)));
     const items = [
       ...(notes || []).map(n => ({ at: n.created_at, kind: 'note', summary: n.body, actor: n.author, noteId: n.id })),
-      ...(events || []).map(x => ({ at: x.at, kind: x.kind, summary: x.summary, actor: x.actor })),
+      ...(events || []).filter(x => !(CALLISH(x.kind) && callMinutes.has(minute(x.at))))
+        .map(x => ({ at: x.at, kind: x.kind, summary: x.summary, actor: x.actor })),
       ...(calls || []).map(c => ({ at: c.started_at, kind: c.status === 'missed' ? 'missed_call' : c.direction === 'outbound' ? 'call_out' : 'call_in', summary: `${c.status === 'missed' ? 'Missed call' : c.direction === 'outbound' ? 'We called' : 'They called'}${c.agent ? ' · ' + c.agent : ''}${c.duration_s ? ' · ' + c.duration_s + 's' : ''}`, actor: c.agent, rec: c.recording_url })),
     ].sort((a, z) => (z.at || '').localeCompare(a.at || ''));
-    el('en-timeline').innerHTML = items.map(x => `<div class="note-item">
-        <div class="note-head"><span>${EVENT_ICON[x.kind] || '•'}</span>
-          <b>${esc(x.actor || 'system')}</b><span>${dtLocal(x.at)}</span>
-          ${x.noteId ? `<a href="#" class="en-delnote" data-id="${x.noteId}" style="margin-left:auto">Remove</a>` : ''}</div>
-        <div class="note-body">${esc(x.summary || x.kind)}${x.rec ? ` <a href="${esc(x.rec)}" target="_blank" rel="noopener">▶︎ recording</a>` : ''}</div>
-      </div>`).join('') || '<div class="note-item hint">Nothing yet.</div>';
+    // Group by the day it happened, so the date is said once instead of
+    // being stamped on every row.
+    const dkey = iso => { const d = new Date(iso); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+    const dlabel = iso => {
+      const d = new Date(iso), n = new Date(), y = new Date(); y.setDate(y.getDate() - 1);
+      if (dkey(iso) === dkey(n)) return 'Today';
+      if (dkey(iso) === dkey(y)) return 'Yesterday';
+      return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() === n.getFullYear() ? {} : { year: 'numeric' }) });
+    };
+    const tOf = iso => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
+    const rec = x => x.rec ? ` <a href="${esc(x.rec)}" target="_blank" rel="noopener">▶︎ recording</a>` : '';
+    const line = x => `${EVENT_ICON[x.kind] || '•'} ${esc(x.summary || x.kind)}${rec(x)}`;
+    // A call already says who took it. Don't print the name twice.
+    const by = x => (x.actor && !String(x.summary || '').includes(x.actor))
+      ? `<span class="tl-who">${esc(x.actor)}</span>` : '';
+
+    // Nudging a dropdown is not an event in a family's life. Three or more
+    // in a row fold into one line you can open if you actually care.
+    const FIDDLE = new Set(['status', 'stage', 'sentiment', 'edit']);
+
+    const days = [];
+    for (const x of items) {
+      const k = dkey(x.at);
+      if (!days.length || days[days.length - 1].k !== k) days.push({ k, at: x.at, items: [] });
+      days[days.length - 1].items.push(x);
+    }
+
+    const renderRun = run => run.length < 3 ? run.map(x => `
+      <div class="tl-row"><span class="dot" style="--c:${TL_TONE[x.kind] || 'var(--fill-3)'}"></span>
+        <div class="tl-e"><span class="tl-t">${tOf(x.at)}</span><span>${line(x)}</span>${by(x)}</div></div>`).join('')
+      : `<div class="tl-row"><span class="dot" style="--c:var(--fill-3)"></span>
+          <details class="tl-fold"><summary><span>${run.length} small changes between ${tOf(run[run.length - 1].at)} and ${tOf(run[0].at)}</span></summary>
+          ${run.map(x => `<div class="tl-sub"><span class="tl-t">${tOf(x.at)}</span><span>${line(x)}</span>${by(x)}</div>`).join('')}</details></div>`;
+
+    el('en-timeline').innerHTML = days.map(d => {
+      // walk the day, collecting consecutive runs of fiddling
+      const out = []; let run = [];
+      const flush = () => { if (run.length) { out.push(renderRun(run)); run = []; } };
+      for (const x of d.items) {
+        if (x.kind === 'note') {
+          flush();
+          out.push(`<div class="tl-row"><span class="dot" style="--c:${TL_TONE.note}"></span>
+            <div class="tl-n"><div class="tl-nh"><b>${esc(x.actor || 'system')}</b>
+              <span class="tl-t">${tOf(x.at)}</span>
+              ${x.noteId && canCull ? `<a href="#" class="en-delnote" data-id="${x.noteId}">Remove</a>` : ''}</div>
+              <div class="tl-nb">${esc(x.summary || '')}</div></div></div>`);
+        } else if (FIDDLE.has(x.kind)) { run.push(x); }
+        else { flush(); out.push(renderRun([x])); }
+      }
+      flush();
+      return `<div class="tl-day"><i></i>${esc(dlabel(d.at))}<s></s></div>${out.join('')}`;
+    }).join('') || '<div class="tl-empty">Nothing yet.</div>';
     // Asked for from the "Last worked" column: land on the trail rather
     // than at the top of a long record.
     if (opts.trail) {
@@ -1162,6 +1241,22 @@ async function openEnquiry(id, opts = {}){
       address: val('en-addr'), child_name: val('en-cname'), dob: val('en-dob'), sex: sex(), ...extra,
     };
     if (!patch.father_phone && !patch.mother_phone) { el('pf-msg').innerHTML = '<div class="err">Keep at least one phone number — it is how the family is recognised.</div>'; return false; }
+    // Saving on its own means this runs whenever somebody clicks about, not
+    // only when they meant something. A write that changes no field is not
+    // harmless: `updated_by` is in the patch, so merely opening a family and
+    // tabbing through it would quietly put your name on Deepti's work and
+    // move "last worked" to now. If nothing moved, nothing is written.
+    if (!Object.keys(extra).length) {
+      const same = v => Array.isArray(v) ? [...v].sort().join('\u0000') : v instanceof Date ? +v : v;
+      const eq = (a, b) => {
+        if (a == null && b == null) return true;
+        const da = Date.parse(a), db2 = Date.parse(b);
+        if (!Number.isNaN(da) && !Number.isNaN(db2) && /\d{4}-\d\d-\d\dT/.test(String(a))) return da === db2;
+        return String(same(a) ?? '') === String(same(b) ?? '');
+      };
+      const moved = Object.keys(patch).some(k => k !== 'updated_by' && !eq(patch[k], e[k]));
+      if (!moved) return 'same';
+    }
     if (patch.status === 'won' && !e.won_at) patch.won_at = new Date().toISOString();
     // Compare instants, not strings. The browser builds
     // "2026-10-15T09:30:00.000Z" and PostgREST returns
@@ -1184,9 +1279,63 @@ async function openEnquiry(id, opts = {}){
     const sameStages = String([...patch.stages].sort()) === String([...(e.stages || [])].sort());
     if (!sameStages) evs.push({ enquiry_id: id, kind: 'stage', summary: `Stage → ${patch.stages.join(', ') || '—'}`, actor: who() });
     if (evs.length) await s.from('enquiry_event').insert(evs);
+    // The record we diff against has to move with the record. Every event
+    // above is written by comparing the form to `e`, and `e` was the row as
+    // it looked when the sheet opened. Pressing Save used to get away with
+    // that because it threw the whole sheet away and reopened it. Saving on
+    // its own cannot, so without this line the second save would announce
+    // "In progress → Won" all over again, for a change nobody made.
+    Object.assign(e, patch);
+    // Repaint the one row that changed instead of rebuilding the table under
+    // the person. This is why nothing blinks or jumps any more.
+    const tr = document.querySelector(`#eq-rows tr[data-id="${id}"]`);
+    const lrow = (typeof _eq !== 'undefined' && _eq.rows) ? _eq.rows.find(z => z.id === id) : null;
+    if (lrow) { Object.assign(lrow, patch); if (tr) eqRowPaint(tr, lrow); }
     enqRefresh(); return true;
   };
-  el('en-save').onclick = async () => { if (await save()) { el('pf-msg').innerHTML = '<div class="ok">Saved.</div>'; _afterDrawerClose = () => renderApp(); setTimeout(() => openEnquiry(id), 400); } };
+
+  /* ── nothing to press ──────────────────────────────────────────────────
+     There was a Save button, and forgetting it lost the work — you change a
+     status, get pulled away, come back and the change was never real. Worse,
+     pressing it tore the sheet down and rebuilt it, which is the shudder.
+
+     Now a change saves itself. Typing waits until you stop; picking
+     something saves almost at once; closing the sheet flushes whatever is
+     still pending, so walking away cannot lose anything either. The line in
+     the footer says which of those is happening, because silent saving that
+     you cannot see is its own kind of anxiety. */
+  let _dirty = false, _busy = false, _again = false, _t = 0;
+  const say = t => { const m = el('en-savest'); if (m) { m.textContent = t; m.dataset.s = t === 'Saved' ? 'ok' : t === 'Not saved' ? 'err' : ''; } };
+  const flush = async () => {
+    clearTimeout(_t);
+    if (_busy) { _again = _dirty; return; }
+    if (!_dirty) return;
+    _dirty = false; _busy = true; say('Saving…');
+    let r = false;
+    try { r = await save(); } catch { r = false; }
+    _busy = false;
+    if (r === 'same') say('');            // clicked about, changed nothing
+    else if (r) say('Saved');
+    else { _dirty = true; say('Not saved'); }
+    if (_again) { _again = false; queue(0); }
+  };
+  const queue = (ms = 700) => { _dirty = true; if (!_busy) say('…'); clearTimeout(_t); _t = setTimeout(flush, ms); };
+
+  // The note box is its own thing with its own button — it must never drag
+  // the whole enquiry into a save on every keystroke.
+  const mine = t => t && t.closest('.drawer') && t.id !== 'en-note' && !t.closest('#en-timeline');
+  body.addEventListener('change', ev => { if (mine(ev.target)) queue(250); });
+  body.addEventListener('input', ev => {
+    const t = ev.target; if (!mine(t)) return;
+    queue(t.tagName === 'INPUT' && /text|tel|email|search/.test(t.type || 'text') ? 900 : 250);
+  });
+  // Chips and segmented buttons toggle a class rather than firing `change`.
+  body.addEventListener('click', ev => { if (ev.target.closest('.chip, .seg button')) queue(250); });
+  // Clicking away from a field you were typing in means you are done with it.
+  body.addEventListener('focusout', ev => { if (mine(ev.target) && _dirty) flush(); });
+
+  el('en-save').onclick = () => flush();
+  _flushDrawer = () => { if (_dirty || _busy) flush(); };
 
   // The one-line story. Written on demand rather than on every save: it costs
   // a model call, and most opens of a card change nothing worth re-reading.

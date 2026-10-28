@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=96">
-<link rel="prefetch" href="/brand/enquiries.js?v=96" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=97">
+<link rel="prefetch" href="/brand/enquiries.js?v=97" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -5259,12 +5259,19 @@ function leavingIsSafe(){
 }
 function closeDrawer(force){
   if (force !== true && !leavingIsSafe()) return;
+  // A sheet that saves itself still has to cope with being shut mid-thought:
+  // a change made half a second ago is waiting on a timer, and closing must
+  // not be what loses it. Nothing to wait for — the write is already on its
+  // way and the sheet can go.
+  if (typeof _flushDrawer === 'function') { try { _flushDrawer(); } catch {} }
+  _flushDrawer = null;
   _unsaved = null;
   el('drawer-bg')?.classList.remove('on'); el('drawer')?.classList.remove('on');
   document.body.style.overflow = '';
   if (typeof _afterDrawerClose === 'function') { const f = _afterDrawerClose; _afterDrawerClose = null; f(); }
 }
 let _afterDrawerClose = null;
+let _flushDrawer = null;
 
 // The statement: what was agreed, what came off, what came in (with dates
 // where we have them), and what is left. Green is money in the family's
@@ -6076,7 +6083,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=96"></script>
+<script src="/brand/enquiries.js?v=97"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
