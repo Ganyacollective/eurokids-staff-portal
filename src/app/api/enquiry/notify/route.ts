@@ -56,12 +56,12 @@ export async function GET(req: NextRequest) {
   const [{ data: authList }, { data: profs }, { data: prefs }, { data: links }, { data: grants }] = await Promise.all([
     db.auth.admin.listUsers({ perPage: 200 }),
     db.from("profiles").select("id, full_name, role"),
-    db.schema("eurokids").from("enquiry_notify").select("user_id, sources"),
+    db.schema("eurokids").from("enquiry_notify").select("id, user_id, email, sources"),
     db.from("teacher_links").select("user_id"),
     db.from("module_access").select("user_id"),
   ]);
 
-  const by = new Map((prefs || []).map(p => [p.user_id, p.sources || []]));
+  const by = new Map((prefs || []).filter(p => p.user_id).map(p => [p.user_id, p.sources || []]));
   const prof = new Map((profs || []).map(p => [p.id, p]));
 
   // Hub users only — the same people Users & Access lists.
@@ -95,7 +95,15 @@ export async function GET(req: NextRequest) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  return NextResponse.json({ ok: true, sources: SOURCES, canEdit: await mayEdit(db, user.id), people });
+  // Addresses that are not hub users at all — a coordinator who should get
+  // the walk-in email and has no business signing in, and whose address
+  // often already exists as a Staff Portal teacher login so an account
+  // cannot be made for it anyway.
+  const extras = (prefs || []).filter(p => p.email).map(p => ({
+    id: p.id, email: String(p.email), sources: p.sources || [],
+  })).sort((a, b) => a.email.localeCompare(b.email));
+
+  return NextResponse.json({ ok: true, sources: SOURCES, canEdit: await mayEdit(db, user.id), people, extras });
 }
 
 export async function POST(req: NextRequest) {
@@ -109,6 +117,26 @@ export async function POST(req: NextRequest) {
 
   const b = await req.json().catch(() => ({}));
   const userId = String(b.user_id || "");
+  const email = String(b.email || "").trim().toLowerCase();
+
+  // Removing an address entirely, rather than unticking every source.
+  if (b.remove && email) {
+    const { error } = await db.schema("eurokids").from("enquiry_notify").delete().eq("email", email);
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, removed: email });
+  }
+
+  if (email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ ok: false, error: "That does not look like an email address." }, { status: 400 });
+    }
+    const sources = Array.isArray(b.sources) ? b.sources.filter((x: string) => SOURCES.includes(x)) : [];
+    const { error } = await db.schema("eurokids").from("enquiry_notify")
+      .upsert({ email, sources, updated_at: new Date().toISOString(), updated_by: user.id }, { onConflict: "email" });
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, email, sources });
+  }
+
   if (!userId) return NextResponse.json({ ok: false, error: "Which person?" }, { status: 400 });
 
   // The same test the list applies, applied again on the way in. The GET

@@ -584,7 +584,7 @@ window.addEventListener('message',function(e){if(e.data&&e.data.ekEnquireHeight)
     </div></div>
 
     <div class="grp"><h3>Who gets told</h3><div class="box" id="nt-box"><div class="rowx hint">Loading the people…</div></div>
-      <div class="foot">Everyone with hub access, from Users &amp; Access. Teachers are not here — those accounts belong to the Staff Portal. The email names the family and opens their card directly, and nobody is emailed a source they have not ticked.</div></div>
+      <div class="foot">Everyone with hub access, from Users &amp; Access — plus any address you add below, which receives the email without being able to sign in. The email names the family and opens their card directly, and nobody is emailed a source they have not ticked.</div></div>
 
     <div class="grp"><h3>Bring in the Coda database</h3><div class="box">
       <div class="rowx"><div class="hint" style="margin-bottom:10px">
@@ -657,7 +657,8 @@ async function renderNotify(){
   if (!j.ok) return box.innerHTML = `<div class="rowx"><div class="err">${esc(j.error)}</div></div>`;
   if (!j.people.length) return box.innerHTML = '<div class="rowx hint">Nobody has hub access yet. Add them in Fees &amp; Children &rarr; Users &amp; Access and they will appear here.</div>';
 
-  const nobody = j.people.every(p => !p.sources.length);
+  const extras = j.extras || [];
+  const nobody = j.people.every(p => !p.sources.length) && extras.every(x => !x.sources.length);
   box.innerHTML =
     (nobody ? `<div class="rowx hint">Nobody has been chosen yet, so new enquiries still go to the old office address. Tick somebody and that stops.</div>` : '') +
     j.people.map(p => `<div class="row" style="align-items:flex-start">
@@ -667,21 +668,61 @@ async function renderNotify(){
             data-u="${esc(p.id)}" data-s="${esc(s)}" ${j.canEdit ? '' : 'disabled'}
             style="cursor:${j.canEdit ? 'pointer' : 'default'}">${esc(s)}</button>`).join('')}
       </div></div>`).join('') +
+    // Plain addresses. Somebody who should get the email and has no reason to
+    // sign in — and whose address is very often already a Staff Portal
+    // teacher login, so an account cannot be created for it at all.
+    extras.map(x => `<div class="row" style="align-items:flex-start">
+      <div class="l">${esc(x.email)}<span class="sub">email only &middot; cannot sign in</span></div>
+      <div class="v chips" style="flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:62%">
+        ${j.sources.map(s => `<button class="chip nt-src ${x.sources.includes(s) ? 'on c-good' : 'c-mute'}"
+            data-e="${esc(x.email)}" data-s="${esc(s)}" ${j.canEdit ? '' : 'disabled'}
+            style="cursor:${j.canEdit ? 'pointer' : 'default'}">${esc(s)}</button>`).join('')}
+        ${j.canEdit ? `<button class="chip c-mute nt-del" data-e="${esc(x.email)}" title="Remove this address">&times;</button>` : ''}
+      </div></div>`).join('') +
+    (j.canEdit ? `<div class="rowx" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+       <input class="in" id="nt-new" type="email" placeholder="someone@example.com" style="max-width:280px">
+       <button class="btn line sm" id="nt-add">Add an address</button>
+       <span class="hint">They get the email. They cannot sign in.</span></div>` : '') +
     (j.canEdit ? '' : '<div class="rowx hint">Only an admin can change this.</div>');
 
   if (!j.canEdit) return;
+  // A chip belongs either to a hub user (data-u) or to a plain address
+  // (data-e); the only difference is which key the save is sent under.
   box.querySelectorAll('.nt-src').forEach(btn => btn.onclick = async () => {
-    const u = btn.dataset.u;
-    btn.classList.toggle('on'); btn.classList.toggle('c-good'); btn.classList.toggle('c-mute');
-    const sources = [...box.querySelectorAll(`.nt-src[data-u="${u}"].on`)].map(x => x.dataset.s);
-    const r = await enqApi('/api/enquiry/notify', { user_id: u, sources });
+    const u = btn.dataset.u, e = btn.dataset.e;
+    const sel = u ? `.nt-src[data-u="${u}"]` : `.nt-src[data-e="${e}"]`;
+    const flip = () => { btn.classList.toggle('on'); btn.classList.toggle('c-good'); btn.classList.toggle('c-mute'); };
+    flip();
+    const sources = [...box.querySelectorAll(sel + '.on')].map(x => x.dataset.s);
+    const r = await enqApi('/api/enquiry/notify', u ? { user_id: u, sources } : { email: e, sources });
     if (!r.ok) {
       // Put the chip back rather than leaving the screen claiming something
       // that was never saved.
-      btn.classList.toggle('on'); btn.classList.toggle('c-good'); btn.classList.toggle('c-mute');
+      flip();
       alert(r.error || 'That could not be saved.');
     }
   });
+
+  box.querySelectorAll('.nt-del').forEach(btn => btn.onclick = async () => {
+    const e = btn.dataset.e;
+    if (!confirm(`Stop emailing ${e} about enquiries?`)) return;
+    const r = await enqApi('/api/enquiry/notify', { email: e, remove: true });
+    if (!r.ok) return alert(r.error || 'That could not be removed.');
+    renderNotify();
+  });
+
+  const add = el('nt-add');
+  if (add) add.onclick = async () => {
+    const v = (el('nt-new').value || '').trim();
+    if (!v) return;
+    // Every source on by default — somebody added here was added to be told,
+    // and an address that is on the list but ticked for nothing is the silent
+    // failure this whole screen exists to prevent.
+    const r = await enqApi('/api/enquiry/notify', { email: v, sources: j.sources });
+    if (!r.ok) return alert(r.error || 'That could not be added.');
+    el('nt-new').value = '';
+    renderNotify();
+  };
 }
 
 /* ── two records that might be one family ──────────────────────

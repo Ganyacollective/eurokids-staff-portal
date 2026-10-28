@@ -68,9 +68,24 @@ for r in rows:
 head = ("insert into eurokids.enquiry (coda_row_id,created_at,updated_at,updated_by,academic_year,child_name,dob,sex,programs,"
         "father_name,father_phone,father_email,mother_name,mother_phone,mother_email,address,sources,stages,status,sentiment,"
         "visit_at,call_status,call_date,follow_up_on,first_contact_at,first_visit_at) values\n")
-n = 4; size = math.ceil(len(out) / n)
+n = 8; size = math.ceil(len(out) / n)
 for i in range(n):
-    open(f"{outdir}/enq_{i}.sql", "w").write(head + ",\n".join(out[i * size:(i + 1) * size]) + "\non conflict (coda_row_id) do nothing;")
+    # Upsert, not insert-or-skip.
+    #
+    # "do nothing" was right while Coda and the hub were both live and the
+    # hub owned its own edits. For the switch it is wrong: Coda is the source
+    # of truth until the day you stop using it, and a row that was imported
+    # in March and marked Lost in Coda in August would keep its March status
+    # here for ever. Every field Coda owns is refreshed; the hub's own
+    # columns — admitted_uin, the intake photo, ai_summary — are not in this
+    # list and are left alone.
+    cols = ("created_at,updated_at,updated_by,academic_year,child_name,dob,sex,programs,father_name,"
+            "father_phone,father_email,mother_name,mother_phone,mother_email,address,sources,stages,"
+            "status,sentiment,visit_at,call_status,call_date,follow_up_on,first_contact_at,first_visit_at")
+    upd = ",".join(f"{c}=excluded.{c}" for c in cols.split(","))
+    chunk = out[i * size:(i + 1) * size]
+    if not chunk: continue
+    open(f"{outdir}/enq_{i}.sql", "w").write(head + ",\n".join(chunk) + f"\non conflict (coda_row_id) do update set {upd};")
 notes_sql = ("insert into eurokids.enquiry_note (enquiry_id, body, author, created_at) select e.id, v.body, v.author, v.at::timestamptz from (values "
              + ",".join(f"({q(c)},{q(b)},{q(w)},{q(t)})" for c, b, w, t in notes)
              + ") as v(cid,body,author,at) join eurokids.enquiry e on e.coda_row_id=v.cid where not exists (select 1 from eurokids.enquiry_note n where n.enquiry_id=e.id and n.body=v.body);\n"

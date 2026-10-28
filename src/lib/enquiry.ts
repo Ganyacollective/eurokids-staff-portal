@@ -169,15 +169,25 @@ const fallbackRecipients = () =>
   (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
 
 export async function notifyRecipients(admin: SupabaseClient, source: Source): Promise<string[]> {
-  const { data, error } = await admin.schema("eurokids").from("enquiry_notify").select("user_id, sources");
+  const { data, error } = await admin.schema("eurokids").from("enquiry_notify").select("user_id, email, sources");
   if (error || !data?.length) return fallbackRecipients();
   // Has anybody expressed a preference at all?
   if (!data.some(r => (r.sources || []).length)) return fallbackRecipients();
-  const wants = new Set(data.filter(r => (r.sources || []).includes(source)).map(r => r.user_id));
-  if (!wants.size) return [];
+
+  const picked = data.filter(r => (r.sources || []).includes(source));
+  // A row is either a hub user or a bare address.
+  //
+  // Hearing about a walk-in and being able to sign in are different things,
+  // and tying them together meant a coordinator had to be given a hub account
+  // purely to be emailed — which also fails outright when the address already
+  // exists as a Staff Portal teacher login, as most of them do.
+  const plain = picked.filter(r => r.email).map(r => String(r.email));
+  const wants = new Set(picked.filter(r => r.user_id).map(r => r.user_id));
+  if (!wants.size) return plain;
   // Addresses live on the auth record, not on profiles.
   const { data: list } = await admin.auth.admin.listUsers({ perPage: 200 });
-  return (list?.users || []).filter(u => wants.has(u.id) && u.email).map(u => u.email!) as string[];
+  const users = (list?.users || []).filter(u => wants.has(u.id) && u.email).map(u => u.email!) as string[];
+  return [...new Set([...users, ...plain])];
 }
 
 export async function notifySchool(e: EnquiryRow, source: Source, created: boolean, admin?: SupabaseClient) {
