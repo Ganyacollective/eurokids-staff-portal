@@ -5,18 +5,34 @@
    balances and receipts must never be stale, and Supabase calls carry auth
    headers that must not be replayed from a cache. */
 
-// One number, so the cache name and the asset stamps can never drift apart.
-// They had: the worker was on v68 while this list still pre-cached the v=42
-// stylesheet and script, which no page has asked for since. Every install
-// fetched two dead files and the stamp meant nothing here.
-const V = 93;
+// One number — and it has to be the SAME number hub.html asks for.
+//
+// It was not. This said 93 while hub.html asked for `hub.css?v=84` and
+// `enquiries.js?v=84`, and had asked for 84 for nine deploys running. The
+// stamp is the cache key, so nine redesigns went out to a URL nobody's
+// browser ever requested, while every browser kept asking for the v=84 URL
+// it already had. Bumping this number did nothing, because this number was
+// not in the URL being fetched. Three screens of new CSS and a rewritten
+// table shipped correctly to the server and were invisible on the screen.
+//
+// So: when hub.css or enquiries.js changes, bump V here AND the three ?v=
+// stamps in public/hub.html, together. They are one number.
+const V = 94;
 const VERSION = `ek-v${V}`;
+// Bare paths, not stamped ones. A stamped entry here can disagree with what
+// the page asks for — which is exactly what went wrong — and the stamped URL
+// gets cached on first use anyway.
 const SHELL = [
   '/', '/hub.html', '/staff', '/portal.html', '/teacher', '/teacher.html',
-  '/brand/portal.css', `/brand/hub.css?v=${V}`, `/brand/enquiries.js?v=${V}`, '/brand/email-signature.png',
+  '/brand/portal.css', '/brand/hub.css', '/brand/enquiries.js', '/brand/email-signature.png',
   '/brand/icons/icon-192.png', '/brand/icons/icon-512.png',
   '/manifest.webmanifest',
 ];
+// The two files that change on nearly every deploy. Cache-first on these is
+// how a stale screen survives a reload, and 25 KB gzipped behind a login is
+// not worth that risk: they go to the network first and fall back to cache
+// only when the network is gone.
+const VOLATILE = ['/brand/hub.css', '/brand/enquiries.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -44,10 +60,12 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   if (isShell(url)) {
-    // Assets carry ?v= in their URL, so a new deploy is a new cache key and
-    // cache-first is both instant and correct. Only the HTML documents go to
-    // the network first — they are small, and they carry the version stamps.
-    const isDoc = req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/' || url.pathname === '/staff' || url.pathname === '/teacher';
+    // The HTML documents, and the stylesheet and script that change with
+    // them, go to the network first. Everything else — icons, fonts, the
+    // hashed /_next/static bundles, whose names change when they change —
+    // is cache-first, because for those the URL really is the version.
+    const isDoc = req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/' || url.pathname === '/staff' || url.pathname === '/teacher'
+      || VOLATILE.includes(url.pathname);
     e.respondWith(
       caches.open(VERSION).then(async (c) => {
         const cached = await c.match(req);
