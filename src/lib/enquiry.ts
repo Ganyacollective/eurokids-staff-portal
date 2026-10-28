@@ -169,8 +169,34 @@ const fallbackRecipients = () =>
   (process.env.ENQUIRY_NOTIFY_EMAIL || "admin@eurokidsjmdenclave.org").split(/[,\s]+/).filter(Boolean);
 
 export async function notifyRecipients(admin: SupabaseClient, source: Source): Promise<string[]> {
-  const { data, error } = await admin.schema("eurokids").from("enquiry_notify").select("user_id, email, sources");
-  if (error || !data?.length) return fallbackRecipients();
+  // select("*") rather than naming the columns.
+  //
+  // Naming them couples this query to PostgREST's cached view of the table.
+  // The email column was added minutes before a deploy, the cache had not
+  // caught up, the select was rejected — and the line below treated that
+  // rejection as "nobody is configured", quietly posted the enquiry to the
+  // old office address and reported success. Nothing in the timeline said
+  // anything had gone wrong. select("*") returns whatever the table has.
+  const { data, error } = await admin.schema("eurokids").from("enquiry_notify").select("*");
+
+  // A failure here must never again look like an empty list. The office
+  // address is still the right thing to fall back to — somebody must hear
+  // about the family — but the reason is now on the record instead of
+  // vanishing.
+  if (error) {
+    // audit_log, not enquiry_event: enquiry_id is NOT NULL there, so the
+    // record of the failure would itself have failed, silently, which is the
+    // same joke twice.
+    await admin.from("audit_log").insert({
+      action: "enquiry_notify_unreadable",
+      entity_type: "enquiry_notify",
+      entity_id: source,
+      after_json: { message: error.message, code: (error as { code?: string }).code ?? null },
+    }).then(() => {}, () => {});
+    console.error("notifyRecipients: enquiry_notify unreadable", error);
+    return fallbackRecipients();
+  }
+  if (!data?.length) return fallbackRecipients();
   // Has anybody expressed a preference at all?
   if (!data.some(r => (r.sources || []).length)) return fallbackRecipients();
 
