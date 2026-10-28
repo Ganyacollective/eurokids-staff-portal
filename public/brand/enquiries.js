@@ -899,12 +899,41 @@ async function renderDupeBanner(){
 async function openEnquiry(id, opts = {}){
   const s = getSb().schema('eurokids');
   const body = openDrawer('Enquiry', '');
-  const [{ data: e }, { data: events }, { data: notes }, { data: calls }] = await Promise.all([
-    s.from('v_enquiry').select('*').eq('id', id).maybeSingle(),
-    s.from('enquiry_event').select('*').eq('enquiry_id', id).order('at', { ascending: false }).limit(200),
-    s.from('enquiry_note').select('*').eq('enquiry_id', id).order('created_at', { ascending: false }),
-    s.from('call_log').select('*').eq('enquiry_id', id).order('started_at', { ascending: false }).limit(50),
-  ]);
+
+  // "Loading…" that never goes away tells nobody anything.
+  //
+  // These four reads take about three milliseconds between them, so when this
+  // sheet sits spinning it is not the database — it is a request that never
+  // came back, or an error nobody surfaced. Either way the old code had no
+  // way of saying so: one unresolved promise and the word "Loading…" stayed
+  // on screen forever, with the real reason in a console nobody has open.
+  //
+  // Now it waits ten seconds, then says what happened and offers to try
+  // again. A slow answer still arrives; a lost one stops pretending.
+  const guard = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000));
+  let e, events, notes, calls;
+  try {
+    const res = await Promise.race([
+      Promise.all([
+        s.from('v_enquiry').select('*').eq('id', id).maybeSingle(),
+        s.from('enquiry_event').select('*').eq('enquiry_id', id).order('at', { ascending: false }).limit(200),
+        s.from('enquiry_note').select('*').eq('enquiry_id', id).order('created_at', { ascending: false }),
+        s.from('call_log').select('*').eq('enquiry_id', id).order('started_at', { ascending: false }).limit(50),
+      ]),
+      guard,
+    ]);
+    const err = res.find(x => x && x.error)?.error;
+    if (err) throw new Error(err.message || String(err));
+    [{ data: e }, { data: events }, { data: notes }, { data: calls }] = res;
+  } catch (err) {
+    const slow = String(err && err.message) === 'timeout';
+    body.innerHTML = `<div class="err">${slow
+      ? 'This family’s record did not come back within ten seconds. That is the connection, not the data.'
+      : 'Could not load this family: ' + esc(String(err && err.message || err))}</div>
+      <button class="btn line" id="en-retry">Try again</button>`;
+    el('en-retry').onclick = () => openEnquiry(id, opts);
+    return;
+  }
   if (!e) { body.innerHTML = '<div class="err">Enquiry not found.</div>'; return; }
   el('drawer-title').textContent = enqName(e);
   el('drawer-sub').textContent = [(e.programs || []).join(', '), (e.sources || []).join(', '), e.academic_year, 'since ' + longDate((e.first_contact_at || e.created_at).slice(0, 10))].filter(Boolean).join(' · ');
