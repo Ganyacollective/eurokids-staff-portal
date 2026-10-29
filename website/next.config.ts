@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { KIOSK_PREFIX } from "./src/lib/kiosk-host";
 
 // Every URL that is live on Framer today has to keep working, because some of
 // them are printed on QR codes that are already out in the world and cannot be
@@ -83,21 +84,38 @@ const nextConfig: NextConfig = {
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-        // camera=(self), not camera=().
-        //
-        // An empty allowlist means no origin at all may use the camera —
-        // including this one. The browser then rejects getUserMedia outright
-        // and never shows a permission prompt, which is exactly what the
-        // reception tablet was doing: the form worked, no dialog ever
-        // appeared, and every walk-in was recorded without the photograph
-        // that is the whole reason the camera is there. The hook treats a
-        // refusal as "no camera on this device" and carries on silently, so
-        // nothing on screen said anything was wrong.
-        //
-        // (self) is still restrictive: our own pages may ask, and the answer
-        // is still the parent's or the staff member's to give. Microphone and
-        // location stay shut — nothing here has any use for either.
+      ],
+    },
+
+    // The camera is allowed on one address and forbidden on the other, and
+    // the browser enforces it rather than our own code remembering to.
+    //
+    // camera=(self) used to be sent on every page of the public site. Nothing
+    // there ever asked, but "nothing asks today" is a promise about code, and
+    // this is a promise about the site: a parent filling the form in at home
+    // cannot be prompted for their camera, because the browser will not carry
+    // the request at all.
+    //
+    // It must be (self) and not () on the tablet. An empty allowlist means no
+    // origin may use the camera *including this one* — the browser then
+    // rejects getUserMedia outright and never shows a prompt, which is
+    // precisely what the reception iPad was doing for weeks: the form worked,
+    // no dialog ever appeared, and every walk-in was recorded without the
+    // photograph that is the whole reason the camera is there.
+    {
+      source: "/:path*",
+      has: [{ type: "host", value: `${KIOSK_PREFIX}(?<rest>.*)` }],
+      headers: [
         { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+        // The tablet is a till, not a page to be found in a search result.
+        { key: "X-Robots-Tag", value: "noindex, nofollow" },
+      ],
+    },
+    {
+      source: "/:path*",
+      missing: [{ type: "host", value: `${KIOSK_PREFIX}(?<rest>.*)` }],
+      headers: [
+        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
       ],
     },
   ],

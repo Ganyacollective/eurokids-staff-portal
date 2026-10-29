@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { isKioskHost } from "@/lib/kiosk-host";
 
 // The reception tablet.
 //
@@ -36,6 +37,26 @@ const REMEMBERED = "ek-kiosk-key";
 export function useKiosk() {
   const [key, setKey] = useState<string | null>(null);
   const [linkedNow, setLinkedNow] = useState(false);
+  // The address is now what makes a device the tablet. Everything below —
+  // the key in the query string, remembering it, ?kiosk=off — is the older
+  // way, kept working for devices set up before the subdomain existed and
+  // for testing on a preview deployment, where there is no kiosk host.
+  const [onKioskHost, setOnKioskHost] = useState(false);
+
+  useEffect(() => {
+    if (isKioskHost(window.location.hostname)) {
+      setOnKioskHost(true);
+      // Ask the server for the shared secret. It only answers on this host,
+      // so the public site never receives it.
+      let dead = false;
+      fetch("/api/kiosk-key")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (!dead && j?.key) setKey(j.key); })
+        .catch(() => { /* the form still works; the API will refuse the photo */ });
+      return () => { dead = true; };
+    }
+  }, []);
+
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get("kiosk");
     if (fromUrl && fromUrl !== "off") setLinkedNow(true);
@@ -56,7 +77,7 @@ export function useKiosk() {
       if (saved) setKey(saved);
     } catch { /* storage unavailable; the form still works, without a photo */ }
   }, []);
-  return { key, linkedNow };
+  return { key, linkedNow, onKioskHost };
 }
 
 // Taking a device out of reception duty — run from the address bar on that

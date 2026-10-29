@@ -100,9 +100,36 @@ const QUESTIONS: Q[] = [
 
 type Answers = Record<string, string | string[]>;
 
-export default function EnquiryForm({ onDone }: { onDone?: () => void }) {
-  const { key: kioskKey } = useKiosk();
-  const kiosk = !!kioskKey;
+export default function EnquiryForm({
+  onDone,
+  kioskHost = false,
+  kioskKey: hostKey = null,
+}: {
+  onDone?: () => void;
+  // Decided on the server from the Host header: is this the tablet's address?
+  kioskHost?: boolean;
+  // The shared secret, handed to the page only when it is. Never rendered on
+  // the public site, so a parent's browser never receives it.
+  kioskKey?: string | null;
+}) {
+  // Two ways to be the tablet, and they answer different questions.
+  //
+  // The host is what decides the *behaviour* — camera or no camera, Walk In
+  // or Website. It cannot be faked by a visitor, it survives Add to Home
+  // Screen, and it needs no setup on the device at all.
+  //
+  // The key is what the *server* will accept as proof before it records a
+  // walk-in or stores a photograph. It has to stay, because the hostname a
+  // browser reports to an API is just a header, and a header can be typed by
+  // anybody with a one-line script. Without the key, a stranger could post
+  // invented walk-ins with invented photographs — which is the exact problem
+  // the camera was put there to solve.
+  //
+  // ?kiosk=<key> still works, for a device set up before the subdomain
+  // existed and for testing on a preview deployment.
+  const { key: urlKey, onKioskHost } = useKiosk();
+  const kioskKey = hostKey || urlKey;
+  const kiosk = kioskHost || onKioskHost || !!urlKey;
   const cam = useIntakeCamera(kiosk);
   const [step, setStep] = useState(0);
   const [a, setA] = useState<Answers>({ father_cc: "+91", mother_cc: "+91" });

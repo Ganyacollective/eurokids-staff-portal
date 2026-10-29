@@ -27,6 +27,12 @@ export default async function Home() {
       <section className="tf-section" id="enquire">
         <div className="tf-wrap">
           <IntakeHead />
+          {/* Which of the two sites this is gets worked out in the browser
+              from the address, and the key is fetched from an endpoint that
+              only answers on the tablet's host. Deliberately not read here
+              with headers(): that would opt this page out of being cached
+              and make every visitor to the public site wait on a fresh
+              render, to answer a question only the tablet ever asks. */}
           <EnquiryForm />
         </div>
       </section>
