@@ -88,36 +88,68 @@ export default function CardMarquee({
     };
     let raf = requestAnimationFrame(frame);
 
-    // ── stop only over a card ──
+    // ── press, drag, or neither ──
+    //
+    // The pointer is captured late, and that is the whole point.
+    //
+    // Capturing it on pointerdown — which is what this did — retargets every
+    // later pointer event at this section. The browser then works out the
+    // click from a pointerdown and a pointerup that both landed on the
+    // section rather than on the card, so the click was delivered to the
+    // section: the <Link> never saw it, its onClick never ran, and the href
+    // was never followed either. No card on the row could be opened at all,
+    // by mouse or by thumb. Nothing on screen looked broken, which is worse
+    // than if it had.
+    //
+    // So the press is left alone until it has actually travelled. Under the
+    // threshold it is a click and reaches the card untouched; past it, the
+    // row takes the pointer and becomes a drag.
+    const DRAG = 6;            // px of travel before a press becomes a drag
+    let down = false;
+    let startX = 0;
+
     const onMove = (e: PointerEvent) => {
-      if (!dragging) overCard = !!(e.target as Element)?.closest?.(".card");
-      if (!dragging) return;
+      if (!down) { overCard = !!(e.target as Element)?.closest?.(".card"); return; }
+
+      // Distance from where the finger went down, not path length: a hand
+      // that wobbles left and right while pressing has still not dragged.
+      moved = Math.abs(e.clientX - startX);
+
+      if (!dragging) {
+        if (moved <= DRAG) return;
+        dragging = true;
+        view.setPointerCapture(e.pointerId);
+        view.classList.add("is-dragging");
+        lastX = e.clientX;                 // measure the throw from here
+        lastT = performance.now();
+        return;
+      }
 
       const dx = e.clientX - lastX;
       x -= dx;
-      moved += Math.abs(dx);
       const now = performance.now();
       flick = -dx / Math.max(0.008, (now - lastT) / 1000);
       lastX = e.clientX;
       lastT = now;
     };
-    const onLeave = () => { if (!dragging) overCard = false; };
+    const onLeave = () => { if (!down && !dragging) overCard = false; };
 
-    // ── drag, on a trackpad or a finger ──
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      dragging = true;
+      down = true;
+      dragging = false;
       moved = 0;
       flick = 0;
+      startX = e.clientX;
       lastX = e.clientX;
       lastT = performance.now();
-      view.setPointerCapture(e.pointerId);
-      view.classList.add("is-dragging");
     };
     const onUp = (e: PointerEvent) => {
-      if (!dragging) return;
+      if (!down) return;
+      down = false;
+      if (!dragging) return;               // a plain click: nothing to undo
       dragging = false;
-      view.releasePointerCapture?.(e.pointerId);
+      try { view.releasePointerCapture?.(e.pointerId); } catch { /* already gone */ }
       view.classList.remove("is-dragging");
       // Hand it the speed of the flick. The frame loop eases this back to
       // the drift on its own, so it coasts rather than stopping dead.
@@ -126,7 +158,7 @@ export default function CardMarquee({
 
     // A drag that ends on a card must not also open it.
     const onClick = (e: MouseEvent) => {
-      if (moved > 6) { e.preventDefault(); e.stopPropagation(); }
+      if (moved > DRAG) { e.preventDefault(); e.stopPropagation(); }
     };
 
     // ── a two-finger swipe on the trackpad ──
