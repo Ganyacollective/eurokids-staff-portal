@@ -222,7 +222,14 @@ export default function CardMarquee({
               // stays on both, so the link is real, crawlable, and works on
               // a middle click or "open in new tab".
               onClick={(e) => {
-                if (ghost || !hasVideo(c)) return;
+                // Not `ghost ||` — the second copy of the row is scenery to a
+                // screen reader, but to a mouse it is an ordinary card sitting
+                // in front of somebody. Half the row is the duplicate, so
+                // excluding it meant a film opened in place on one copy of a
+                // card and silently navigated away on the other, depending
+                // only on how far the row happened to have drifted. The index
+                // is already folded back with % cards.length.
+                if (!hasVideo(c)) return;
                 // A drag that ends on a card never reaches here: the marquee
                 // already swallows that click in the capture phase.
                 e.preventDefault();
