@@ -471,8 +471,18 @@ img, video { max-width: 100%; display: block; }
 
 .card-page { padding-block: clamp(26px, 5vw, 56px) clamp(50px, 9vw, 96px); }
 .card-title { font-size: var(--fs-hero); text-align: center; margin-bottom: clamp(20px, 4vw, 40px); }
-.player { border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 16 / 9; }
-.player iframe, .player video { width: 100%; height: 100%; border: 0; display: block; }
+/* The event page's player, which had the same 16:9 assumption as the overlay.
+   A portrait film forced into a 16:9 box becomes a thin strip down the middle
+   of a wide black rectangle. The film is allowed to be whatever shape it is,
+   capped so a tall one cannot run off the bottom of the screen. The iframe
+   keeps a ratio because an embed has no intrinsic size to take one from. */
+.player { border-radius: 12px; overflow: hidden; background: #000; }
+.player video {
+  display: block; margin-inline: auto;
+  max-width: 100%; max-height: min(76vh, 820px);
+  border: 0; object-fit: contain;
+}
+.player iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; }
 .gallery { display: grid; gap: 14px; margin-top: clamp(22px, 4vw, 44px);
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
 .gallery figure { margin: 0; border-radius: 10px; overflow: hidden; background: #F1F1F4; }
@@ -788,15 +798,45 @@ img, video { max-width: 100%; display: block; }
 .vplay-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 /* The film fills what is left, letterboxed rather than cropped — these are
-   somebody's child, not a background texture. */
+   somebody's child, not a background texture.
+ *
+ * This used to centre the film in a grid and cap its width at
+ * (100vh - 140px) * 16/9, which quietly assumed every film was 16:9. None of
+ * them are. Independence Day is 1288x1080 and Voiceprint is a portrait phone
+ * video at 1080x1920.
+ *
+ * object-fit: contain was already here and was never the problem. The problem
+ * was the size of the box it was containing INTO. A centred grid item has an
+ * indefinite height, so `height: 100%` — and `max-height: 100%`, which I tried
+ * first — resolve against nothing and fall away, leaving the element to take
+ * its intrinsic height from its own width. At 1440x900 that made the element
+ * 1351x1133 inside an 822px-tall stage: 311 pixels of the film below the fold,
+ * with the bottom of somebody's child cut off. For a 16:9 film the arithmetic
+ * happened to land just inside the stage, which is why it looked fine for a
+ * year.
+ *
+ * Positioning it absolutely gives it a containing block with a real height, so
+ * the percentages mean something. Both dimensions are then pinned and
+ * object-fit does the letterboxing, for any shape of film. The insets keep the
+ * breathing room the padding used to give: a replaced element will not stretch
+ * to fill its insets the way a div does, so the width and height are stated
+ * rather than left to auto.
+ *
+ * Measured on the live page at 1440x900 and at 375x812, with both the 1.19
+ * film and the 0.56 portrait one: whole film visible, aspect ratio exact,
+ * nothing below the fold. */
 .vplay-stage {
-  flex: 1; min-height: 0; display: grid; place-items: center;
-  padding: 0 var(--s5) var(--s5);
+  --vpad: var(--s5);              /* one number, so the insets below cannot
+                                     drift from the padding on a phone */
+  flex: 1; min-height: 0; position: relative;
+  padding: 0 var(--vpad) var(--vpad);
 }
 .vplay-stage video,
 .vplay-stage iframe {
-  width: 100%; height: 100%;
-  max-width: min(100%, calc((100vh - 140px) * 16 / 9));
+  position: absolute;
+  top: 0; left: var(--vpad);
+  width: calc(100% - var(--vpad) * 2);
+  height: calc(100% - var(--vpad));
   border: 0; border-radius: 12px; background: #000;
   object-fit: contain;
 }
@@ -806,5 +846,5 @@ img, video { max-width: 100%; display: block; }
 @media (max-width: 560px) {
   .vplay-bar { padding: var(--s3) var(--s3); gap: var(--s2); }
   .vplay-title { order: 3; flex-basis: 100%; text-align: left; }
-  .vplay-stage { padding: 0 var(--s3) var(--s3); }
+  .vplay-stage { --vpad: var(--s3); }
 }
