@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=97">
-<link rel="prefetch" href="/brand/enquiries.js?v=97" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=98">
+<link rel="prefetch" href="/brand/enquiries.js?v=98" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1266,7 +1266,7 @@ async function tabViews(){
     const cnt = c => _views.rows.filter(r => c.every(x => evalCond(r, x))).length;
     el('vw-side').innerHTML =
       `<div class="side-h">Lists</div>` +
-      QUICK.map(([l, c], i) => `<button class="side-i ${!_views.current && quickIdx === i ? 'on' : ''}" data-q="${i}">
+      QUICK.map(([l, c], i) => `<button class="side-i ${onQuick() && quickIdx === i ? 'on' : ''}" data-q="${i}">
           <span style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:${QUICK_TINT[l] || 'var(--accent)'}"></span>${l}</span><b>${cnt(c)}</b></button>`).join('') +
       `<div class="side-h">Saved views</div>` +
       (_views.list.map(v => `<button class="side-i ${_views.current?.id === v.id ? 'on' : ''}" data-id="${v.id}">
@@ -1354,7 +1354,23 @@ async function tabViews(){
     });
     return rows;
   };
-  const viewName = () => _views.current ? _views.current.name : QUICK[quickIdx][0];
+  // What this list is now, which is not always what you clicked.
+  //
+  // Picking "Still owing" loads one condition: truly due is more than zero.
+  // Editing that condition — changing it to "less than 6,000", say — does not
+  // narrow the list, it REPLACES the only thing that made it the owing list.
+  // Every child who owes nothing is under 6,000, so all 137 fully-paid
+  // children arrive, and the screen went on calling it "Still owing" with the
+  // sidebar lit and the count reading 59. The filter did exactly what it was
+  // told; the heading above it was a lie, which is worse than a bug because
+  // you check a heading rather than re-derive it.
+  //
+  // So the moment the conditions stop being the list's own, the list stops
+  // claiming the name.
+  const onQuick = () => !_views.current && !isDirty();
+  const viewName = () => _views.current
+    ? _views.current.name + (isDirty() ? ' (edited)' : '')
+    : (onQuick() ? QUICK[quickIdx][0] : 'Filtered list');
   run = () => {
     const rows = matched();
     _views.lastRows = rows;
@@ -1364,9 +1380,14 @@ async function tabViews(){
     // the sidebar's own list already says what it is; only spell out edits
     el('vw-fdesc').textContent = (isDirty() || (_views.current && _views.conds.length))
       ? (_views.conds.length ? 'Where ' + _views.conds.map(describeCond).join(', and ') : 'No filters — everyone') : '';
-    const owed = rows.reduce((a, r) => a + Number(r.true_due||0), 0);
-    el('vw-meta').textContent = `${rows.length} ${rows.length===1?'child':'children'}` +
-      (has('finance') && owed > 0 ? ` · ${money(owed)} still due` : '');
+    // "153 children · ₹44,695 still due" read as though 153 children owed
+    // money. 137 of them owed nothing. Say how many actually owe, so the
+    // count and the amount are about the same people.
+    const owing = rows.filter(r => Number(r.true_due||0) > 0);
+    const owed = owing.reduce((a, r) => a + Number(r.true_due||0), 0);
+    el('vw-meta').textContent = `${rows.length} ${rows.length===1?'child':'children'}`
+      + (owing.length && owing.length !== rows.length ? ` · ${owing.length} owing` : '')
+      + (has('finance') && owed > 0 ? ` · ${money(owed)} still due` : '');
     drawDirty(); drawSort();
     el('vw-rename').style.display = el('vw-del').style.display =
       el('vw-moremenu').querySelector('.msep').style.display = _views.current ? '' : 'none';
@@ -6083,7 +6104,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=97"></script>
+<script src="/brand/enquiries.js?v=98"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
