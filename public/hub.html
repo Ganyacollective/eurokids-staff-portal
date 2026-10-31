@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=101">
-<link rel="prefetch" href="/brand/enquiries.js?v=101" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=102">
+<link rel="prefetch" href="/brand/enquiries.js?v=102" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -198,6 +198,8 @@ const TABS = {
   rb_customers: { app: 'reimb', label: 'Customers',      icon: 'people', sect: 'Reimbursements',
                   need: () => has('reimbursements') },
   rb_recurring: { app: 'reimb', label: 'Recurring',      icon: 'list',  sect: 'Reimbursements',
+                  need: () => has('reimbursements') },
+  rb_fees:      { app: 'reimb', label: 'Transaction fees', icon: 'tag',  sect: 'Reimbursements',
                   need: () => has('reimbursements') },
   assets:     { label: 'Equipment',     icon: 'box',    sect: 'School',        need: () => has('inventory') || isOwner() },
   supplies:   { label: 'Supplies',      icon: 'tray',   sect: 'School',        need: () => has('inventory') || isOwner() },
@@ -620,7 +622,7 @@ function renderApp(){
      assets: tabAssets, supplies: tabSupplies,
      rb_home: tabReimbursements, rb_customers: tabCustomers, rb_recurring: tabRecurring,
      bill_home: tabDaycareBilling, bill_customers: tabCustomers, bill_recurring: tabRecurring,
-     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_reports: tabEnqReports, enq_setup: tabEnqSetup, website: tabWebsite }[tab] || tabOverview)();
+     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_reports: tabEnqReports, enq_setup: tabEnqSetup, website: tabWebsite, rb_fees: tabFeeCheck }[tab] || tabOverview)();
 }
 
 /* ── Forms for signature ──────────────────────────────────────────────────
@@ -3447,6 +3449,109 @@ async function dcLoad(){
   return r;
 }
 
+
+/* ── The transaction fee checklist ────────────────────────────────────────
+   A reimbursement receipt going to a parent means a transaction fee invoice
+   has to be raised against them in Zoho. The two systems do not talk, so
+   until now the only way to know whether a month had been missed was to open
+   Zoho and count — which means in practice nobody checked.
+
+   The list builds itself: every receipt that goes out is a row here, newest
+   month first, and it stays open until somebody ticks it. Nothing to
+   remember and nothing to add by hand.
+
+   The expected fee is shown per row so she can tell at a glance whether what
+   she raised was the right size. There is deliberately no total: this tab is
+   her working list, not a statement of what the fees come to. */
+async function tabFeeCheck(){
+  el('body').innerHTML = '<div class="loading">Loading…</div>';
+  const r = await dcLoad();
+  if (!r.ok) return el('body').innerHTML = fail(r);
+
+  const housePct = Number((_dc.settings || {}).txn_fee_pct);
+  const pctFor = inv => {
+    const p = dcParty(inv.party_id);
+    const own = p && p.txn_fee_pct != null ? Number(p.txn_fee_pct) : NaN;
+    return Number.isFinite(own) ? own : (Number.isFinite(housePct) && housePct > 0 ? housePct : NaN);
+  };
+  const expected = inv => {
+    const pct = pctFor(inv);
+    return Number.isFinite(pct) ? Number(inv.total || 0) * pct / 100 : null;
+  };
+
+  // Only receipts that actually went out. A draft owes nobody a fee yet.
+  const rows = dcOf('reimbursement')
+    .filter(i => i.status === 'sent')
+    .sort((a, z) => String(z.period_start || '').localeCompare(String(a.period_start || '')));
+
+  const open = rows.filter(i => !i.fee_raised);
+  const months = [...new Set(rows.map(i => String(i.period_start || '').slice(0, 7)))];
+
+  const rateMissing = !Number.isFinite(housePct) || housePct <= 0;
+
+  el('body').innerHTML = head('Transaction fees',
+      'Every reimbursement receipt that goes out needs a transaction fee invoice raised against that parent in Zoho. Tick it here once you have.')
+    + (rateMissing ? `<div class="grp"><div class="foot warn">
+        No fee rate is set, so this list cannot say what each fee should come to —
+        only whether one was raised. Set it in Setup to get the expected amount.
+       </div></div>` : '')
+    + `<div class="stats" style="margin-bottom:16px">
+        <div class="stat ${open.length ? 'warn' : ''}"><div class="k">Still to raise</div><div class="v">${open.length}</div>
+          <div class="m">${open.length ? 'across ' + new Set(open.map(i=>String(i.period_start||'').slice(0,7))).size + ' month(s)' : 'nothing outstanding'}</div></div>
+        <div class="stat"><div class="k">Receipts sent</div><div class="v">${rows.length}</div>
+          <div class="m">over ${months.length} month(s)</div></div>
+       </div>`
+    + months.map(m => {
+        const mine = rows.filter(i => String(i.period_start || '').slice(0, 7) === m);
+        const done = mine.filter(i => i.fee_raised).length;
+        return `<div class="grp"><h3>${esc(dcMonth(m + '-01'))}
+            <span class="sub" style="font-weight:400">· ${done} of ${mine.length} raised</span></h3>
+          <div class="box"><table class="tbl"><thead><tr>
+            <th>Parent</th><th>Receipt</th><th class="r">Receipt total</th>
+            <th class="r">Fee should be</th><th>Raised in Zoho</th></tr></thead><tbody>
+          ${mine.map(i => {
+            const p = dcParty(i.party_id);
+            const ex = expected(i);
+            return `<tr class="${i.fee_raised ? '' : 't-warn'}">
+              <td><strong>${esc(p?.display_name || '—')}</strong>${
+                 p?.employer_name ? `<div class="hint">${esc(p.employer_name)}</div>` : ''}</td>
+              <td><span class="uin">${esc(i.number || '—')}</span></td>
+              <td class="r num">${money(i.total)}</td>
+              <td class="r num">${ex == null ? '<span class="hint">rate not set</span>'
+                                              : money(ex) + ` <span class="hint">(${pctFor(i)}%)</span>`}</td>
+              <td><label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" class="sw fee-tick" data-id="${i.id}" ${i.fee_raised ? 'checked' : ''}>
+                    <span class="hint" id="fee-say-${i.id}">${
+                      i.fee_raised
+                        ? esc((i.fee_raised_by || 'someone')) + (i.fee_raised_at ? ' · ' + dtLocal(i.fee_raised_at) : '')
+                        : 'not yet'}</span>
+                  </label></td></tr>`;
+          }).join('')}
+          </tbody></table></div></div>`;
+      }).join('')
+    + (rows.length ? '' : '<div class="grp"><div class="box" style="padding:22px;text-align:center;color:var(--muted)">No receipts have gone out yet.</div></div>');
+
+  el('body').querySelectorAll('.fee-tick').forEach(cb => cb.onchange = async () => {
+    const id = Number(cb.dataset.id);
+    const say = el('fee-say-' + id);
+    cb.disabled = true; if (say) say.textContent = 'saving…';
+    const res = await dcApi('/fee-check', { id, raised: cb.checked });
+    cb.disabled = false;
+    if (!res.ok) {
+      cb.checked = !cb.checked;
+      if (say) say.textContent = 'not saved';
+      return alert('Could not save: ' + (res.error || 'unknown error'));
+    }
+    // Keep the row we already hold in step, so leaving the tab and coming
+    // back does not show the old answer.
+    const inv = (_dc.invoices || []).find(x => x.id === id);
+    if (inv) { inv.fee_raised = cb.checked; inv.fee_raised_by = cb.checked ? (profile?.full_name || 'you') : null;
+               inv.fee_raised_at = cb.checked ? new Date().toISOString() : null; }
+    if (say) say.textContent = cb.checked
+      ? (profile?.full_name || 'you') + ' · just now' : 'not yet';
+  });
+}
+
 /* ── Reimbursements: how many, never how much ─────────────────────────── */
 async function tabReimbursements(){
   el('body').innerHTML = '<div class="loading">Loading…</div>';
@@ -6139,7 +6244,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=101"></script>
+<script src="/brand/enquiries.js?v=102"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

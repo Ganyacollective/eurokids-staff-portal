@@ -17,7 +17,7 @@
 //
 // So: when hub.css or enquiries.js changes, bump V here AND the three ?v=
 // stamps in public/hub.html, together. They are one number.
-const V = 101;
+const V = 102;
 const VERSION = `ek-v${V}`;
 // Bare paths, not stamped ones. A stamped entry here can disagree with what
 // the page asks for — which is exactly what went wrong — and the stamped URL
