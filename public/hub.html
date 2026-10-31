@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=99">
-<link rel="prefetch" href="/brand/enquiries.js?v=99" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=100">
+<link rel="prefetch" href="/brand/enquiries.js?v=100" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1460,7 +1460,12 @@ async function tabViews(){
     if (!rows.length) return alert('Nothing to print — the view is empty.');
     const title = viewName() || 'Follow-up list';
     const today = new Date().toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
-    const owed = rows.reduce((a, r) => a + Number(r.true_due||0), 0);
+    // The same two-populations-in-one-sentence as the on-screen subtitle, on
+    // the sheet that gets signed and carried into calls: "199 families ·
+    // ₹12,53,777 outstanding" when 140 of the rows printed beneath it read
+    // "paid" in the Truly due column.
+    const owingRows = rows.filter(r => Number(r.true_due||0) > 0);
+    const owed = owingRows.reduce((a, r) => a + Number(r.true_due||0), 0);
     const w = window.open('', '_blank');
     if (!w) return alert('Your browser blocked the print window. Allow pop-ups for this site and try again.');
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} — ${esc(today)}</title>
@@ -1483,7 +1488,7 @@ async function tabViews(){
       tr{page-break-inside:avoid}
     </style></head><body>
     <div class="hd"><div><h1>EuroKids JMD Enclave</h1><div class="sub">${esc(title)}</div></div>
-      <div style="text-align:right"><div style="font-weight:700">${esc(today)}</div><div class="sub">${rows.length} famil${rows.length===1?'y':'ies'} · ${money(owed)} outstanding</div></div></div>
+      <div style="text-align:right"><div style="font-weight:700">${esc(today)}</div><div class="sub">${rows.length} famil${rows.length===1?'y':'ies'}${owingRows.length && owingRows.length!==rows.length ? ` · ${owingRows.length} owing` : ''} · ${money(owed)} outstanding</div></div></div>
     ${_views.conds.length ? `<div class="meta">Showing children where ${esc(_views.conds.map(describeCond).join(', and '))}.</div>` : ''}
     <table><thead><tr><th style="width:24px"></th><th>Child</th><th>Class</th><th>Parent</th><th>Phone</th>
       <th class="r">Truly due</th><th>Next due</th><th>Called / remarks</th></tr></thead><tbody>
@@ -5214,7 +5219,15 @@ async function tabPlans(){
     setPlanOrder(rows);            // ‹ › in the child sheet follow this list
     el('plan-h').textContent = `${rows.length} ${rows.length === 1 ? 'child' : 'children'}`;
     el('plan-rows').innerHTML = rows.map(k => {
-      const fee = Number(k.final_fee || 0);
+      // final_fee is ALREADY net of the concession — our_discount is
+      // total_fee − final_fee. Printing "₹61,000" with "− ₹7,500" beneath it
+      // invites the subtraction a second time, and the child's own statement
+      // three clicks away says Annual ₹68,500, Concession − ₹7,500, Agreed
+      // ₹61,000. Show the gross when there is a concession, so the two lines
+      // read as the sum they are and land on the figure true_due uses.
+      const fee = Number(k.our_discount) > 0
+        ? Number(k.total_fee || k.final_fee || 0)
+        : Number(k.final_fee || 0);
       return `<tr class="${tint(k)}" style="cursor:pointer" onclick="openPlan('${esc(k.uin)}')"><td><strong>${esc(k.student_name)}</strong>
           ${k.latest_note ? `<div class="hint" style="font-size:12px;color:var(--ink);opacity:.75;margin-top:2px">📝 ${esc(String(k.latest_note).slice(0, 70))}${String(k.latest_note).length > 70 ? '…' : ''}</div>` : ''}
           <span class="uin">${esc(k.uin)}</span></td>
@@ -6126,7 +6139,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=99"></script>
+<script src="/brand/enquiries.js?v=100"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
