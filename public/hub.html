@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=98">
-<link rel="prefetch" href="/brand/enquiries.js?v=98" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=99">
+<link rel="prefetch" href="/brand/enquiries.js?v=99" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -108,6 +108,26 @@ const invalidate = (prefix) => {
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const has = m => modules.includes(m);
+
+// Setting one child's fee, and seeing what the school is worth, are two
+// different jobs and were one permission.
+//
+// The coordinator sits with the family at admission and agrees the
+// concession there and then. She needs to set that child's fee, schedule and
+// concession, and to watch the balance go to nil. She has no business with
+// what the school collected this term, or what is owed to EuroKids in total,
+// and did not want it.
+//
+// Finance was both, so she had neither: the concession box was read-only, the
+// save silently skipped the discount, and parents who had paid in full went
+// on showing a due. So:
+//
+//   canFees()  — may set THIS child's fee, schedule and concession
+//   has('finance') — may see what the school as a whole has collected or owes
+//
+// Totals stay exactly where they were. Anyone can of course add a column up
+// by hand; the point is that the hub does not do it for them.
+const canFees = () => has('fees') || has('finance');
 const el = id => document.getElementById(id);
 
 // Outline symbols for the sidebar, drawn in the spirit of SF Symbols: one
@@ -182,7 +202,7 @@ const TABS = {
   assets:     { label: 'Equipment',     icon: 'box',    sect: 'School',        need: () => has('inventory') || isOwner() },
   supplies:   { label: 'Supplies',      icon: 'tray',   sect: 'School',        need: () => has('inventory') || isOwner() },
   kits:       { label: 'Kits',          icon: 'box',    sect: 'Reference',     need: () => has('kits') },
-  discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => has('finance') },
+  discounts:  { label: 'Discounts',     icon: 'tag',    sect: 'Reference',     need: () => canFees() },
   fees:       { label: 'Fee Grid',      icon: 'grid',   sect: 'Reference',     need: () => has('fees') || has('finance') },
   templates:  { label: 'Letter templates', icon: 'mail', sect: 'Setup',       need: () => has('finance') },
   letters:    { app: 'letters', label: 'Appointment letters', icon: 'mail', sect: 'Staff', need: () => has('letters') },
@@ -5553,9 +5573,9 @@ async function openPlan(uin){
         : epmsSchemeLabel(kid?.epms_discount_kind) ? `<div class="row"><div class="l">EuroKids scheme<span class="sub">Already inside the annual fee below. Do not enter it again as a concession.</span></div>
         <div class="v"><span class="chip c-acc">${esc(kid.epms_discount_kind)}</span></div></div>` : ''}
       <div class="row"><div class="l">Annual fee<span class="sub">EPMS invoiced <strong id="pf-epms-fig">${money(kid?.epms_invoiced || 0)}</strong></span></div>
-        <input class="in num" id="pf-total" type="number" value="${total}" ${has('finance') ? '' : 'readonly tabindex="-1"'}></div>
-      <div class="row"><div class="l">Concession<span class="sub">${has('finance') ? 'Off our own margin. EPMS never sees it.' : 'Only someone with Finance can change a concession.'}</span></div>
-        <input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0" ${has('finance') ? '' : 'readonly tabindex="-1"'}></div>
+        <input class="in num" id="pf-total" type="number" value="${total}" ${canFees() ? '' : 'readonly tabindex="-1"'}></div>
+      <div class="row"><div class="l">Concession<span class="sub">${canFees() ? 'Off our own margin. EPMS never sees it.' : 'Only someone who can set fees may change a concession.'}</span></div>
+        <input class="in num" id="pf-disc" type="number" value="${plan?.our_discount ?? 0}" placeholder="0" ${canFees() ? '' : 'readonly tabindex="-1"'}></div>
       <div class="row" id="pf-why-row"><div class="l">What for<span class="sub">Shown to the parent on their statement.</span></div>
         <select class="in" id="pf-why"><option value="">— choose —</option>
           ${CONCESSION_REASONS.concat(plan?.discount_reason && !CONCESSION_REASONS.includes(plan.discount_reason) ? [plan.discount_reason] : [])
@@ -5785,12 +5805,14 @@ async function openPlan(uin){
         due_date: r.due_date, label: r.label || null })));
     if (ins.error) { el('pf-msg').innerHTML = `<div class="err">${esc(ins.error.message)}</div>`; return false; }
 
-    // child_discount is finance-only, while the plan itself is not — so a
-    // coordinator saving an instalment date used to write the plan, then be
-    // refused the discount mirror, and be told "the plan saved, but the
-    // discount did not". She had not touched the discount. Nothing to mirror
-    // if she cannot change it: skip the write rather than fail half way.
-    if (has('finance')) {
+    // The concession used to be finance-only while the plan was not, so the
+    // coordinator — who is the person actually sitting with the family when
+    // the concession is agreed — could save an instalment date and then be
+    // refused the discount mirror, and told "the plan saved, but the discount
+    // did not" for something she had not touched. She can set it now; the
+    // guard stays for anyone who genuinely cannot, so their save does not
+    // fail half way through.
+    if (canFees()) {
       // Always write, never skip: leaving the old row behind meant a discount
       // could be reduced to zero on screen while the family kept it forever, so
       // every reminder kept quoting a discount they no longer had.
@@ -6104,7 +6126,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=98"></script>
+<script src="/brand/enquiries.js?v=99"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
