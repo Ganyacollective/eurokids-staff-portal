@@ -74,6 +74,11 @@ const SCHOOL_JSONLD = {
   alternateName: "EuroKids Undri",
   url: "https://eurokidsjmdenclave.org",
   logo: "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/eurokids-logo.png",
+  // A logo is a mark; `image` is what a result can actually show. Without it
+  // Google has no picture it is allowed to use for this business, so the
+  // listing falls back to whatever it scrapes. Points at our own OG endpoint,
+  // which is generated and therefore cannot rot.
+  image: "https://eurokidsjmdenclave.org/opengraph-image",
   telephone: SCHOOL.phoneHref.replace("tel:", ""),
   email: SCHOOL.email,
   foundingDate: SCHOOL.founded,
