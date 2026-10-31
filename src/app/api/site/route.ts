@@ -147,6 +147,12 @@ export async function POST(req: NextRequest) {
       blurb: String(b.blurb || "").trim() || null,
       video_url: String(b.video_url || "").trim() || null,
       published: !!b.published,
+      // Whether the site draws its own WATCH NOW circle. Most of the artwork
+      // already has one painted in, so the default for an existing card is
+      // whatever it is set to; a card arriving without the field is a new one
+      // and gets the badge, because artwork with no badge and no circle drawn
+      // has no call to action at all.
+      show_badge: b.show_badge === undefined ? true : !!b.show_badge,
       sort: Number(b.sort) || 0,
       updated_at: new Date().toISOString(),
     };

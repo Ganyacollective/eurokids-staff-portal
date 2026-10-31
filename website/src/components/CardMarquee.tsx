@@ -245,9 +245,17 @@ export default function CardMarquee({
                   draggable={false}
                 />
               )}
-              <span className="card-watch" aria-hidden={ghost || undefined}>
-                {hasVideo(c) ? <>WATCH<br />NOW</> : <>SEE<br />PHOTOS</>}
-              </span>
+              {/* Most of the artwork already has a WATCH NOW circle painted
+                  into it, so drawing ours on top gave the card two — and on a
+                  card with no film the picture said "WATCH NOW" while ours
+                  said "SEE PHOTOS" beside it. Voiceprint's artwork has none
+                  and does need ours, so it is a choice per card rather than a
+                  setting for the row. */}
+              {c.show_badge !== false && (
+                <span className="card-watch" aria-hidden={ghost || undefined}>
+                  {hasVideo(c) ? <>WATCH<br />NOW</> : <>SEE<br />PHOTOS</>}
+                </span>
+              )}
             </Link>
           );
         })}

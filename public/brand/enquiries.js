@@ -1582,6 +1582,7 @@ function openCard(id){
       ${row('Address', `<input class="in wide" id="sc-slug" value="${esc(c?.slug || '')}" placeholder="sports-day">`, 'The bit after /events/ in the link. Leave blank and it follows the title.')}
       ${row('Blurb', `<input class="in wide" id="sc-blurb" value="${esc(c?.blurb || '')}" placeholder="One line under the title">`)}
       ${row('Live on the site', `<input type="checkbox" class="sw" id="sc-pub" ${c?.published ? 'checked' : ''}>`, 'Unticked, nobody can reach it even with the link.')}
+      ${row('Draw the WATCH NOW circle', `<input type="checkbox" class="sw" id="sc-badge" ${c && c.show_badge === false ? '' : 'checked'}>`, 'Leave it off when the artwork already has one painted in — otherwise the card carries two.')}
     </div></div>
 
     <div class="grp"><h3>The face of the card</h3><div class="box">
@@ -1685,7 +1686,7 @@ function openCard(id){
     const r = await enqApi('/api/site', {
       action: 'save_card', id,
       title: el('sc-title').value, slug: el('sc-slug').value, blurb: el('sc-blurb').value,
-      published: el('sc-pub').checked, video_url: el('sc-vurl').value,
+      published: el('sc-pub').checked, show_badge: el('sc-badge').checked, video_url: el('sc-vurl').value,
       sort: c?.sort ?? (_site.cards.length + 1),
       ...(artPath !== undefined ? { artwork_path: artPath } : {}),
       ...(vidPath !== undefined ? { video_path: vidPath } : {}),

@@ -36,6 +36,8 @@ export type Card = {
   artwork_path: string | null;
   video_path: string | null;
   video_url: string | null;
+  // Draw our badge, or leave it to the artwork.
+  show_badge: boolean;
 };
 
 export type CardMedia = {
@@ -47,7 +49,7 @@ export type CardMedia = {
 
 export async function listCards(): Promise<Card[]> {
   const { data } = await db().from("site_card")
-    .select("id, slug, title, blurb, artwork_path, video_path, video_url")
+    .select("id, slug, title, blurb, artwork_path, video_path, video_url, show_badge")
     .eq("published", true)
     .order("sort").order("id");
   return data || [];
@@ -56,7 +58,7 @@ export async function listCards(): Promise<Card[]> {
 export async function getCard(slug: string): Promise<{ card: Card; media: CardMedia[] } | null> {
   const a = db();
   const { data: card } = await a.from("site_card")
-    .select("id, slug, title, blurb, artwork_path, video_path, video_url")
+    .select("id, slug, title, blurb, artwork_path, video_path, video_url, show_badge")
     .eq("slug", slug).eq("published", true).maybeSingle();
   if (!card) return null;
   const { data: media } = await a.from("site_card_media")
