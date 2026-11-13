@@ -803,8 +803,12 @@ function renderBalance(){
     : (myLegacyOverride.el != null) ? myLegacyOverride.el : (AY.el_per_teacher + (myCarryForward.el || 0));
   document.getElementById('cl-total').textContent = clTotal;
   document.getElementById('el-total').textContent = elTotal;
-  document.getElementById('cl-left').textContent  = Math.max(0, clTotal - usedCL);
-  document.getElementById('el-left').textContent  = Math.max(0, elTotal - usedEL);
+  // Not Math.max(0, …). Clamping at zero meant somebody four days over their
+  // casual leave read "0 left", exactly like somebody who had spent their
+  // last day — so neither they nor HR ever saw how far past the line it had
+  // gone, and it kept going.
+  document.getElementById('cl-left').textContent  = clTotal - usedCL;
+  document.getElementById('el-left').textContent  = elTotal - usedEL;
   // Kept for the application form, so it can say what a request will cost
   // before it is sent rather than after HR has approved it.
   myLeft = { CL: clTotal - usedCL, EL: elTotal - usedEL };
@@ -839,14 +843,15 @@ function updateLeaveCost(){
     box.className = 'text-sm rounded-lg px-3 py-2 border bg-green-50 border-green-200 text-green-800';
     box.textContent = `${d(asked)} — you have ${d(left)} of ${type} left, so all of it is paid.`;
   } else if (paid > 0) {
-    box.className = 'text-sm rounded-lg px-3 py-2 border bg-amber-50 border-amber-300 text-amber-900';
+    box.className = 'text-sm rounded-lg px-3 py-2 border bg-red-50 border-red-300 text-red-900';
     box.innerHTML = `You are asking for ${d(asked)} but have only <strong>${d(left)}</strong> of ${type} left.
-      <strong>${d(paid)} will be paid and ${d(unpaid)} will not.</strong>
-      You can still send it — we need to know you are away.`;
+      Send <strong>${d(paid)}</strong> as ${type}, and the other <strong>${d(unpaid)}</strong>
+      as <strong>Leave without pay</strong> in a second request.
+      We still need to know you are away — this cannot be sent as one.`;
   } else {
-    box.className = 'text-sm rounded-lg px-3 py-2 border bg-amber-50 border-amber-300 text-amber-900';
-    box.innerHTML = `You have <strong>no ${type} left</strong>, so all ${d(asked)} would be unpaid.
-      You can still send it — we need to know you are away.`;
+    box.className = 'text-sm rounded-lg px-3 py-2 border bg-red-50 border-red-300 text-red-900';
+    box.innerHTML = `You have <strong>no ${type} left</strong>${left < 0 ? ` (you are ${d(Math.abs(left))} over)` : ''}.
+      Please choose <strong>Leave without pay</strong> — we still need to know you are away.`;
   }
 }
 
@@ -924,6 +929,33 @@ async function submitLeave(ev){
     errEl.textContent = 'Half-day leave must be a single date.'; errEl.classList.remove('hidden'); return false;
   }
   const total_days = isHalf ? 0.5 : daysBetween(start, end);
+
+  // Paid leave stops at the entitlement.
+  //
+  // Until now this form warned and then sent it anyway — "You can still send
+  // it, we need to know you are away" — which was a deliberate choice and is
+  // how somebody ended up four days past their casual leave with nothing on
+  // screen saying so. Knowing that a teacher will be absent still matters
+  // more than the leave type, so nothing here stops them telling us: it
+  // routes them to Leave without pay instead of refusing the absence.
+  //
+  // A part-covered request is refused whole rather than quietly trimmed. Two
+  // days of CL and two of LWP are two different things to payroll, and
+  // splitting it silently would hide that from the person applying.
+  if (type === 'CL' || type === 'EL') {
+    const left = myLeft[type] ?? 0;
+    if (total_days > left) {
+      const d = n => `${n} day${n === 1 ? '' : 's'}`;
+      errEl.innerHTML = left > 0
+        ? `You have only <strong>${d(left)}</strong> of ${type} left but asked for ${d(total_days)}.
+           Send ${d(left)} as ${type}, then a second request for the rest as Leave without pay.`
+        : `You have no ${type} left${left < 0 ? ` — you are ${d(Math.abs(left))} over` : ''}.
+           Please apply as <strong>Leave without pay</strong>.`;
+      errEl.classList.remove('hidden');
+      return false;
+    }
+  }
+
   btn.disabled = true; btn.textContent = 'Submitting…';
   try {
     const sb = getSb();
