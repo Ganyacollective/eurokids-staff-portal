@@ -1,0 +1,31 @@
+{
+  "name": "EuroKids Reception",
+  "short_name": "Reception",
+  "description": "The enquiry desk at EuroKids JMD Enclave reception. Takes a photograph when the form is submitted.",
+  "start_url": "/kiosk",
+  "scope": "/kiosk",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FCF8F6",
+  "theme_color": "#FF2217",
+  "icons": [
+    {
+      "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

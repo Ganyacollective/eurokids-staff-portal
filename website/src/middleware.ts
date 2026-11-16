@@ -28,8 +28,14 @@ import { isKioskHost } from "@/lib/kiosk-host";
 export function middleware(req: NextRequest) {
   const res = NextResponse.next();
 
+  // Three ways to be the tablet, and the third is the one that survives
+  // "Add to Home Screen": the icon launches /kiosk with no query string,
+  // because that is its manifest's start_url.
   const isTablet =
-    isKioskHost(req.headers.get("host")) || req.nextUrl.searchParams.has("kiosk");
+    isKioskHost(req.headers.get("host")) ||
+    req.nextUrl.pathname === "/kiosk" ||
+    req.nextUrl.pathname.startsWith("/kiosk/") ||
+    req.nextUrl.searchParams.has("kiosk");
 
   res.headers.set(
     "Permissions-Policy",
@@ -39,7 +45,7 @@ export function middleware(req: NextRequest) {
   );
 
   // The tablet is a till, not a page to be found in a search result.
-  if (isKioskHost(req.headers.get("host"))) {
+  if (isKioskHost(req.headers.get("host")) || req.nextUrl.pathname.startsWith("/kiosk")) {
     res.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
 
