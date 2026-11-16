@@ -17,7 +17,7 @@
 //
 // So: when hub.css or enquiries.js changes, bump V here AND the three ?v=
 // stamps in public/hub.html, together. They are one number.
-const V = 103;
+const V = 104;
 const VERSION = `ek-v${V}`;
 // Bare paths, not stamped ones. A stamped entry here can disagree with what
 // the page asks for — which is exactly what went wrong — and the stamped URL
@@ -75,7 +75,24 @@ self.addEventListener('fetch', (e) => {
           return cached;
         }
         const fresh = fetch(req).then((res) => { if (res && res.ok) c.put(req, res.clone()); return res; }).catch(() => null);
-        const res = await Promise.race([fresh, new Promise((r) => setTimeout(() => r(null), 1200))]);
+        // How long to wait for the real thing before falling back to the
+        // copy we already have.
+        //
+        // This was 1200ms for everything, and that is the reason "I pushed it
+        // and I still cannot see it" kept happening. On a slow connection the
+        // timer wins, the cached HTML is served, and the screen is a deploy
+        // behind — then the fetch finishes and quietly updates the cache, so
+        // the SECOND reload is correct and the first is not. The change was
+        // live the whole time.
+        //
+        // A document is the thing that carries the new code, so it gets long
+        // enough that a normal connection always wins; the stylesheet and the
+        // script keep the short fuse, because they are small and a stale one
+        // is visible rather than silent. Either way the fallback still works
+        // when the network is genuinely gone — the race only ever ends early
+        // on a timeout, never on a failure.
+        const wait = isDoc && !VOLATILE.includes(url.pathname) ? 6000 : 1200;
+        const res = await Promise.race([fresh, new Promise((r) => setTimeout(() => r(null), wait))]);
         return res || cached || (await fresh) || new Response('Offline', { status: 503 });
       })
     );
