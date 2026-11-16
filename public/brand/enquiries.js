@@ -22,14 +22,47 @@ const ENQ_STATUSES = [
   ['lost',        'Lost',                    'c-crit'],
 ];
 const ENQ_STATUS = Object.fromEntries(ENQ_STATUSES.map(([k, l, c]) => [k, { l, c }]));
-const ENQ_SOURCES = ['Walk In', 'Call', 'Website', 'Leadsquare', 'Instagram', 'Referral', 'Just Dial', 'WhatsApp', 'Others'];
-const ENQ_STAGES = ['1st Call Contact', '1st Whatsapp Contact', '1st Premise Visit', '2nd Premise Visit', '1st Follow-up', '2nd Follow-up', 'Confirmed | Not Paid', 'Leadsquare'];
-const ENQ_PROGRAMS = ['P.G.', 'Nursery', 'Euro Junior', 'Euro Senior', 'Daycare', 'Summercamp', 'Evening Club', 'Bridge', 'Settler'];
+// Nine options to make one choice, and the nine were not the right nine.
+//
+// Counted across the whole book: 555 of 608 records carry exactly one source,
+// 490 of 608 exactly one programme, 474 of 596 exactly one stage. So the wall
+// of equal-weight pills was asking a question that has one answer nine times
+// out of ten — and asking it badly. Six of the nine source pills had never
+// been used once (Instagram, Referral, Just Dial, Website, WhatsApp, Others
+// between them: a dozen records), while Leadsquare — ninety records, the
+// third commonest thing that happens — was not offered at all and could only
+// arrive through the import. Half the stage pills were in single digits, and
+// nine stage values that are really in the data (Admission Taken, Not
+// Responded, Under Consideration…) were missing from the list that is
+// supposed to enumerate them.
+//
+// So each list is now in two parts: the handful that carry the traffic, in
+// the order the work happens, and the rest behind More. The full list keeps
+// every value the book contains, because a value that is on a record and
+// missing from the list is a value that vanishes the next time anybody saves.
+const ENQ_SOURCES_TOP = ['Walk In', 'Call', 'Leadsquare'];
+const ENQ_SOURCES = [...ENQ_SOURCES_TOP, 'Website', 'WhatsApp', 'Instagram', 'Referral', 'Just Dial',
+  'Facebook Ad', 'Friends/ Aquaintances/ Family', 'Others'];
+
+// In funnel order rather than frequency order: a stage is a place on a path,
+// and reading it out of order costs more than the two rare ones cost to pass.
+const ENQ_STAGES_TOP = ['1st Call Contact', '1st Premise Visit', '2nd Premise Visit',
+  '1st Follow-up', '2nd Follow-up', 'Confirmed | Not Paid'];
+const ENQ_STAGES = [...ENQ_STAGES_TOP, 'Admission Taken', 'Form Taken', 'Under Consideration',
+  'Awaiting Discount', 'Early Bird Offer Msg', 'Establish authenticity', 'Not Responded',
+  'Declined', '1st Whatsapp Contact', 'Leadsquare'];
+
+const ENQ_PROGRAMS_TOP = ['P.G.', 'Nursery', 'Euro Junior', 'Euro Senior', 'Daycare'];
+const ENQ_PROGRAMS = [...ENQ_PROGRAMS_TOP, 'Summercamp', 'Evening Club', 'Bridge', 'Settler'];
 const ENQ_CALLS = ['Call Made', 'Tried Calling', 'Positive', 'Invalid Number', 'Not Reachable', 'Follow-up Call'];
 const EVENT_ICON = { call_in: '📞', call_out: '📲', missed_call: '📵', walk_in: '🚶', website: '🌐', form: '📝', visit: '🏫', stage: '➡️', status: '➡️', sentiment: '🌡', note: '🗒', email: '✉️', whatsapp: '💬', sms: '💬', won: '🎉', lost: '⏹', created: '✨', edit: '✏️', reminder: '⏰' };
 // The dot on the rail, so the shape of a family's history is visible before
 // a word of it is read: green when they came to us, blue when we spoke,
 // red when it went wrong, amber for our own bookkeeping.
+// A number nought to ten is a judgement, and a judgement reads better with a
+// word against it: "6" alone makes you stop and work out which end is good.
+const KEEN_WORD = v => v >= 9 ? 'Ready to join' : v >= 7 ? 'Keen' : v >= 4 ? 'Warm' : v >= 1 ? 'Cool' : 'Cold';
+
 const TL_TONE = {
   walk_in: 'var(--green)', visit: 'var(--green)', created: 'var(--green)', won: 'var(--green)', whatsapp: 'var(--green)',
   call_in: 'var(--accent)', call_out: 'var(--accent)', website: 'var(--accent)', form: 'var(--accent)', email: 'var(--accent)', sms: 'var(--accent)',
@@ -953,6 +986,7 @@ async function openEnquiry(id, opts = {}){
     return;
   }
   if (!e) { body.innerHTML = '<div class="err">Enquiry not found.</div>'; return; }
+  el('drawer').classList.add('enq');
   el('drawer-title').textContent = enqName(e);
   el('drawer-sub').textContent = [(e.programs || []).join(', '), (e.sources || []).join(', '), e.academic_year, 'since ' + longDate((e.first_contact_at || e.created_at).slice(0, 10))].filter(Boolean).join(' · ');
 
@@ -960,7 +994,26 @@ async function openEnquiry(id, opts = {}){
   const waText = `Hello${e.father_name ? ' ' + e.father_name : ''}, this is ${who() || 'the team'} from EuroKids JMD Enclave. Thank you for enquiring${e.child_name ? ' for ' + e.child_name : ''} — happy to answer any questions and book a visit for you. When would suit?`;
   const row = (l, ctl, sub = '') => `<div class="row"><div class="l">${l}${sub ? `<span class="sub">${sub}</span>` : ''}</div>${ctl}</div>`;
   const inp = (i, v, ph = '', type = 'text') => `<input class="in wide" id="${i}" type="${type}" value="${esc(v ?? '')}" placeholder="${esc(ph)}">`;
-  const multi = (i, chosen, opts) => `<div class="chips" id="${i}">${opts.map(o => `<span class="chip ${(chosen || []).includes(o) ? 'on' : ''}" data-v="${esc(o)}">${esc(o)}</span>`).join('')}</div>`;
+  // Shortlist first, then whatever this record already carries even if it is
+  // not on the shortlist, then More for the tail. `one` makes the choice
+  // exclusive: a stage is where the family IS, and two simultaneous
+  // "current" stages mean nothing — the timeline below already keeps the
+  // history, which is the question an accumulating list was answering.
+  const pick = (i, chosen, top, all, one) => {
+    const ch = (chosen || []).map(String);
+    const head = [...top, ...ch.filter(v => !top.includes(v))];
+    const tail = all.filter(v => !head.includes(v));
+    const chip = (o, hid) => `<span class="chip${ch.includes(o) ? ' on' : ''}${hid ? ' hid' : ''}" data-v="${esc(o)}">${esc(o)}</span>`;
+    return `<div class="chips pick${one ? ' one' : ''}" id="${i}">
+      ${head.map(o => chip(o, false)).join('')}
+      ${tail.length ? `<button type="button" class="chip more" data-more="1">More&hellip;</button>` : ''}
+      ${tail.map(o => chip(o, true)).join('')}</div>`;
+  };
+  // A set of options is not a value, so it does not belong in the right-hand
+  // value column: pressed against that edge it wrapped into three ragged
+  // lines that have to be read backwards. Label above, options below, every
+  // one of them starting at the same left edge.
+  const pickRow = (l, ctl) => `<div class="rowx pickrow"><div class="l">${l}</div>${ctl}</div>`;
 
   body.innerHTML = `
     ${e.has_intake_photo ? `<div class="grp"><div class="box" style="padding:0;overflow:hidden">
@@ -994,15 +1047,41 @@ async function openEnquiry(id, opts = {}){
           ${e.on_roster ? '<span class="chip c-mute">on roll</span>' : ''}
         </div>
         <div class="snap-next ${overdue ? 'due' : ''}">${next}</div>
-        <div class="snap-meta">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'} · last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
+        <div class="snap-meta">last worked ${whenAgo(e.updated_at)}${e.updated_by ? ' by ' + esc(e.updated_by) : ''}</div>
         ${e.needs_check ? `<div class="grp foot warn" style="margin:10px 0 0">
           The family typed something at the tablet that we had down differently. Their version is what is saved here now; the old one is in the history below.
           <a id="en-checked" style="cursor:pointer">These are right &rsaquo;</a></div>` : ''}
 
-        <div class="snap-keen"><span class="cap">How keen</span>
-          <input type="range" class="keen-range" id="en-sent" min="0" max="10" value="${keen}"
-                 style="--kc:${kcol};--kp:${keen * 10}%;max-width:190px;flex:1">
-          <b class="keen-n" id="en-sentn" style="--kc:${kcol}">${keen}</b></div>
+        ${(() => {
+          // Days open is counted from the first contact, not from the row's
+          // creation, because an enquiry imported in a batch would otherwise
+          // read as a day old on a family we first spoke to in April.
+          const days = Math.max(0, Math.round(
+            (Date.now() - new Date(e.first_contact_at || e.created_at).getTime()) / 86400000));
+          const touches = (e.call_count || 0) + (e.note_count || 0);
+          const C = 2 * Math.PI * 15.5;   // the ring's circumference
+          return `<div class="snap-tiles">
+            <div class="snap-tile keen" style="--kc:${kcol}">
+              <div class="snap-ring">
+                <svg viewBox="0 0 36 36" aria-hidden="true">
+                  <circle class="rb" cx="18" cy="18" r="15.5"></circle>
+                  <circle class="rf" id="en-ring" cx="18" cy="18" r="15.5"
+                          stroke-dasharray="${(keen / 10 * C).toFixed(1)} ${C.toFixed(1)}"></circle>
+                </svg><b id="en-sentn">${keen}</b></div>
+              <div class="txt"><span class="cap">How keen</span>
+                <span class="word" id="en-sentw">${KEEN_WORD(keen)}</span>
+                <input type="range" id="en-sent" min="0" max="10" value="${keen}"
+                       aria-label="How keen this family is, nought to ten"
+                       style="--kp:${keen * 10}%"></div>
+            </div>
+            <div class="snap-tile"><span class="cap">Open</span>
+              <span class="n">${days}<span class="u">${days === 1 ? 'day' : 'days'}</span></span>
+              <span class="sub">since ${longDate((e.first_contact_at || e.created_at).slice(0, 10))}</span></div>
+            <div class="snap-tile"><span class="cap">Reached out</span>
+              <span class="n${touches ? '' : ' none'}">${touches || '—'}</span>
+              <span class="sub">${e.call_count || 0} call${e.call_count === 1 ? '' : 's'} · ${e.note_count || 0} note${e.note_count === 1 ? '' : 's'}</span></div>
+          </div>`;
+        })()}
 
         ${e.ai_summary
           ? `<div class="snap-story" id="en-story"><span id="en-storytext">${esc(e.ai_summary)}</span>
@@ -1019,7 +1098,7 @@ async function openEnquiry(id, opts = {}){
 
     <div class="grp"><h3>Where they are</h3><div class="box">
       ${row('Inquiry status', `<select class="in" id="en-status">${ENQ_STATUSES.map(([k, l]) => `<option value="${k}" ${e.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
-      ${row('Admission stage', multi('en-stages', e.stages, ENQ_STAGES))}
+      ${pickRow('Admission stage', pick('en-stages', e.stages, ENQ_STAGES_TOP, ENQ_STAGES, true))}
       ${row('Follow up on', inp('en-follow', e.follow_up_on, '', 'date'))}
       ${row('Handled by', inp('en-by', e.updated_by, who()))}
       ${row('Academic year', `<select class="in" id="en-ay">${[acadYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
@@ -1044,10 +1123,10 @@ async function openEnquiry(id, opts = {}){
 
     <div class="grp"><h3>Child</h3><div class="box">
       ${row('Name', inp('en-cname', e.child_name, 'child’s name'))}
-      ${row('Programme', multi('en-progs', e.programs, ENQ_PROGRAMS))}
+      ${pickRow('Programme', pick('en-progs', e.programs, ENQ_PROGRAMS_TOP, ENQ_PROGRAMS))}
       ${row('Date of birth', inp('en-dob', e.dob, '', 'date'))}
       ${row('Sex', `<div class="seg" id="en-sex"><button data-v="Boy" class="${e.sex === 'Boy' ? 'on' : ''}">Boy</button><button data-v="Girl" class="${e.sex === 'Girl' ? 'on' : ''}">Girl</button></div>`)}
-      ${row('Lead source', multi('en-sources', e.sources, ENQ_SOURCES))}
+      ${pickRow('Lead source', pick('en-sources', e.sources, ENQ_SOURCES_TOP, ENQ_SOURCES))}
     </div></div>
 
     <div class="grp"><h3>Notes &amp; timeline</h3><div class="box">
@@ -1080,7 +1159,25 @@ async function openEnquiry(id, opts = {}){
     <button id="en-save" hidden></button>`;
 
   const segOne = i => { const box = el(i); box.querySelectorAll('button').forEach(b2 => b2.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b2.classList.add('on'); }); return () => box.querySelector('.on')?.dataset.v ?? null; };
-  const segMany = i => { const box = el(i); box.querySelectorAll('.chip').forEach(c => c.onclick = () => c.classList.toggle('on')); return () => [...box.querySelectorAll('.chip.on')].map(c => c.dataset.v); };
+  const segMany = i => {
+    const box = el(i), one = box.classList.contains('one');
+    box.querySelectorAll('.chip').forEach(c => c.onclick = () => {
+      if (c.dataset.more) return box.classList.add('open');
+      if (one) box.querySelectorAll('.chip.on').forEach(x => { if (x !== c) x.classList.remove('on'); });
+      c.classList.toggle('on');
+    });
+    return () => [...box.querySelectorAll('.chip.on')].map(c => c.dataset.v);
+  };
+  // Setting a stage from elsewhere on the card — "Visited", the Actions menu
+  // — has to respect exclusivity too, or those two paths quietly put the
+  // record back into the two-stages-at-once state the picker just removed.
+  const setStage = v => {
+    const box = el('en-stages'); if (!box) return;
+    const t = box.querySelector(`[data-v="${v}"]`); if (!t) return;
+    box.querySelectorAll('.chip.on').forEach(x => x.classList.remove('on'));
+    t.classList.add('on');
+    if (t.classList.contains('hid')) box.classList.add('open');
+  };
   const sex = segOne('en-sex'), progs = segMany('en-progs'), sources = segMany('en-sources'), stages = segMany('en-stages');
   // The photo is behind a route that checks permission and streams the file,
   // because the bucket it lives in has no read policy at all. So it cannot be
@@ -1116,11 +1213,16 @@ async function openEnquiry(id, opts = {}){
   // Red, amber, green as it moves — the number is a judgement, so it should
   // look like one rather than like the browser's default blue for everything.
   const paintKeen = () => {
-    const v = Number(el('en-sent').value);
+    const sl = el('en-sent'), v = Number(sl.value);
     const c = v >= 7 ? 'var(--green)' : v >= 4 ? 'var(--orange)' : 'var(--red)';
-    el('en-sent').style.setProperty('--kc', c);
-    el('en-sent').style.setProperty('--kp', v * 10 + '%');
-    const n = el('en-sentn'); n.textContent = v; n.style.setProperty('--kc', c);
+    // --kc is set on the tile, so the ring, the number and the track all move
+    // together off one property rather than three that can drift apart.
+    sl.closest('.snap-tile').style.setProperty('--kc', c);
+    sl.style.setProperty('--kp', v * 10 + '%');
+    el('en-sentn').textContent = v;
+    el('en-sentw').textContent = KEEN_WORD(v);
+    const C = 2 * Math.PI * 15.5;
+    el('en-ring').setAttribute('stroke-dasharray', `${(v / 10 * C).toFixed(1)} ${C.toFixed(1)}`);
   };
   el('en-sent').oninput = paintKeen;
   el('en-callst').onchange = () => { if (el('en-callst').value && !el('en-calldate').value) el('en-calldate').value = new Date().toISOString().slice(0, 10); };
@@ -1362,7 +1464,7 @@ async function openEnquiry(id, opts = {}){
   const qaVisit = el('qa-visit');
   if (qaVisit) qaVisit.onclick = () => {
     if (!el('en-visited').value) el('en-visited').value = toInputDT(new Date().toISOString());
-    if (!stages().includes('1st Premise Visit')) el('en-stages').querySelector('[data-v="1st Premise Visit"]')?.classList.add('on');
+    setStage('1st Premise Visit');
     el('en-save').click();
   };
 
@@ -1395,7 +1497,7 @@ async function openEnquiry(id, opts = {}){
       enqRefresh(); setTimeout(() => openEnquiry(id), 900);
     }
     if (a === 'visit_now') { if (!el('en-visited').value) el('en-visited').value = toInputDT(new Date().toISOString());
-      if (!stages().includes('1st Premise Visit')) el('en-stages').querySelector('[data-v="1st Premise Visit"]')?.classList.add('on');
+      setStage('1st Premise Visit');
       el('en-save').click(); }
     if (a === 'form_taken') { el('en-status').value = 'form_taken'; el('en-save').click(); }
     if (a === 'won') { if (!confirm(`Mark ${enqName(e)} as won?`)) return; el('en-status').value = 'won'; el('en-save').click(); }

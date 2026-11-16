@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=107">
-<link rel="prefetch" href="/brand/enquiries.js?v=107" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=108">
+<link rel="prefetch" href="/brand/enquiries.js?v=108" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -5483,6 +5483,9 @@ function openDrawer(title, subtitle){
   // Any drawer that is not a child's plan clears the flag; openPlan sets it
   // again straight after calling this.
   _planSheet = false;
+  // Likewise the enquiry card's own palette: it is set by openEnquiry and must
+  // not survive into the next drawer, or a fee sheet opens wearing coral.
+  dr.classList.remove('enq');
   el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
   let wide = false; try { wide = localStorage.getItem('ek-drawer-wide') === '1'; } catch (_) {}
   dr.classList.toggle('wide', wide);
@@ -6333,7 +6336,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=107"></script>
+<script src="/brand/enquiries.js?v=108"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

@@ -591,25 +591,79 @@ input[type="range"].keen-range::-moz-range-thumb{
    the shape every generated admin screen has, which says "a machine laid this
    out" before it says anything about the family. What a coordinator needs in
    the first second is three things: where this stands, what happens next, and
-   the phone. So: a line of status, one sentence of plain type, and the
-   actions as a real toolbar. No hero number, no bar, no tint. */
-.snap{padding:2px 0 14px;border-bottom:1px solid var(--sep);margin-bottom:4px}
+   the phone.
+
+   That order still holds. What changed is that the three numbers worth
+   knowing — how keen, how long this has been open, how many times we have
+   reached out — were buried: keenness as a slider competing with its own
+   label, the other two as a grey sentence in 13px that nobody reads. They
+   are now tiles, because a number you are meant to judge should be large
+   enough to judge at a glance, and because an enquiry open 26 days with
+   nothing logged against it should be visible from the doorway. The slider
+   survives inside its tile: the number is the display, the hairline under it
+   is the control. */
+.snap{padding:2px 0 18px;border-bottom:1px solid var(--sep);margin-bottom:4px}
 .snap-pills{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.snap-next{margin:10px 0 2px;font-size:var(--fs-t2);line-height:var(--lh-t2);font-weight:600;letter-spacing:-.01em;color:var(--label)}
+.snap-next{margin:12px 0 2px;font-size:var(--fs-lt);line-height:var(--lh-lt);font-weight:600;
+  letter-spacing:-.022em;color:var(--label);text-wrap:balance}
 .snap-next.due{color:var(--red)}
-.snap-meta{font-size:var(--fs-co);color:var(--label-2)}
-.snap-story{margin-top:10px;padding:10px 12px;border-radius:var(--r-ctl);background:var(--fill);
+.snap-meta{font-size:var(--fs-co);line-height:var(--lh-co);color:var(--label-2)}
+
+/* Three tiles. Keen leads because it is the only one that is a judgement
+   rather than a count, so it gets the ring, the colour and the control. */
+.snap-tiles{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:8px;margin-top:16px}
+.snap-tile{position:relative;padding:12px 14px 11px;border-radius:var(--r-card);
+  background:var(--bg-card);box-shadow:0 0 0 1px rgba(0,0,0,.055),0 1px 2px rgba(0,0,0,.03)}
+.snap-tile .cap{display:block;font-size:var(--fs-fn);line-height:var(--lh-fn);font-weight:600;
+  letter-spacing:.055em;text-transform:uppercase;color:var(--label-3)}
+.snap-tile .n{display:block;margin-top:5px;font-size:26px;line-height:30px;font-weight:650;
+  letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--label)}
+.snap-tile .n .u{font-size:13px;font-weight:600;letter-spacing:0;color:var(--label-3);margin-left:3px}
+.snap-tile .n.none{color:var(--label-3);font-weight:500}
+.snap-tile .sub{display:block;margin-top:1px;font-size:var(--fs-fn);line-height:var(--lh-fn);color:var(--label-3)}
+
+.snap-tile.keen{background:var(--accent-wash);box-shadow:none;display:flex;align-items:center;gap:13px}
+.snap-tile.keen .txt{min-width:0;flex:1}
+.snap-tile.keen .word{display:block;margin-top:4px;font-size:var(--fs-t3);line-height:var(--lh-t3);
+  font-weight:650;letter-spacing:-.015em;color:var(--kc)}
+.snap-ring{position:relative;flex:0 0 auto;width:54px;height:54px}
+.snap-ring svg{width:54px;height:54px;transform:rotate(-90deg);display:block}
+.snap-ring circle{fill:none;stroke-width:3.4;stroke-linecap:round}
+.snap-ring .rb{stroke:rgba(0,0,0,.075)}
+.snap-ring .rf{stroke:var(--kc);transition:stroke-dasharray .18s ease}
+.snap-ring b{position:absolute;inset:0;display:grid;place-items:center;font-size:20px;font-weight:650;
+  letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--kc)}
+/* The control, kept to a hairline so the number stays the loud part. */
+.snap-tile.keen input[type=range]{-webkit-appearance:none;appearance:none;width:100%;margin:7px 0 0;
+  height:14px;background:transparent;cursor:ew-resize;display:block}
+.snap-tile.keen input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:999px;
+  background:linear-gradient(90deg,var(--kc) var(--kp),rgba(0,0,0,.12) var(--kp))}
+.snap-tile.keen input[type=range]::-moz-range-track{height:3px;border-radius:999px;background:rgba(0,0,0,.12)}
+.snap-tile.keen input[type=range]::-moz-range-progress{height:3px;border-radius:999px;background:var(--kc)}
+.snap-tile.keen input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:13px;height:13px;margin-top:-5px;border-radius:50%;background:#fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.1),0 1px 3px rgba(0,0,0,.25)}
+.snap-tile.keen input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;
+  background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.1),0 1px 3px rgba(0,0,0,.25)}
+.snap-tile.keen input[type=range]:focus-visible{outline:none}
+.snap-tile.keen input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:var(--focus)}
+
+.snap-story{margin-top:12px;padding:11px 13px;border-radius:var(--r-ctl);background:var(--fill);
   font-size:var(--fs-co);line-height:1.5;color:var(--label)}
-.snap-story .lnk{font-style:normal}
-.snap-keen{display:flex;align-items:center;gap:10px;margin-top:12px}
-.snap-keen .cap{font-size:var(--fs-sub);color:var(--label-2);min-width:62px}
+/* Not in the accent. On a grey panel, an accent that is now red turns an
+   optional convenience into something that looks like it has gone wrong —
+   which is the cost of a warm accent, and the reason to spend it only on
+   the one button you actually want pressed. */
+.snap-story .lnk{font-style:normal;color:var(--label-2);font-weight:600;text-decoration:none}
+.snap-story .lnk:hover{color:var(--label);text-decoration:underline;text-underline-offset:3px}
 .snap-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .snap-bar a,.snap-bar button{display:inline-flex;align-items:center;gap:7px;font:inherit;
-  font-size:var(--fs-co);font-weight:600;padding:8px 12px;border-radius:var(--r-ctl);border:0;cursor:pointer;
+  font-size:var(--fs-co);font-weight:600;padding:8px 13px;border-radius:var(--r-ctl);border:0;cursor:pointer;
   text-decoration:none;background:var(--fill);color:var(--label);transition:background .12s}
 .snap-bar a:hover,.snap-bar button:hover{background:var(--fill-2)}
 .snap-bar .pri{background:var(--accent);color:#fff}
 .snap-bar .pri:hover{background:var(--accent-dk)}
+@media (max-width:520px){ .snap-tiles{grid-template-columns:1fr 1fr} .snap-tile.keen{grid-column:1 / -1} }
 
 /* ══ a note ══
    Nobody could tell where to type. The box now says so, the button only
@@ -715,3 +769,84 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .fcard .frow .in{flex:1 1 120px;min-width:0;margin-top:0}
 .fcard .seg{margin-top:0}
 .fand{font-size:var(--fs-sub);text-transform:uppercase;letter-spacing:.06em}
+
+/* ══ the enquiries surfaces ═══════════════════════════════════════════════
+   Two accents were fighting. The sidebar's app icons are EuroKids coral and
+   the content's accent was a navy — every selected chip, every primary
+   button, every row hover in a different family from the brand three inches
+   to its left. None of the work that got looked at for this used more than
+   one accent, and that is not a style choice: a second accent costs you the
+   first one's meaning, because "this is the thing to press" stops being a
+   colour and starts being a guess.
+
+   So the enquiries shell and the enquiry card run on coral, darkened from
+   the brand red to #CC3A26 so white text on it clears 5:1 rather than the
+   4.2:1 the brand value gives. Scoped, not global — the rest of the hub is
+   untouched until it is looked at properly, and one line here takes it
+   everywhere when it is. */
+#shell[data-app="enquiries"], #drawer.enq{
+  --accent:#CC3A26; --accent-dk:#B02F1D; --accent-wash:rgba(204,58,38,.09);
+}
+/* Row hover at full accent-wash was a coral flood across eight columns.
+   A table is read, not pressed. */
+#shell[data-app="enquiries"] tbody tr:hover td{background:rgba(0,0,0,.035)}
+
+/* Selection as a tint, not a fill.
+   Eight stage pills and nine programme pills in solid navy made the chosen
+   one shout at the same volume as the heading above it, and a card with
+   three groups of them had three shouts. A wash plus a ring says "chosen"
+   just as unambiguously at a fraction of the weight — which is what every
+   one of those references does with its tags. */
+#drawer.enq .chips .chip.on{
+  background:var(--accent-wash);color:var(--accent-dk);font-weight:600;
+  box-shadow:inset 0 0 0 1px rgba(204,58,38,.45)}
+#drawer.enq .chips .chip.on:hover{background:rgba(204,58,38,.15)}
+
+/* Headings stop competing with the content under them. 14px semibold black
+   sat at the same weight as the field labels it was introducing; small caps
+   in grey read as a divider, which is all a section title is. */
+#drawer.enq .grp{margin-top:28px}
+#drawer.enq .grp>h3{font-size:var(--fs-fn);line-height:var(--lh-fn);font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--label-3);margin:0 0 9px 4px}
+#drawer.enq .box{box-shadow:0 0 0 1px rgba(0,0,0,.055),0 1px 2px rgba(0,0,0,.03)}
+#drawer.enq .row{min-height:54px;padding:11px 16px 11px 0}
+
+/* ── the list ──
+   Same product as the card it opens, which it did not look like. */
+#shell[data-app="enquiries"] thead th{
+  font-size:var(--fs-fn);font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--label-3);padding:11px 14px}
+#shell[data-app="enquiries"] tbody td{padding:13px 14px}
+#shell[data-app="enquiries"] tbody tr:nth-child(even) td{background:transparent}
+#shell[data-app="enquiries"] tbody td{border-bottom:1px solid rgba(60,60,67,.09)}
+
+/* Heat as a judgement you can read down the column, not eight loose digits
+   of different colours floating in white space. */
+#eq-table .hv{display:inline-grid;place-items:center;min-width:28px;height:28px;padding:0 7px;
+  border-radius:999px;font-size:var(--fs-co);font-weight:700;font-variant-numeric:tabular-nums;
+  background:color-mix(in srgb, currentColor 13%, transparent)}
+#eq-table .hv.none{background:none;color:var(--label-3);font-weight:500}
+
+/* The two inline controls were boxes drawn around every row of an eight-row
+   table — sixteen borders doing nothing but marking where you may type.
+   They are flat until pointed at. */
+#shell[data-app="enquiries"] td .in{background:transparent;border-color:transparent;box-shadow:none}
+#shell[data-app="enquiries"] td .in:hover{background:var(--field)}
+#shell[data-app="enquiries"] td .in:focus{background:#fff;border-color:var(--accent);box-shadow:var(--focus)}
+#shell[data-app="enquiries"] td .in.is-empty{color:var(--label-3)}
+
+/* ── choosing one of a list ──
+   The options used to live in the value column, right-aligned, which for a
+   nine-item list means three ragged lines read right-to-left against the
+   edge of the sheet. A label on its own line and the options under it, all
+   starting at the same left edge, is both calmer and quicker to scan — and
+   it leaves room for the shortlist to be a shortlist. */
+#drawer.enq .pickrow{padding:13px 16px 14px 0}
+#drawer.enq .pickrow>.l{display:block;max-width:none;margin-bottom:9px;color:var(--label)}
+#drawer.enq .pickrow .chips{justify-content:flex-start;gap:7px}
+#drawer.enq .pick .chip.hid{display:none}
+#drawer.enq .pick.open .chip.hid{display:inline-flex}
+#drawer.enq .pick.open .chip.more{display:none}
+#drawer.enq .pick .chip.more{color:var(--label-2);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);
+  background:transparent;font-weight:600;cursor:pointer}
+#drawer.enq .pick .chip.more:hover{background:var(--fill);color:var(--label)}
