@@ -460,14 +460,39 @@ img, video { max-width: 100%; display: block; }
   background: var(--brand); color: #fff; display: grid; place-items: center; font-size: var(--step-3);
 }
 .tf-done h2 { font-size: clamp(27px, 3.8vw, 40px); margin: 0; letter-spacing: -.03em; }
+.tf-done-lead {
+  margin: 10px 0 0; font-size: var(--step-0); color: var(--muted); line-height: 1.5;
+}
+
+/* The one thing worth doing next.
+   A parent who has just told us about their child is the most interested
+   they will ever be, and the end of the form used to offer them the exit. */
+.tf-watch {
+  margin-top: 26px; font: inherit; font-size: var(--step-0); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 10px;
+  color: #fff; background: var(--brand); border: 0; border-radius: 999px;
+  padding: 14px 26px; cursor: pointer;
+  transition: transform .16s var(--ease), box-shadow .16s var(--ease), filter .16s;
+  box-shadow: 0 6px 18px rgba(60,20,14,.18);
+}
+.tf-watch:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(60,20,14,.24); }
+.tf-watch:active { transform: translateY(0); filter: brightness(.95); }
+.tf-watch:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.tf-watch span { font-size: 1.05em; }
+
 /* Quiet, and out of the way. The coordinator presses it when the next family
    arrives; it is not something a parent needs to notice. */
+.tf-done-foot { margin-top: 30px; }
 .tf-again {
-  margin-top: 22px; font: inherit; font-size: var(--step-s); color: #8A6A64;
+  font: inherit; font-size: var(--step-s); color: #8A6A64;
   background: none; border: 0; border-bottom: 1px solid rgba(60,20,14,.28);
   padding: 2px 0; cursor: pointer; transition: color .14s, border-color .14s;
 }
 .tf-again:hover { color: var(--brand); border-color: var(--brand); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-watch, .tf-watch:hover { transition: none; transform: none; }
+}
 
 .card-page { padding-block: clamp(26px, 5vw, 56px) clamp(50px, 9vw, 96px); }
 .card-title { font-size: var(--fs-hero); text-align: center; margin-bottom: clamp(20px, 4vw, 40px); }

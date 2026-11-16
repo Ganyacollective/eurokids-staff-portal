@@ -339,7 +339,28 @@ export default function EnquiryForm({
         <div className="tf-done">
           <div className="tf-tick" aria-hidden>&#10003;</div>
           <h2>Submitted</h2>
-          <button className="tf-again" onClick={startAgain}>Start a new form</button>
+          {/* The end of the form was a full stop: a tick, the word
+              "Submitted", and a button for the next family. A parent who has
+              just told us about their child is the most interested they will
+              ever be, and we were showing them the exit.
+              So the main thing to do now is go and watch a year of the school
+              — the posters are already at the top of this page. Starting
+              another form is still here, quiet and in the corner, because at
+              the reception desk that is what the coordinator reaches for. */}
+          <p className="tf-done-lead">Thank you — we will call you shortly.</p>
+          <button
+            className="tf-watch"
+            onClick={() => {
+              const cards = document.getElementById("cards");
+              if (cards) cards.scrollIntoView({ behavior: "smooth", block: "start" });
+              else window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          >
+            Watch our beautiful videos above <span aria-hidden>&#8593;</span>
+          </button>
+          <div className="tf-done-foot">
+            <button className="tf-again" onClick={startAgain}>Submit another form</button>
+          </div>
         </div>
       </div>
     );
