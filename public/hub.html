@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=106">
-<link rel="prefetch" href="/brand/enquiries.js?v=106" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=107">
+<link rel="prefetch" href="/brand/enquiries.js?v=107" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1186,7 +1186,7 @@ function openFilterPanel(){
         const yes = f.t === 'bool' ? 'true' : 'notempty', no = f.t === 'bool' ? 'false' : 'empty';
         ctl = `<div class="seg"><button data-i="${i}" data-op="${yes}" class="${c.op===yes?'on':''}">✓ Yes</button><button data-i="${i}" data-op="${no}" class="${c.op===no?'on':''}">— No</button></div>`;
       } else if (!['empty','notempty'].includes(c.op)) {
-        if (f.t === 'enum' && c.op === 'in') {
+        if (f.t === 'enum' && (c.op === 'in' || c.op === '=')) {
           const sel = (Array.isArray(c.value) ? c.value : (c.value ? [c.value] : [])).map(String);
           ctl = `<div class="chips fmulti" data-i="${i}" style="margin-top:8px">${enumVals(f.k).map(v =>
             `<span class="chip ${sel.includes(String(v)) ? 'on' : ''}" data-v="${esc(v)}">${esc(v)}</span>`).join('')}</div>`;
@@ -1197,10 +1197,15 @@ function openFilterPanel(){
       }
       const opSel = (f.t === 'bool' || f.t === 'exists') ? '' :
         `<select class="fop fopsel" data-i="${i}">${ops.map(o => `<option value="${o[0]}" ${o[0]===c.op?'selected':''}>${o[1]}</option>`).join('')}</select>`;
+      // Say it where the eye already is, the first time a status card is
+      // open with only one thing ticked.
+      const pickHint = (f.t === 'enum' && (c.op === 'in' || c.op === '=')
+        && (Array.isArray(c.value) ? c.value.length : (c.value ? 1 : 0)) <= 1)
+        ? '<div class="hint" style="margin-top:6px">Tick as many as you need — they are matched as “any of these”.</div>' : '';
       return `${i ? '<div class="fand">and</div>' : ''}
         <div class="fcard"><div class="fhead"><div class="fname">${esc(f.l)}</div>
           <button class="fdel" data-i="${i}" aria-label="Remove this filter">✕</button></div>
-          <div class="frow">${opSel}${ctl}</div></div>`;
+          <div class="frow">${opSel}${ctl}</div>${pickHint}</div>`;
     }).join('');
     // Two cards on the same single-value field can never both be true, so
     // the list goes to nothing and the panel looks broken. Say so, and offer
@@ -1241,6 +1246,15 @@ function openFilterPanel(){
       const cur = (Array.isArray(c.value) ? c.value : (c.value ? [c.value] : [])).map(String);
       const v = ch.dataset.v;
       c.value = cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v];
+      // The operator follows the choice instead of gating it.
+      //
+      // "is any of" was there and worked, but you had to know to change the
+      // operator dropdown BEFORE the tick-boxes appeared — so a card that
+      // opened saying "is equal to" looked like it only allowed one answer,
+      // and the obvious move was to add a second filter card, which is the
+      // combination that matches nothing. Nobody should have to understand
+      // the word "operator" to ask for two statuses.
+      c.op = 'in';
       sync();
     });
     const live = () => { run(); el('drawer-sub').textContent = `${(_views.lastRows||[]).length} of ${_views.rows.length} children`; };
@@ -6319,7 +6333,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=106"></script>
+<script src="/brand/enquiries.js?v=107"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
