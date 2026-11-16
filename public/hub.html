@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=102">
-<link rel="prefetch" href="/brand/enquiries.js?v=102" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=103">
+<link rel="prefetch" href="/brand/enquiries.js?v=103" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1100,7 +1100,11 @@ const OPS = {
   num:   [['=','is equal to'],['!=','is not equal to'],['<','is less than'],['<=','is at most'],['>','is greater than'],['>=','is at least'],['between','is between']],
   date:  [['=','is on'],['<','is before'],['>','is after'],['between','is between'],['empty','is blank'],['notempty','is not blank']],
   text:  [['contains','contains'],['=','is equal to'],['!=','is not equal to'],['startswith','starts with'],['empty','is blank'],['notempty','is not blank']],
-  enum:  [['=','is equal to'],['!=','is not equal to'],['empty','is blank'],['notempty','is not blank']],
+  // "is any of" first, because a status is one value per family and the
+  // question people actually ask is "show me In progress AND Form taken".
+  // Two "is equal to" cards get ANDed, and no family is ever two statuses at
+  // once, so that combination can only ever return nothing.
+  enum:  [['in','is any of'],['=','is equal to'],['!=','is not equal to'],['empty','is blank'],['notempty','is not blank']],
   bool:  [['true','is equal to'],['false','is equal to']],
   exists:[['notempty','is not blank'],['empty','is blank']],
 };
@@ -1135,6 +1139,13 @@ function evalCond(r, c){
     }
   }
   const v = String(raw ?? '').toLowerCase(), a = String(c.value ?? '').toLowerCase();
+  if (c.op === 'in') {
+    const arr = Array.isArray(c.value) ? c.value : (c.value === '' || c.value == null ? [] : [c.value]);
+    // Nothing ticked yet is not the same as "match nothing" — an empty
+    // filter card should leave the list alone until a choice is made.
+    if (!arr.length) return true;
+    return arr.some(x => String(x).toLowerCase() === v);
+  }
   switch (c.op) {
     case '=': return v === a; case '!=': return v !== a;
     case 'contains': return v.includes(a); case 'startswith': return v.startsWith(a);
@@ -1146,6 +1157,10 @@ const describeCond = c => {
   const op = (OPS[f.t] || []).find(o => o[0] === c.op)?.[1] || c.op;
   const fmt = v => f.t === 'num' ? money(v) : f.t === 'date' ? longDate(v) : v;
   const val = ['empty','notempty','true','false'].includes(c.op) ? ''
+    : c.op === 'in' ? (() => {
+        const arr = Array.isArray(c.value) ? c.value : (c.value ? [c.value] : []);
+        return arr.length ? ' ' + arr.join(' or ') : ' (nothing chosen yet)';
+      })()
     : c.op === 'between' ? ` ${fmt(c.value)} and ${fmt(c.value2)}` : ` ${fmt(c.value)}`;
   return `${f.l} ${op}${val}`;
 };
@@ -1171,7 +1186,12 @@ function openFilterPanel(){
         const yes = f.t === 'bool' ? 'true' : 'notempty', no = f.t === 'bool' ? 'false' : 'empty';
         ctl = `<div class="seg"><button data-i="${i}" data-op="${yes}" class="${c.op===yes?'on':''}">✓ Yes</button><button data-i="${i}" data-op="${no}" class="${c.op===no?'on':''}">— No</button></div>`;
       } else if (!['empty','notempty'].includes(c.op)) {
-        if (f.t === 'enum') ctl = `<select class="in fval" data-i="${i}" style="margin-top:8px"><option value="">Select…</option>${enumVals(f.k).map(v => `<option ${String(c.value)===String(v)?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
+        if (f.t === 'enum' && c.op === 'in') {
+          const sel = (Array.isArray(c.value) ? c.value : (c.value ? [c.value] : [])).map(String);
+          ctl = `<div class="chips fmulti" data-i="${i}" style="margin-top:8px">${enumVals(f.k).map(v =>
+            `<span class="chip ${sel.includes(String(v)) ? 'on' : ''}" data-v="${esc(v)}">${esc(v)}</span>`).join('')}</div>`;
+        }
+        else if (f.t === 'enum') ctl = `<select class="in fval" data-i="${i}" style="margin-top:8px"><option value="">Select…</option>${enumVals(f.k).map(v => `<option ${String(c.value)===String(v)?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
         else ctl = `<input class="in fval" data-i="${i}" type="${f.t==='num'?'number':f.t==='date'?'date':'text'}" value="${esc(c.value ?? '')}" placeholder="${f.t==='num'?'Amount':'Value'}" style="margin-top:8px">`
              + (c.op === 'between' ? `<div class="hint" style="margin:6px 0 0">and</div><input class="in fval2" data-i="${i}" type="${f.t==='num'?'number':'date'}" value="${esc(c.value2 ?? '')}">` : '');
       }
@@ -1189,7 +1209,22 @@ function openFilterPanel(){
       <div id="fpick" style="display:none"><input class="in" id="fsearch" placeholder="Search fields…" style="margin-top:8px"><div class="flist" id="flistbox"></div></div>`;
     const sync = () => { run(); paint(); };
     body.querySelectorAll('.seg button').forEach(b => b.onclick = () => { _views.conds[+b.dataset.i].op = b.dataset.op; sync(); });
-    body.querySelectorAll('.fopsel').forEach(e => e.onchange = () => { _views.conds[+e.dataset.i].op = e.value; sync(); });
+    body.querySelectorAll('.fopsel').forEach(e => e.onchange = () => {
+      const c = _views.conds[+e.dataset.i], was = c.op;
+      c.op = e.value;
+      // "is any of" holds a list; everything else holds one value. Carry the
+      // choice across rather than silently dropping what was already picked.
+      if (c.op === 'in' && was !== 'in') c.value = c.value ? [c.value] : [];
+      if (c.op !== 'in' && was === 'in') c.value = Array.isArray(c.value) ? (c.value[0] ?? '') : (c.value ?? '');
+      sync();
+    });
+    body.querySelectorAll('.fmulti .chip').forEach(ch => ch.onclick = () => {
+      const c = _views.conds[+ch.closest('.fmulti').dataset.i];
+      const cur = (Array.isArray(c.value) ? c.value : (c.value ? [c.value] : [])).map(String);
+      const v = ch.dataset.v;
+      c.value = cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v];
+      sync();
+    });
     const live = () => { run(); el('drawer-sub').textContent = `${(_views.lastRows||[]).length} of ${_views.rows.length} children`; };
     body.querySelectorAll('.fval').forEach(e => { const h = () => { _views.conds[+e.dataset.i].value = e.value; live(); }; e.onchange = h; if (e.tagName === 'INPUT') e.oninput = debounce(h, 200); });
     body.querySelectorAll('.fval2').forEach(e => e.oninput = debounce(() => { _views.conds[+e.dataset.i].value2 = e.value; live(); }, 200));
@@ -6244,7 +6279,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=102"></script>
+<script src="/brand/enquiries.js?v=103"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
