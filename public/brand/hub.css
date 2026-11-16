@@ -841,12 +841,49 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    edge of the sheet. A label on its own line and the options under it, all
    starting at the same left edge, is both calmer and quicker to scan — and
    it leaves room for the shortlist to be a shortlist. */
-#drawer.enq .pickrow{padding:13px 16px 14px 0}
-#drawer.enq .pickrow>.l{display:block;max-width:none;margin-bottom:9px;color:var(--label)}
-#drawer.enq .pickrow .chips{justify-content:flex-start;gap:7px}
 #drawer.enq .pick .chip.hid{display:none}
 #drawer.enq .pick.open .chip.hid{display:inline-flex}
 #drawer.enq .pick.open .chip.more{display:none}
 #drawer.enq .pick .chip.more{color:var(--label-2);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);
   background:transparent;font-weight:600;cursor:pointer}
 #drawer.enq .pick .chip.more:hover{background:var(--fill);color:var(--label)}
+
+/* ── fields as cells, not as a settings list ──
+   Label-left-control-right gives the name and the value the same size and
+   weight, so "Inquiry status" shouts as loudly as "In progress" and you read
+   the word you already knew before the one you opened the card for. Small
+   grey cap, large value underneath, editable where it stands — which also
+   fits two facts on a line instead of one, and that is what lets the card be
+   read without scrolling.
+
+   The hairlines are a 1px grid gap over a grey ground rather than borders on
+   the cells, so a cell that spans both columns still rules off correctly
+   with no special casing. */
+#drawer.enq .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--sep)}
+#drawer.enq .cell{background:var(--bg-card);padding:11px 16px 12px;min-width:0}
+#drawer.enq .cell.wide{grid-column:1 / -1}
+#drawer.enq .cell>.cap{display:block;font-size:11.5px;line-height:15px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--label-3);margin-bottom:4px}
+#drawer.enq .cell>.sub{display:block;margin-top:3px;font-size:var(--fs-fn);line-height:var(--lh-fn);color:var(--label-3)}
+#drawer.enq .cell>.sub:empty{display:none}
+
+/* The control is the value: no box until you reach for it. */
+#drawer.enq .cell .in{width:100%;max-width:none;min-height:30px;text-align:left;
+  font-size:var(--fs-t3);line-height:var(--lh-t3);font-weight:600;letter-spacing:-.012em;
+  background:transparent;border:0;box-shadow:none;border-radius:7px;
+  padding:3px 7px;margin:0 -7px;color:var(--label)}
+#drawer.enq .cell .in:hover{background:var(--field)}
+#drawer.enq .cell .in:focus{background:#fff;box-shadow:var(--focus)}
+#drawer.enq .cell .in::placeholder{font-weight:500;color:var(--label-3)}
+#drawer.enq .cell select.in{padding-right:20px}
+#drawer.enq .cell .inst{display:flex;align-items:center;gap:6px;justify-content:flex-start}
+#drawer.enq .cell .inst .in{flex:1 1 auto;min-width:0}
+/* Call and WhatsApp next to a number: small, quiet, and out of the way of
+   the number itself, which is the thing being read. */
+#drawer.enq .cell .inst .ic{flex:none;font-size:var(--fs-fn);font-weight:700;letter-spacing:.03em;
+  padding:4px 8px;border-radius:999px;text-decoration:none;color:var(--label-2);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+#drawer.enq .cell .inst .ic:hover{background:var(--fill);color:var(--label)}
+#drawer.enq .cell .seg{margin-top:1px}
+#drawer.enq .cell .chips{justify-content:flex-start;gap:7px;margin-top:2px}
+@media (max-width:460px){ #drawer.enq .fgrid{grid-template-columns:1fr} }

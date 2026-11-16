@@ -61,6 +61,20 @@ const EVENT_ICON = { call_in: '📞', call_out: '📲', missed_call: '📵', wal
 // red when it went wrong, amber for our own bookkeeping.
 // A number nought to ten is a judgement, and a judgement reads better with a
 // word against it: "6" alone makes you stop and work out which end is good.
+// Nobody reads "02/02/2025" and thinks "Euro Junior". The date is what we
+// store; the age is what decides which programme they are even eligible for,
+// and it was being worked out in somebody's head every single time.
+const ageOn = dob => {
+  if (!dob) return '';
+  const b = new Date(dob), n = new Date();
+  if (isNaN(b) || b > n) return '';
+  let m = (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth());
+  if (n.getDate() < b.getDate()) m--;
+  if (m < 0) return '';
+  const y = Math.floor(m / 12), r = m % 12;
+  return (y ? `${y}y ` : '') + `${r}m old`;
+};
+
 const KEEN_WORD = v => v >= 9 ? 'Ready to join' : v >= 7 ? 'Keen' : v >= 4 ? 'Warm' : v >= 1 ? 'Cool' : 'Cold';
 
 const TL_TONE = {
@@ -1009,11 +1023,30 @@ async function openEnquiry(id, opts = {}){
       ${tail.length ? `<button type="button" class="chip more" data-more="1">More&hellip;</button>` : ''}
       ${tail.map(o => chip(o, true)).join('')}</div>`;
   };
-  // A set of options is not a value, so it does not belong in the right-hand
-  // value column: pressed against that edge it wrapped into three ragged
-  // lines that have to be read backwards. Label above, options below, every
-  // one of them starting at the same left edge.
-  const pickRow = (l, ctl) => `<div class="rowx pickrow"><div class="l">${l}</div>${ctl}</div>`;
+  // The card stops being a settings list.
+  //
+  // Eleven rows of label-left-control-right is the shape of a preferences
+  // screen, and it gives the label and the value the same size and weight —
+  // so "Inquiry status" is as loud as "In progress", and you read the word
+  // you already know before the word you came for. Every one of those
+  // references does the opposite: a small grey cap naming the thing, and the
+  // thing itself large underneath, because the label is scaffolding and the
+  // value is the content.
+  //
+  // So each field is a cell on a two-column grid: the name in 11px caps, the
+  // value in 15px semibold, editable where it stands. Two facts to a line
+  // instead of one, which is what lets the whole card be read without
+  // scrolling. The hairlines come from a 1px grid gap over a grey ground, so
+  // a cell that spans the full width — a picker, an address — still rules
+  // off correctly without any special casing.
+  // The sub line is always present, even when empty (CSS hides it), because
+  // the age under the date of birth has to have somewhere to appear the
+  // moment somebody types a date into a record that had none.
+  const cell = (cap, ctl, sub = '', wide = false) =>
+    `<div class="cell${wide ? ' wide' : ''}"><span class="cap">${cap}</span>${ctl}` +
+    `<span class="sub">${sub}</span></div>`;
+  const pickRow = (l, ctl) => cell(l, ctl, '', true);
+  const grid = inner => `<div class="fgrid">${inner}</div>`;
 
   body.innerHTML = `
     ${e.has_intake_photo ? `<div class="grp"><div class="box" style="padding:0;overflow:hidden">
@@ -1096,38 +1129,38 @@ async function openEnquiry(id, opts = {}){
         </div></div>`;
     })()}
 
-    <div class="grp"><h3>Where they are</h3><div class="box">
-      ${row('Inquiry status', `<select class="in" id="en-status">${ENQ_STATUSES.map(([k, l]) => `<option value="${k}" ${e.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
+    <div class="grp"><h3>Where they are</h3><div class="box">${grid(`
+      ${cell('Inquiry status', `<select class="in" id="en-status">${ENQ_STATUSES.map(([k, l]) => `<option value="${k}" ${e.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
+      ${cell('Follow up on', inp('en-follow', e.follow_up_on, '', 'date'))}
       ${pickRow('Admission stage', pick('en-stages', e.stages, ENQ_STAGES_TOP, ENQ_STAGES, true))}
-      ${row('Follow up on', inp('en-follow', e.follow_up_on, '', 'date'))}
-      ${row('Handled by', inp('en-by', e.updated_by, who()))}
-      ${row('Academic year', `<select class="in" id="en-ay">${[acadYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
-    </div></div>
+      ${cell('Handled by', inp('en-by', e.updated_by, who()))}
+      ${cell('Academic year', `<select class="in" id="en-ay">${[acadYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
+    `)}</div></div>
 
-    <div class="grp"><h3>Calls &amp; visits</h3><div class="box">
-      ${row('Call status', `<select class="in" id="en-callst"><option value=""></option>${ENQ_CALLS.map(c => `<option ${e.call_status === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`, 'Setting this stamps today’s date')}
-      ${row('Call date', inp('en-calldate', e.call_date, '', 'date'))}
-      ${row('Visit scheduled', inp('en-visit', toInputDT(e.visit_at), '', 'datetime-local'), e.visit_reminder_sent_at ? 'Reminder sent ' + dtLocal(e.visit_reminder_sent_at) : 'The family is reminded the morning before, automatically')}
-      ${row('First visit', inp('en-visited', toInputDT(e.first_visit_at), '', 'datetime-local'))}
-    </div></div>
+    <div class="grp"><h3>Calls &amp; visits</h3><div class="box">${grid(`
+      ${cell('Call status', `<select class="in" id="en-callst"><option value=""></option>${ENQ_CALLS.map(c => `<option ${e.call_status === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`, 'Stamps today’s date')}
+      ${cell('Call date', inp('en-calldate', e.call_date, '', 'date'))}
+      ${cell('Visit scheduled', inp('en-visit', toInputDT(e.visit_at), '', 'datetime-local'), e.visit_reminder_sent_at ? 'Reminder sent ' + dtLocal(e.visit_reminder_sent_at) : 'They are reminded the morning before')}
+      ${cell('First visit', inp('en-visited', toInputDT(e.first_visit_at), '', 'datetime-local'))}
+    `)}</div></div>
 
-    <div class="grp"><h3>Family</h3><div class="box">
-      ${row('Father', inp('en-fname', e.father_name, 'name'))}
-      ${row('Phone', `<div class="inst">${inp('en-fphone', e.father_phone, '10-digit mobile', 'tel')}${e.father_phone ? `<a class="btn line sm" href="tel:${esc(e.father_phone)}">Call</a><a class="btn line sm" href="${waHref(e.father_phone, waText)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</div>`)}
-      ${row('Email', inp('en-femail', e.father_email, '', 'email'))}
-      ${row('Mother', inp('en-mname', e.mother_name, 'name'))}
-      ${row('Phone', `<div class="inst">${inp('en-mphone', e.mother_phone, 'optional', 'tel')}${e.mother_phone ? `<a class="btn line sm" href="tel:${esc(e.mother_phone)}">Call</a><a class="btn line sm" href="${waHref(e.mother_phone, waText)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</div>`)}
-      ${row('Email', inp('en-memail', e.mother_email, 'optional', 'email'))}
-      ${row('Address', inp('en-addr', e.address, 'area or society'))}
-    </div>${e.welcome_email_sent_at ? `<div class="foot">Welcome email sent ${dtLocal(e.welcome_email_sent_at)}.</div>` : ''}</div>
+    <div class="grp"><h3>Family</h3><div class="box">${grid(`
+      ${cell('Father', inp('en-fname', e.father_name, 'name'))}
+      ${cell('His phone', `<div class="inst">${inp('en-fphone', e.father_phone, '10-digit mobile', 'tel')}${e.father_phone ? `<a class="ic" href="tel:${esc(e.father_phone)}" title="Call">Call</a><a class="ic" href="${waHref(e.father_phone, waText)}" target="_blank" rel="noopener" title="WhatsApp">WA</a>` : ''}</div>`)}
+      ${cell('His email', inp('en-femail', e.father_email, 'optional', 'email'), '', true)}
+      ${cell('Mother', inp('en-mname', e.mother_name, 'name'))}
+      ${cell('Her phone', `<div class="inst">${inp('en-mphone', e.mother_phone, 'optional', 'tel')}${e.mother_phone ? `<a class="ic" href="tel:${esc(e.mother_phone)}" title="Call">Call</a><a class="ic" href="${waHref(e.mother_phone, waText)}" target="_blank" rel="noopener" title="WhatsApp">WA</a>` : ''}</div>`)}
+      ${cell('Her email', inp('en-memail', e.mother_email, 'optional', 'email'), '', true)}
+      ${cell('Address', inp('en-addr', e.address, 'area or society'), '', true)}
+    `)}</div>${e.welcome_email_sent_at ? `<div class="foot">Welcome email sent ${dtLocal(e.welcome_email_sent_at)}.</div>` : ''}</div>
 
-    <div class="grp"><h3>Child</h3><div class="box">
-      ${row('Name', inp('en-cname', e.child_name, 'child’s name'))}
+    <div class="grp"><h3>Child</h3><div class="box">${grid(`
+      ${cell('Name', inp('en-cname', e.child_name, 'child’s name'), '', true)}
+      ${cell('Date of birth', inp('en-dob', e.dob, '', 'date'), ageOn(e.dob))}
+      ${cell('Sex', `<div class="seg" id="en-sex"><button data-v="Boy" class="${e.sex === 'Boy' ? 'on' : ''}">Boy</button><button data-v="Girl" class="${e.sex === 'Girl' ? 'on' : ''}">Girl</button></div>`)}
       ${pickRow('Programme', pick('en-progs', e.programs, ENQ_PROGRAMS_TOP, ENQ_PROGRAMS))}
-      ${row('Date of birth', inp('en-dob', e.dob, '', 'date'))}
-      ${row('Sex', `<div class="seg" id="en-sex"><button data-v="Boy" class="${e.sex === 'Boy' ? 'on' : ''}">Boy</button><button data-v="Girl" class="${e.sex === 'Girl' ? 'on' : ''}">Girl</button></div>`)}
       ${pickRow('Lead source', pick('en-sources', e.sources, ENQ_SOURCES_TOP, ENQ_SOURCES))}
-    </div></div>
+    `)}</div></div>
 
     <div class="grp"><h3>Notes &amp; timeline</h3><div class="box">
       <div class="note-new">
@@ -1225,6 +1258,13 @@ async function openEnquiry(id, opts = {}){
     el('en-ring').setAttribute('stroke-dasharray', `${(v / 10 * C).toFixed(1)} ${C.toFixed(1)}`);
   };
   el('en-sent').oninput = paintKeen;
+  // The age under the date of birth has to follow the date, or it is a lie
+  // the moment anybody corrects a typo in the year.
+  const dobIn = el('en-dob');
+  if (dobIn) dobIn.oninput = () => {
+    const sub = dobIn.closest('.cell')?.querySelector('.sub');
+    if (sub) sub.textContent = ageOn(dobIn.value);
+  };
   el('en-callst').onchange = () => { if (el('en-callst').value && !el('en-calldate').value) el('en-calldate').value = new Date().toISOString().slice(0, 10); };
   // The box says what it wants, the button stays asleep until there is
   // something to send, and the line underneath says who it will be filed
