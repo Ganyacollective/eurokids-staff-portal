@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=104">
-<link rel="prefetch" href="/brand/enquiries.js?v=104" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=105">
+<link rel="prefetch" href="/brand/enquiries.js?v=105" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1202,7 +1202,25 @@ function openFilterPanel(){
           <button class="fdel" data-i="${i}" aria-label="Remove this filter">✕</button></div>
           <div class="frow">${opSel}${ctl}</div></div>`;
     }).join('');
-    body.innerHTML = `${cards || '<div class="empty" style="padding:26px 8px"><div class="ic">⚲</div><h3>No filters</h3><div>Showing all ' + total + ' children. Add one to narrow it down.</div></div>'}
+    // Two cards on the same single-value field can never both be true, so
+    // the list goes to nothing and the panel looks broken. Say so, and offer
+    // to make it the question they meant.
+    const clash = (() => {
+      const byField = {};
+      _views.conds.forEach((c, i) => {
+        const f = VIEW_FIELDS.find(x => x.k === c.field);
+        if (!f || f.t !== 'enum' || c.op !== '=') return;
+        (byField[c.field] = byField[c.field] || []).push(i);
+      });
+      const hit = Object.entries(byField).find(([, ix]) => ix.length > 1);
+      return hit ? { field: hit[0], idx: hit[1] } : null;
+    })();
+    const clashNote = clash ? `<div class="foot warn" style="margin:12px 0 0">
+        Two “is equal to” filters on ${esc((VIEW_FIELDS.find(x => x.k === clash.field) || {}).l || 'the same field')}
+        can never both be true — a child has one, so nothing matches.
+        <a href="#" id="fmerge">Combine them into “is any of”</a>.</div>` : '';
+
+    body.innerHTML = `${cards || '<div class="empty" style="padding:26px 8px"><div class="ic">⚲</div><h3>No filters</h3><div>Showing all ' + total + ' children. Add one to narrow it down.</div></div>'}${clashNote}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
         <button class="btn line sm" id="fadd">+ Add filter</button>
         ${_views.conds.length ? '<a href="#" id="fclear" class="hint">Remove all</a>' : ''}</div>
@@ -1230,6 +1248,15 @@ function openFilterPanel(){
     body.querySelectorAll('.fval2').forEach(e => e.oninput = debounce(() => { _views.conds[+e.dataset.i].value2 = e.value; live(); }, 200));
     body.querySelectorAll('.fdel').forEach(b => b.onclick = () => { _views.conds.splice(+b.dataset.i, 1); sync(); });
     const fc = el('fclear'); if (fc) fc.onclick = ev => { ev.preventDefault(); _views.conds = []; sync(); };
+    const fm = el('fmerge'); if (fm) fm.onclick = ev => {
+      ev.preventDefault();
+      const vals = clash.idx.map(i => _views.conds[i].value).filter(v => v !== '' && v != null).map(String);
+      const keep = clash.idx[0];
+      _views.conds[keep] = { field: clash.field, op: 'in', value: [...new Set(vals)] };
+      // Remove the rest from the back, so the earlier indexes stay valid.
+      clash.idx.slice(1).sort((a, b) => b - a).forEach(i => _views.conds.splice(i, 1));
+      sync();
+    };
     el('fadd').onclick = () => {
       el('fpick').style.display = ''; el('fsearch').focus();
       const list = q => el('flistbox').innerHTML = VIEW_FIELDS.filter(f => !q || f.l.toLowerCase().includes(q)).map(f =>
@@ -6279,12 +6306,37 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=104"></script>
+<script src="/brand/enquiries.js?v=105"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+    // Take the new version as soon as there is one.
+    //
+    // Registering was not enough. A new service worker installs, calls
+    // skipWaiting and claims the page — but the HTML already on screen is
+    // the old one, and nothing asked it to go and get the new one. So the
+    // screen stayed a deploy behind until somebody happened to reload twice,
+    // and "I pushed it and I still cannot see it" became a weekly
+    // conversation. It is not a cache that needs clearing; it is a page that
+    // was never told.
+    //
+    // controllerchange fires exactly once, when a genuinely new worker takes
+    // over, so this reloads on a real deploy and never on an ordinary visit.
+    // The guard is for the one case where that is not true: a page with no
+    // controller at all, where claiming it counts as a change.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading || !navigator.serviceWorker.controller) return;
+      reloading = true;
+      location.reload();
+    });
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').then((reg) => {
+      // Look for a new deploy when the tab comes back to the front. The hub
+      // is left open all day on the office machine, so without this the only
+      // check is a cold start, which may be tomorrow.
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => {}));
   }
 </script>
 </body>

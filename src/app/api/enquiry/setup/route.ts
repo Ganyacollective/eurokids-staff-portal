@@ -33,7 +33,16 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true, site: SITE, website: WEB,
     kiosk_key_set: !!kiosk,
-    kiosk_url: kiosk ? `${WEB}/?kiosk=${encodeURIComponent(kiosk)}` : null,
+    // /kiosk, not /?kiosk=.
+    //
+    // Both mark the tablet and both allow the camera, but only /kiosk
+    // survives "Add to Home screen": it carries its own manifest whose
+    // start_url is /kiosk, so the icon comes back to an address that is
+    // still the tablet. The old link installs an icon that opens "/" with
+    // the marker gone — the enquiry still files as a walk-in, because the
+    // key is remembered on the device, but the camera is refused and the
+    // photograph is lost without anything on screen saying so.
+    kiosk_url: kiosk ? `${WEB}/kiosk?kiosk=${encodeURIComponent(kiosk)}` : null,
     embed_url: `${WEB}/#enquire`,
     ivr_key_set: !!ivr,
     ivr_url: ivr ? `${SITE}/api/public/ivr-webhook?key=${encodeURIComponent(ivr)}` : null,
