@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import CardMarquee from "@/components/CardMarquee";
 import IntakeHead from "@/components/IntakeHead";
 import EnquiryForm from "@/components/EnquiryForm";
+import KioskSW from "@/components/KioskSW";
 import { listCards, getSetting } from "@/lib/site";
 
 // The reception tablet's own front door.
@@ -46,6 +47,7 @@ export default async function Kiosk() {
 
   return (
     <>
+      <KioskSW />
       <CardMarquee cards={cards} seconds={Number(seconds) || 55} />
 
       <section className="tf-section" id="enquire">
