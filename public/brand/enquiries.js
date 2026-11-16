@@ -1047,6 +1047,22 @@ async function openEnquiry(id, opts = {}){
     `<span class="sub">${sub}</span></div>`;
   const pickRow = (l, ctl) => cell(l, ctl, '', true);
   const grid = inner => `<div class="fgrid">${inner}</div>`;
+  // One card per thing being described, each with its own tint.
+  //
+  // Putting the fields in a box did not separate them, because there was only
+  // ever one box and everything in it looked the same: father's phone, the
+  // child's birthday and the academic year all sat in identical grey rows and
+  // you had to read the labels to find out which was which. These are four
+  // different subjects. The father is one, the mother is one, the child is
+  // one, and where the enquiry has got to is one — so they are four cards,
+  // and the tint tells you which you are in before you have read a word.
+  //
+  // The colour is doing wayfinding, not decoration, so it is kept to a wash
+  // under a frosted-white grid. The hairlines between the cells are the
+  // gradient showing through a 1px gap, which is why they pick up each
+  // card's own hue for free.
+  const sec = (k, title, inner) => `<div class="grp sec s-${k}"><div class="box">
+      <div class="sechd"><span class="dot"></span>${title}</div>${grid(inner)}</div></div>`;
 
   body.innerHTML = `
     ${e.has_intake_photo ? `<div class="grp"><div class="box" style="padding:0;overflow:hidden">
@@ -1129,38 +1145,41 @@ async function openEnquiry(id, opts = {}){
         </div></div>`;
     })()}
 
-    <div class="grp"><h3>Where they are</h3><div class="box">${grid(`
+    ${sec('where', 'Where they are', `
       ${cell('Inquiry status', `<select class="in" id="en-status">${ENQ_STATUSES.map(([k, l]) => `<option value="${k}" ${e.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`)}
       ${cell('Follow up on', inp('en-follow', e.follow_up_on, '', 'date'))}
       ${pickRow('Admission stage', pick('en-stages', e.stages, ENQ_STAGES_TOP, ENQ_STAGES, true))}
-      ${cell('Handled by', inp('en-by', e.updated_by, who()))}
-      ${cell('Academic year', `<select class="in" id="en-ay">${[acadYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
-    `)}</div></div>
-
-    <div class="grp"><h3>Calls &amp; visits</h3><div class="box">${grid(`
-      ${cell('Call status', `<select class="in" id="en-callst"><option value=""></option>${ENQ_CALLS.map(c => `<option ${e.call_status === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`, 'Stamps today’s date')}
+      ${cell('Call status', `<select class="in" id="en-callst"><option value="">&mdash;</option>${ENQ_CALLS.map(c => `<option ${e.call_status === c ? 'selected' : ''}>${c}</option>`).join('')}</select>`, 'Stamps today’s date')}
       ${cell('Call date', inp('en-calldate', e.call_date, '', 'date'))}
       ${cell('Visit scheduled', inp('en-visit', toInputDT(e.visit_at), '', 'datetime-local'), e.visit_reminder_sent_at ? 'Reminder sent ' + dtLocal(e.visit_reminder_sent_at) : 'They are reminded the morning before')}
       ${cell('First visit', inp('en-visited', toInputDT(e.first_visit_at), '', 'datetime-local'))}
-    `)}</div></div>
+      ${cell('Handled by', inp('en-by', e.updated_by, who()))}
+      ${cell('Academic year', `<select class="in" id="en-ay">${[acadYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
+    `)}
 
-    <div class="grp"><h3>Family</h3><div class="box">${grid(`
-      ${cell('Father', inp('en-fname', e.father_name, 'name'))}
-      ${cell('His phone', `<div class="inst">${inp('en-fphone', e.father_phone, '10-digit mobile', 'tel')}${e.father_phone ? `<a class="ic" href="tel:${esc(e.father_phone)}" title="Call">Call</a><a class="ic" href="${waHref(e.father_phone, waText)}" target="_blank" rel="noopener" title="WhatsApp">WA</a>` : ''}</div>`)}
-      ${cell('His email', inp('en-femail', e.father_email, 'optional', 'email'), '', true)}
-      ${cell('Mother', inp('en-mname', e.mother_name, 'name'))}
-      ${cell('Her phone', `<div class="inst">${inp('en-mphone', e.mother_phone, 'optional', 'tel')}${e.mother_phone ? `<a class="ic" href="tel:${esc(e.mother_phone)}" title="Call">Call</a><a class="ic" href="${waHref(e.mother_phone, waText)}" target="_blank" rel="noopener" title="WhatsApp">WA</a>` : ''}</div>`)}
-      ${cell('Her email', inp('en-memail', e.mother_email, 'optional', 'email'), '', true)}
-      ${cell('Address', inp('en-addr', e.address, 'area or society'), '', true)}
-    `)}</div>${e.welcome_email_sent_at ? `<div class="foot">Welcome email sent ${dtLocal(e.welcome_email_sent_at)}.</div>` : ''}</div>
-
-    <div class="grp"><h3>Child</h3><div class="box">${grid(`
+    ${sec('child', 'The child', `
       ${cell('Name', inp('en-cname', e.child_name, 'child’s name'), '', true)}
       ${cell('Date of birth', inp('en-dob', e.dob, '', 'date'), ageOn(e.dob))}
       ${cell('Sex', `<div class="seg" id="en-sex"><button data-v="Boy" class="${e.sex === 'Boy' ? 'on' : ''}">Boy</button><button data-v="Girl" class="${e.sex === 'Girl' ? 'on' : ''}">Girl</button></div>`)}
       ${pickRow('Programme', pick('en-progs', e.programs, ENQ_PROGRAMS_TOP, ENQ_PROGRAMS))}
       ${pickRow('Lead source', pick('en-sources', e.sources, ENQ_SOURCES_TOP, ENQ_SOURCES))}
-    `)}</div></div>
+    `)}
+
+    ${sec('father', 'Father', `
+      ${cell('Name', inp('en-fname', e.father_name, 'name'), '', true)}
+      ${cell('Phone', `<div class="inst">${inp('en-fphone', e.father_phone, '10-digit mobile', 'tel')}${e.father_phone ? `<a class="ic" href="tel:${esc(e.father_phone)}" title="Call">Call</a><a class="ic" href="${waHref(e.father_phone, waText)}" target="_blank" rel="noopener" title="WhatsApp">WA</a>` : ''}</div>`, '', true)}
+      ${cell('Email', inp('en-femail', e.father_email, 'optional', 'email'), '', true)}
+    `)}
+
+    ${sec('mother', 'Mother', `
+      ${cell('Name', inp('en-mname', e.mother_name, 'name'), '', true)}
+      ${cell('Phone', `<div class="inst">${inp('en-mphone', e.mother_phone, 'optional', 'tel')}${e.mother_phone ? `<a class="ic" href="tel:${esc(e.mother_phone)}" title="Call">Call</a><a class="ic" href="${waHref(e.mother_phone, waText)}" target="_blank" rel="noopener" title="WhatsApp">WA</a>` : ''}</div>`, '', true)}
+      ${cell('Email', inp('en-memail', e.mother_email, 'optional', 'email'), '', true)}
+    `)}
+
+    ${sec('home', 'Home', `
+      ${cell('Address', inp('en-addr', e.address, 'area or society'), '', true)}
+    `)}${e.welcome_email_sent_at ? `<div class="foot">Welcome email sent ${dtLocal(e.welcome_email_sent_at)}.</div>` : ''}
 
     <div class="grp"><h3>Notes &amp; timeline</h3><div class="box">
       <div class="note-new">

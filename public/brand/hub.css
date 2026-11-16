@@ -887,3 +887,53 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 #drawer.enq .cell .seg{margin-top:1px}
 #drawer.enq .cell .chips{justify-content:flex-start;gap:7px;margin-top:2px}
 @media (max-width:460px){ #drawer.enq .fgrid{grid-template-columns:1fr} }
+
+/* ── four cards, four tints ──
+   A single grey box with eleven identical rows in it separates nothing: the
+   father's phone, the child's birthday and the academic year all looked the
+   same and you had to read the label to find out which you were in. They are
+   not the same thing. So: one card per subject, each with its own wash, and
+   the colour does the wayfinding before a word is read.
+
+   The cells are frosted white over the gradient and the hairlines are the
+   gradient itself showing through a 1px grid gap — which is why each card's
+   rules pick up its own hue without a single extra rule, and why a cell
+   spanning both columns still divides correctly. */
+#drawer.enq .sec{margin-top:16px}
+#drawer.enq .sec>h3{display:none}
+/* The gradient used to run out to pure white by the middle of the card, so
+   the bottom half of every section was the same colourless box it replaced
+   and only the header strip carried the hue. It now stays tinted the whole
+   way down and the cells sit at 74% white over it, which is the most
+   transparency 15px semibold black will take without losing contrast. */
+#drawer.enq .sec>.box{
+  background:linear-gradient(145deg, var(--t1) 0%, var(--t2) 70%, var(--t1) 100%);
+  border-radius:18px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(0,0,0,.04), 0 1px 2px rgba(0,0,0,.03), 0 14px 34px -22px rgba(0,0,0,.3)}
+#drawer.enq .sec .sechd{display:flex;align-items:center;gap:8px;padding:14px 17px 12px;
+  font-size:11.5px;line-height:15px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;color:var(--tk)}
+#drawer.enq .sec .sechd .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.7;flex:none}
+#drawer.enq .sec .fgrid{background:transparent;gap:1px}
+#drawer.enq .sec .cell{background:rgba(255,255,255,.74);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+
+/* A chosen chip belongs to the card it is standing in. The programme picked
+   inside the child's card went on being the same coral as everything else,
+   which undoes the point of tinting the card in the first place. */
+#drawer.enq .sec .chips .chip.on{
+  background:color-mix(in srgb, var(--tk) 12%, transparent);
+  color:var(--tk);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--tk) 42%, transparent)}
+#drawer.enq .sec .chips .chip.on:hover{background:color-mix(in srgb, var(--tk) 19%, transparent)}
+#drawer.enq .sec .cell>.cap{color:color-mix(in srgb, var(--tk) 62%, var(--label-3))}
+#drawer.enq .sec .cell .in:hover{background:color-mix(in srgb, var(--t1) 70%, #fff)}
+#drawer.enq .sec .cell .in:focus{background:#fff}
+
+/* Pale enough that 15px semibold black still sits at full contrast on top of
+   it, and distinct enough in hue that the four are told apart at a glance
+   with the screen at arm's length. Mother is teal and father is indigo
+   because the obvious pair would be pink and blue, and that is a stereotype
+   doing a job that two neutral hues do just as well. */
+#drawer.enq .s-where { --t1:#FDE4DC; --t2:#FEF4F0; --tk:#A8381F }
+#drawer.enq .s-child { --t1:#E4F2D8; --t2:#F4FAEE; --tk:#3F6B1E }
+#drawer.enq .s-father{ --t1:#E2E8FB; --t2:#F3F6FE; --tk:#3C4F96 }
+#drawer.enq .s-mother{ --t1:#D9EFEA; --t2:#F0FAF7; --tk:#1C6757 }
+#drawer.enq .s-home  { --t1:#F0ECE3; --t2:#F9F7F3; --tk:#6B5E46 }
