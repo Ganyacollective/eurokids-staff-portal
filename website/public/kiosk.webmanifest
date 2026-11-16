@@ -1,11 +1,11 @@
 {
-  "name": "EuroKids Reception",
-  "short_name": "Reception",
-  "description": "The enquiry desk at EuroKids JMD Enclave reception. Takes a photograph when the form is submitted.",
+  "name": "Inquiry Form",
+  "short_name": "Inquiry Form",
+  "description": "The inquiry form at EuroKids JMD Enclave reception. Takes a photograph when the form is submitted.",
   "start_url": "/kiosk",
   "scope": "/kiosk",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#FCF8F6",
   "theme_color": "#FF2217",
   "icons": [

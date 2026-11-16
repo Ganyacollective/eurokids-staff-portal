@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=105">
-<link rel="prefetch" href="/brand/enquiries.js?v=105" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=106">
+<link rel="prefetch" href="/brand/enquiries.js?v=106" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1352,16 +1352,29 @@ async function tabViews(){
       `<div class="side-h">Lists</div>` +
       QUICK.map(([l, c], i) => `<button class="side-i ${onQuick() && quickIdx === i ? 'on' : ''}" data-q="${i}">
           <span style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:${QUICK_TINT[l] || 'var(--accent)'}"></span>${l}</span><b>${cnt(c)}</b></button>`).join('') +
-      `<div class="side-h">Saved views</div>` +
-      (_views.list.map(v => `<button class="side-i ${_views.current?.id === v.id ? 'on' : ''}" data-id="${v.id}">
-          <span>${esc(v.name)}</span><b>${cnt(v.conditions || [])}</b></button>`).join('') || '') +
+      // Two headings, because a view is now either the house's or yours.
+      // One pile of everybody's half-named one-offs is what this replaces —
+      // nobody deletes a view they are not sure is theirs.
+      (() => {
+        const mine   = _views.list.filter(v => !v.is_shared);
+        const shared = _views.list.filter(v =>  v.is_shared);
+        const row = v => `<button class="side-i ${_views.current?.id === v.id ? 'on' : ''}" data-id="${v.id}">
+            <span>${esc(v.name)}</span><b>${cnt(v.conditions || [])}</b></button>`;
+        return (shared.length ? `<div class="side-h">Shared views</div>` + shared.map(row).join('') : '')
+             + (mine.length   ? `<div class="side-h">My views</div>`     + mine.map(row).join('')   : '');
+      })() +
       `<button class="side-add" id="vw-new">+ New view</button>`;
     el('vw-side').querySelectorAll('[data-q]').forEach(x => x.onclick = () => loadQuick(Number(x.dataset.q)));
     el('vw-side').querySelectorAll('[data-id]').forEach(x => x.onclick = () => loadView(_views.list.find(v => v.id === Number(x.dataset.id))));
     el('vw-new').onclick = async () => {
       const name = prompt('Name for the new view:', '');
       if (!name || !name.trim()) return;
-      const rec = { name: name.trim(), conditions: _views.conds, sort_field: _views.sort.field, sort_dir: _views.sort.dir, updated_at: new Date().toISOString(), created_by: session?.user?.id || null };
+      // created_by is what makes it yours — the row-level rule checks it
+      // against who is signed in, so a view cannot be saved into somebody
+      // else's sidebar even by accident.
+      const rec = { name: name.trim(), conditions: _views.conds, sort_field: _views.sort.field,
+        sort_dir: _views.sort.dir, updated_at: new Date().toISOString(),
+        created_by: session?.user?.id || null, is_shared: false };
       const { data, error: e2 } = await s.schema('eurokids').from('saved_view').insert(rec).select().maybeSingle();
       if (e2) return alert('Could not save: ' + e2.message);
       await refreshList(); loadView(data);
@@ -6306,7 +6319,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=105"></script>
+<script src="/brand/enquiries.js?v=106"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

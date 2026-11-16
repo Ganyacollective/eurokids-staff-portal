@@ -16,7 +16,7 @@
  * marketing pages keep being served straight from the network, which is what
  * a site that changes with every deploy wants.
  */
-const V = 'ek-kiosk-v1';
+const V = 'ek-kiosk-v2';   // bumped: manifest name and orientation changed
 
 // The shell only. Not the card artwork — that is tens of megabytes of
 // posters and the tablet does not need them to take an enquiry.

@@ -32,7 +32,7 @@ import { listCards, getSetting } from "@/lib/site";
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: "Reception",
+  title: "Inquiry Form",
   // Its own manifest, so the installed icon returns to /kiosk rather than to
   // the public home page.
   manifest: "/kiosk.webmanifest",
