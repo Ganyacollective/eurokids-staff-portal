@@ -59,56 +59,51 @@ export async function POST(req: NextRequest) {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  // There are two leave systems in this building and both have to be served.
+  // One leave system, so one lookup.
   //
-  //   leave_requests  — a table. The teacher portal's signed-in modal writes
-  //                     here, and the Inbox approves it.
-  //   portal_state    — a JSON blob. /api/public/apply-leave writes here for
-  //                     applications made without logging in, and the Leaves
-  //                     tab approves those with approveLeave().
-  //
-  // The first version of this route only knew about the table, so approving
-  // a blob leave sent nothing and looked like a broken feature. The id tells
-  // them apart: a table row is a uuid, a blob leave is an eight-character
-  // id like "359ac7af".
-  type AnyLeave = {
+  // This route used to carry a second branch: if the id was not a uuid in
+  // leave_requests, go and look for it inside portal_state.data.leaves,
+  // because applications filed without signing in lived there. Both systems
+  // have been merged into the table, so that branch is gone — and with it the
+  // bug where approving a leave in one place sent nothing because the other
+  // place still said Pending.
+  type Leave = {
     id: string; leave_type: string; start_date: string; end_date: string;
     total_days: number | string; reason?: string; status: string;
-    reviewer_note?: string; user_id?: string; employee_id?: string;
+    reviewer_note?: string; user_id?: string | null; employee_id: string;
   };
 
-  let lr: AnyLeave | null = null;
+  const { data: row } = await admin.from("leave_requests")
+    .select("id, leave_type, start_date, end_date, total_days, reason, status, reviewer_note, user_id, employee_id")
+    .eq("id", requestId).maybeSingle();
+  if (!row) return NextResponse.json({ ok: false, error: "That request no longer exists." }, { status: 404 });
+  const lr = row as Leave;
+
+  // Where to write to. Two places hold an address, and they are not equally
+  // good: the account she signs in with is verified, the one on the employee
+  // record is whatever was typed. The account wins where there is one, and a
+  // leave applied for without signing in has none — so the employee record
+  // is the fallback rather than the first choice.
   let to = "";
   let name = "";
 
-  const { data: row } = await admin.from("leave_requests").select("*").eq("id", requestId).maybeSingle();
-  if (row) {
-    lr = row as AnyLeave;
-    // The address is the account they sign in with. employees.email is empty
-    // for every one of the twenty-four rows in that table.
+  if (lr.user_id) {
     const { data: teacher } = await admin.auth.admin.getUserById(String(lr.user_id));
     to = (teacher?.user?.email || "").trim();
-    const { data: link } = await admin.from("teacher_links")
-      .select("display_name").eq("user_id", lr.user_id).maybeSingle();
-    name = (link?.display_name || to.split("@")[0] || "").trim();
-  } else {
-    const { data: ps } = await admin.from("portal_state").select("data").eq("id", "main").maybeSingle();
-    const blob = (ps?.data || {}) as {
-      employees?: { id: string; display_name?: string; email?: string }[];
-      leaves?: AnyLeave[];
-    };
-    const found = (blob.leaves || []).find(l => l.id === requestId) || null;
-    if (found) {
-      lr = found;
-      // Here the address lives on the employee record inside the blob, which
-      // is where the apply-time email gets it from too.
-      const emp = (blob.employees || []).find(e => e.id === found.employee_id);
-      to = (emp?.email || "").trim();
-      name = (emp?.display_name || "").trim();
-    }
   }
+  // Oldest link wins; four people have two, and maybeSingle() would throw.
+  const { data: links } = await admin.from("teacher_links")
+    .select("display_name, created_at").eq("employee_id", lr.employee_id)
+    .order("created_at", { ascending: true }).limit(1);
+  name = (links?.[0]?.display_name || "").trim();
 
-  if (!lr) return NextResponse.json({ ok: false, error: "That request no longer exists." }, { status: 404 });
+  if (!to || !name) {
+    const { data: ps } = await admin.from("portal_state").select("data").eq("id", "main").maybeSingle();
+    const emps = ((ps?.data || {}) as { employees?: { id: string; display_name?: string; email?: string }[] }).employees || [];
+    const emp = emps.find(e => e.id === lr.employee_id);
+    if (!to) to = (emp?.email || "").trim();
+    if (!name) name = (emp?.display_name || to.split("@")[0] || "").trim();
+  }
 
   // Who may send which. A teacher can trigger their own "we have it";
   // announcing a decision is the reviewer's to make, and letting anyone send

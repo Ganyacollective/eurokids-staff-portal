@@ -421,15 +421,15 @@ async function submitAnonymousApply(ev){
     msgEl.classList.remove('hidden');
     if (json.ok) {
       msgEl.className = 'text-sm rounded-lg p-3 bg-green-50 border border-green-200 text-green-700';
-      // Show the composed message + full diagnostics so we can see what actually happened
-      let diagBlock = '';
-      if (json.notifications) {
-        const rows = Object.entries(json.notifications).map(([k,v]) => `<div class="flex justify-between gap-3 text-xs"><span class="font-mono text-gray-500">${k}</span><span class="text-gray-700 text-right">${escapeHtml(String(v))}</span></div>`).join('');
-        diagBlock = `<div class="mt-3 pt-3 border-t border-green-200 space-y-0.5">${rows}</div>`;
-      }
-      msgEl.innerHTML = `<div>${escapeHtml(json.message || 'Application received.')}</div>${diagBlock}`;
+      // This used to print the server's notification diagnostics — which mail
+      // provider was configured, which address the confirmation went to,
+      // delivery error strings. Useful while building it, but this screen is
+      // reachable by anyone without signing in, so it was telling the world
+      // about the mail setup and the staff's personal addresses. The endpoint
+      // no longer returns any of it.
+      msgEl.textContent = json.message || 'Application received.';
       btn.textContent = 'Sent';
-      setTimeout(() => { closeAnonymousApply(); btn.disabled = false; btn.textContent = 'Submit'; }, 12000);
+      setTimeout(() => { closeAnonymousApply(); btn.disabled = false; btn.textContent = 'Submit'; }, 8000);
     } else {
       msgEl.className = 'text-sm rounded-lg p-3 bg-red-50 border border-red-200 text-red-700';
       msgEl.textContent = json.error || 'Something went wrong.';
@@ -748,10 +748,10 @@ function fmtDateShort(iso){
 }
 
 async function loadRequests(){
-  // Fetch via the merged API so we see both:
-  //   • leave_requests rows (submitted by this teacher via the portal)
-  //   • portal_state.leaves entries (added manually by HR)
-  // Deduplication and status reconciliation happen server-side.
+  // Through the API rather than straight at the table, because the same call
+  // returns the entitlement and the leave credits, which are worked out from
+  // the employee record and the reconciled months. It used to also merge two
+  // leave systems and dedupe them; there is one now, so it just reads it.
   try {
     const sb = getSb();
     const { data: { session } } = await sb.auth.getSession();

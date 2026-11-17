@@ -6,9 +6,17 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 // GET /api/teacher/my-leaves
-// Returns the calling teacher's combined leave history — both leave_requests
-// (submitted via the teacher portal) and entries in portal_state.leaves
-// (manually entered by HR). Deduplicates by source_id linkage.
+//
+// The calling teacher's leave history, her entitlement, and the credits for
+// days she applied for and then came in anyway.
+//
+// This route used to merge two lists — leave_requests for anything she filed
+// after signing in, and portal_state.data.leaves for anything else — and
+// prefer the blob copy where both existed, because HR's edits landed there.
+// Leaves are rows in one table now, so there is nothing to merge and nothing
+// to prefer. Her entitlement and carry-forward still come from the employee
+// record in the state document, which is where staff records legitimately
+// live; only the leaves moved.
 export async function GET(req: NextRequest) {
   // Authenticate caller
   const auth = req.headers.get("authorization") || "";
@@ -25,34 +33,50 @@ export async function GET(req: NextRequest) {
   // scope the queries strictly to this user's own employee record.
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  // 1) Find this user's employee_id via teacher_links
-  const { data: link, error: linkErr } = await admin.from("teacher_links").select("employee_id, display_name, department, designation").eq("user_id", userId).maybeSingle();
+  // 1) Find this user's employee_id via teacher_links.
+  //
+  // Not maybeSingle(): that throws when a query returns more than one row, and
+  // four people here have two teacher_links rows apiece — a second login was
+  // provisioned for them at some point and the first was never removed. For
+  // those four this route was failing outright, so their leave screen showed
+  // an error rather than their leave. Oldest link wins, deterministically.
+  const { data: links, error: linkErr } = await admin
+    .from("teacher_links")
+    .select("employee_id, display_name, department, designation, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const link = links?.[0];
   if (linkErr || !link) {
     return NextResponse.json({ error: "No employee link for this account. Ask HR." }, { status: 404 });
   }
 
-  // 2) Fetch leave_requests for this user
-  const { data: requests } = await admin.from("leave_requests").select("*").eq("user_id", userId).order("applied_at", { ascending: false });
+  // 2) Every leave of hers, however she applied for it.
+  //
+  // Keyed on employee_id rather than user_id: a leave she filed without
+  // signing in has no account attached, and keying on user_id would have
+  // hidden exactly those from her — including, before the merge, any leave
+  // the office typed in on her behalf.
+  // One literal string, not a concatenation: supabase-js infers the row type
+  // by parsing this at the type level, and a `+` turns it into an opaque
+  // string, which costs you every field name on the way out.
+  const { data: requests } = await admin
+    .from("leave_requests")
+    .select("id, employee_id, leave_type, start_date, end_date, total_days, reason, status, reviewer_note, applied_at, reviewed_at, source, half_day")
+    .eq("employee_id", link.employee_id)
+    .order("applied_at", { ascending: false });
   const requestRows = requests || [];
 
-  // 3) Fetch portal_state and pluck this employee's leaves + leave_credits
-  // Leave credits live with each month's reconciliation, which is now in
-
-  // attendance_month rather than the portal_state blob.
-
+  // 3) Her employee record, for the entitlement, and the reconciled months,
+  //    for the credits. Leave credits live with each month's reconciliation in
+  //    attendance_month; the employee record is still in the state document.
   const [{ data: portal }, { data: monthRows }] = await Promise.all([
-
     admin.from("portal_state").select("data").eq("id", "main").maybeSingle(),
-
     admin.from("attendance_month").select("month, data"),
-
   ]);
 
   const attendanceMonths: Record<string, unknown> = {};
-
   for (const r of monthRows || []) attendanceMonths[r.month] = r.data;
-  const blobLeaves = ((portal?.data?.leaves as Array<{ id: string; employee_id: string; leave_type: string; start_date: string; end_date: string; total_days: number; reason?: string; status: string; reviewer_note?: string; applied_at?: string; reviewed_at?: string; source?: string; source_id?: string }>) || [])
-    .filter((L) => L.employee_id === link.employee_id);
 
   // Aggregate leave credits across all reconciled months for this employee
   type Credit = { employee_id: string; leave_id: string; leave_type: string; date: string; days?: number };
@@ -115,52 +139,31 @@ export async function GET(req: NextRequest) {
     };
   })();
 
-  // 4) Merge — leave_request rows are primary. For each leave_request, if there
-  //    exists a blob entry with matching source_id, prefer the blob's status &
-  //    reviewer_note (HR may have edited after approval). Blob entries with no
-  //    matching source_id (HR-only entries) are added as additional rows.
-  const blobBySourceId = new Map<string, typeof blobLeaves[0]>();
-  for (const L of blobLeaves) if (L.source_id) blobBySourceId.set(L.source_id, L);
+  // 4) One list, in the shape the teacher's screen already expects.
+  //
+  // What stood here was forty lines reconciling two systems: match each table
+  // row to a blob entry by source_id, let the blob's values win field by
+  // field, then append the blob entries that matched nothing. `source` used
+  // to mean which of the two systems a leave came out of. It now means how
+  // the leave was applied for, which is the question anyone actually has.
+  const leaves = requestRows.map((r) => ({
+    id: r.id,
+    leave_type: r.leave_type,
+    start_date: r.start_date,
+    end_date: r.end_date,
+    // numeric can arrive as a string, and this number is subtracted from a
+    // balance shown to the person it is about.
+    total_days: Number(r.total_days) || 0,
+    reason: r.reason || "",
+    status: r.status,
+    reviewer_note: r.reviewer_note || undefined,
+    applied_at: r.applied_at || r.start_date + "T00:00:00Z",
+    half_day: !!r.half_day,
+    source: r.source as "portal" | "anonymous" | "hr" | "legacy",
+  }));
 
-  const seenSourceIds = new Set<string>();
-  const merged: Array<{ id: string; leave_type: string; start_date: string; end_date: string; total_days: number; reason: string; status: string; reviewer_note?: string; applied_at: string; source: "request" | "blob" }> = [];
+  leaves.sort((a, b) => (b.applied_at || "").localeCompare(a.applied_at || ""));
 
-  for (const r of requestRows) {
-    const blobMatch = blobBySourceId.get(r.id);
-    if (blobMatch) seenSourceIds.add(r.id);
-    merged.push({
-      id: r.id,
-      leave_type: blobMatch?.leave_type || r.leave_type,
-      start_date: blobMatch?.start_date || r.start_date,
-      end_date: blobMatch?.end_date || r.end_date,
-      total_days: Number(blobMatch?.total_days ?? r.total_days),
-      reason: blobMatch?.reason || r.reason || "",
-      status: blobMatch?.status || r.status,
-      reviewer_note: blobMatch?.reviewer_note || r.reviewer_note || undefined,
-      applied_at: r.applied_at,
-      source: "request",
-    });
-  }
-
-  for (const L of blobLeaves) {
-    if (L.source_id && seenSourceIds.has(L.source_id)) continue;
-    merged.push({
-      id: L.id,
-      leave_type: L.leave_type,
-      start_date: L.start_date,
-      end_date: L.end_date,
-      total_days: Number(L.total_days || 0),
-      reason: L.reason || "",
-      status: L.status,
-      reviewer_note: L.reviewer_note,
-      applied_at: L.applied_at || L.start_date + "T00:00:00Z",
-      source: "blob",
-    });
-  }
-
-  // 5) Sort newest first by applied_at
-  merged.sort((a, b) => (b.applied_at || "").localeCompare(a.applied_at || ""));
-
-  return NextResponse.json({ ok: true, leaves: merged, credits, carry_forward: carryForward, legacy_override: legacyOverride,
-    allowance, employee: link });
+  return NextResponse.json({ ok: true, leaves, credits, carry_forward: carryForward,
+    legacy_override: legacyOverride, allowance, employee: link });
 }

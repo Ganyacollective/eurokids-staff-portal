@@ -613,11 +613,47 @@ function isHrEmail(email){ return HR_EMAILS.includes((email || '').toLowerCase()
 // rewrites only the month that actually changed rather than a ~900 KB blob.
 let _monthSnapshots = {};
 
+/* Leaves live in one place now: the leave_requests table.
+   ────────────────────────────────────────────────────────────────────────
+   They used to live in two. This blob held an array called `leaves`, and the
+   table held the applications teachers filed after signing in — so the Leave
+   Applications tab and the Inbox each saw about half the truth, and a
+   balance read differently depending on which screen you stood on. The
+   table is now the only system of record; `state.leaves` is a read-through
+   copy of it, kept in the old shape so the twenty-odd places that reconcile
+   attendance and compute pay carry on working untouched.
+
+   LEAVE_COLS is explicit rather than '*' so a new column cannot silently
+   change the shape every one of those places depends on. */
+const LEAVE_COLS = 'id, user_id, employee_id, leave_type, start_date, end_date,'
+                 + ' total_days, reason, status, reviewer_note, applied_at,'
+                 + ' reviewed_at, reviewed_by, source, source_details, half_day, legacy_blob_id';
+
+/* total_days is numeric in Postgres, and numeric can arrive as a string.
+   Payroll multiplies by it, and "3" * rate is fine while "3" + days is not,
+   so it is coerced once here rather than hoped about at each call site. */
+const leaveRow = r => ({ ...r, total_days: Number(r.total_days) || 0 });
+
+async function loadLeaves(){
+  const { data, error } = await getSb().from('leave_requests')
+    .select(LEAVE_COLS).order('start_date', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(leaveRow);
+}
+
+/* Re-read after a write, so the screen shows what the database actually
+   holds rather than what we hoped it would hold. */
+async function reloadLeaves(){
+  try { state.leaves = await loadLeaves(); }
+  catch (e) { console.error('[reloadLeaves]', e); }
+}
+
 async function loadState(){
   const sb = getSb();
-  const [core, months] = await Promise.all([
+  const [core, months, leaves] = await Promise.all([
     sb.from('portal_state').select('data, updated_at').eq('id', PORTAL_ROW_ID).maybeSingle(),
     sb.from('attendance_month').select('month, data'),
+    sb.from('leave_requests').select(LEAVE_COLS).order('start_date', { ascending: true }),
   ]);
 
   if (core.error && core.error.code !== 'PGRST116') {  // PGRST116 = no row yet, fine on first run
@@ -628,6 +664,11 @@ async function loadState(){
   if (months.error) {
     console.error('[loadState:attendance]', months.error);
     alert('Could not fetch attendance: ' + months.error.message);
+    return;
+  }
+  if (leaves.error) {
+    console.error('[loadState:leaves]', leaves.error);
+    alert('Could not fetch leave applications: ' + leaves.error.message);
     return;
   }
 
@@ -644,6 +685,11 @@ async function loadState(){
     state.attendanceMonths[row.month] = row.data;
     _monthSnapshots[row.month] = JSON.stringify(row.data);
   }
+
+  // Whatever the blob still carries under `leaves` is the retired copy. The
+  // table wins, always, so the stale array never gets a chance to be read.
+  state.leaves = (leaves.data || []).map(leaveRow);
+
   _stateLoaded = true;
 }
 
@@ -651,6 +697,11 @@ async function loadState(){
 function stripMonths(s){
   const core = { ...s };
   delete core.attendanceMonths;
+  // Leaves are the leave_requests table's business now. state.leaves is a
+  // read-through copy of it, and writing that copy back here would recreate
+  // the second system this merge removed — and would quietly overwrite
+  // anything another screen had changed in the meantime.
+  delete core.leaves;
   // A salary must never find its way back into the blob HR can read, whatever
   // an older cached page or a stray edit tries to put there.
   if (Array.isArray(core.employees)) {
@@ -719,20 +770,10 @@ async function _flushSave(){
     const dirty = Object.keys(live).filter(m => JSON.stringify(live[m]) !== _monthSnapshots[m]);
     const removed = Object.keys(_monthSnapshots).filter(m => !(m in live));
 
-    // Teachers apply for leave without signing in, and that path appends to the
-    // blob on the server. Before overwriting it with what this browser holds,
-    // pull in any application that arrived since we loaded — otherwise HR's
-    // next save silently erased it.
-    try {
-      const { data: fresh } = await sb.from('portal_state').select('data->leaves').eq('id', PORTAL_ROW_ID).maybeSingle();
-      const remote = (fresh && fresh.leaves) || [];
-      const have = new Set((state.leaves || []).map(l => l.id));
-      const missing = remote.filter(l => l && l.id && !have.has(l.id) && l.source === 'anonymous_portal');
-      if (missing.length) {
-        state.leaves = [...(state.leaves || []), ...missing];
-        console.info(`[saveState] merged ${missing.length} leave application(s) submitted while this page was open`);
-      }
-    } catch (_) { /* best effort — never block a save on this */ }
+    // This used to re-read the blob's `leaves` array and merge back anything a
+    // teacher had applied for while the page was open, because otherwise HR's
+    // next save overwrote it. Leaves are rows in their own table now, so a
+    // save here cannot touch them and there is nothing to rescue.
 
     let { error } = await sb.from('portal_state')
       .upsert({ id: PORTAL_ROW_ID, data: stripMonths(state), updated_at: stamp });
@@ -1822,38 +1863,38 @@ function renderAll(){
 }
 
 function updateNavBadges(){
-  // Pending = manual state.leaves pending + portal-submitted requests not yet promoted into blob
-  const blobSourceIds = new Set();
-  for (const L of state.leaves) if (L.source_id) blobSourceIds.add(L.source_id);
-  const portalPending = (_inbox || []).filter(r => r.status === 'Pending' && !blobSourceIds.has(r.id)).length;
-  const blobPending = state.leaves.filter(L => L.status === "Pending").length;
-  const pending = blobPending + portalPending;
+  // One pending count, because there is one list. This used to add a blob
+  // tally to a table tally while subtracting the overlap, and the two badges
+  // could disagree with each other about the same applications.
+  const pending = (state.leaves || []).filter(L => L.status === "Pending").length;
   const navP = document.getElementById('nav-pending');
   navP.textContent = pending; navP.classList.toggle('hidden', pending===0);
   const m = state.attendanceMonths[state.activeMonth];
   const a = m?.anomalies?.length || 0;
   const navA = document.getElementById('nav-anom');
   navA.textContent = a; navA.classList.toggle('hidden', a===0);
-  const inboxCount = (_inbox || []).filter(r => r.status === 'Pending').length;
   const navI = document.getElementById('nav-inbox');
-  navI.textContent = inboxCount; navI.classList.toggle('hidden', inboxCount === 0);
+  navI.textContent = pending; navI.classList.toggle('hidden', pending === 0);
 }
 
 // ============================================================
 // Inbox — teacher leave-request triage
+//
+// The Inbox and the Leave Applications tab are two views of one list now, so
+// this no longer fetches anything of its own. It used to read leave_requests
+// while the tab read the blob, which is how the same application could be
+// pending in one place and approved in the other.
 // ============================================================
 let _inbox = [];
 
+function rebuildInbox(){
+  _inbox = [...(state.leaves || [])].sort((a, b) =>
+    String(b.applied_at || '').localeCompare(String(a.applied_at || '')));
+}
+
 async function loadInbox(){
-  try {
-    const sb = getSb();
-    const { data, error } = await sb.from('leave_requests')
-      .select('*')
-      .order('applied_at', { ascending: false })
-      .limit(500);
-    if (error) { console.error('[loadInbox]', error); _inbox = []; return; }
-    _inbox = data || [];
-  } catch (e) { console.error('[loadInbox]', e); _inbox = []; }
+  await reloadLeaves();
+  rebuildInbox();
 }
 
 async function refreshInbox(){
@@ -1940,7 +1981,6 @@ async function approveRequest(id){
   try {
     const sb = getSb();
     const { data: { user } } = await sb.auth.getUser();
-    // 1) Update the leave_requests row
     const { error: updErr } = await sb.from('leave_requests').update({
       status: 'Approved',
       reviewed_at: new Date().toISOString(),
@@ -1948,25 +1988,14 @@ async function approveRequest(id){
     }).eq('id', id);
     if (updErr) return alert('Approval failed: ' + updErr.message);
 
-    // 2) Promote into the blob's leaves array so the reconciliation engine consumes it
-    state.leaves.push({
-      id: uid(),
-      employee_id: r.employee_id,
-      leave_type:  r.leave_type,
-      start_date:  r.start_date,
-      end_date:    r.end_date,
-      total_days:  parseFloat(r.total_days),
-      reason:      r.reason || '',
-      status:      'Approved',
-      applied_at:  r.applied_at,
-      reviewed_at: new Date().toISOString(),
-      source:      'teacher_portal',
-      source_id:   r.id,
-    });
-    await saveStateNow();
+    // There used to be a second step here: copy the approved row into the
+    // blob's leaves array, because that was the only array the reconciliation
+    // engine read. That copy is what made one application exist twice, under
+    // two ids, free to drift apart. The engine reads state.leaves, and
+    // state.leaves is this table, so re-reading it is the whole job.
+    await loadInbox();
     rerunActiveMonth();
     const sent = await tellTeacher(id, 'approved');
-    await loadInbox();
     renderAll();
     if (sent && !sent.ok) alert('Approved — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
   } catch (e) { alert('Approval failed: ' + e.message); }
@@ -1975,23 +2004,27 @@ async function approveRequest(id){
 async function rejectRequest(id){
   const r = _inbox.find(x => x.id === id);
   if (!r) return;
-  const note = prompt('Reason for rejection (visible to the teacher):', '');
+  // The reason is not optional. It is the whole content of the email the
+  // teacher gets, and "not approved" with no reason is how an argument in
+  // the corridor starts.
+  const note = prompt('Why is this being rejected? The teacher will be told, in these words:', '');
   if (note === null) return;
+  if (!note.trim()) return alert('A reason is needed — the teacher is told what you write here.');
 
   try {
     const sb = getSb();
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from('leave_requests').update({
       status: 'Rejected',
-      reviewer_note: note,
+      reviewer_note: note.trim(),
       reviewed_at: new Date().toISOString(),
       reviewed_by: user.id,
     }).eq('id', id);
     if (error) return alert('Rejection failed: ' + error.message);
-    const sent = await tellTeacher(id, 'rejected');
     await loadInbox();
-    renderInbox();
-    updateNavBadges();
+    rerunActiveMonth();
+    const sent = await tellTeacher(id, 'rejected');
+    renderAll();
     if (sent && !sent.ok) alert('Recorded — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
   } catch (e) { alert('Rejection failed: ' + e.message); }
 }
@@ -2476,60 +2509,40 @@ function renderLeaves(){
   const tbody = document.getElementById('leaves-tbody');
   const tabPend = document.getElementById('leaves-tab-pending');
 
-  // Merge HR blob leaves with teacher-portal-submitted requests (deduped by source_id).
-  // For requests already promoted into the blob (HR approved via Inbox), the blob is canonical.
-  // Pending / rejected requests not in the blob are surfaced here too.
-  const blobBySourceId = new Map();
-  for (const L of state.leaves) if (L.source_id) blobBySourceId.set(L.source_id, L);
-
-  const fromRequests = (_inbox || [])
-    .filter(r => !blobBySourceId.has(r.id))
-    .map(r => ({
-      id: r.id,
-      employee_id: r.employee_id,
-      leave_type: r.leave_type,
-      start_date: r.start_date,
-      end_date: r.end_date,
-      total_days: parseFloat(r.total_days),
-      reason: r.reason || '',
-      status: r.status,
-      reviewer_note: r.reviewer_note || '',
-      applied_at: r.applied_at,
-      _origin: 'portal',   // came from teacher portal — not yet in blob
-    }));
-
-  const allLeaves = [
-    ...state.leaves.map(L => ({ ...L, _origin: L.source === 'teacher_portal' ? 'portal' : 'manual' })),
-    ...fromRequests,
-  ];
+  // One list. This used to merge the blob's array with a separate fetch of
+  // leave_requests, deduped by source_id, with the blob winning where both
+  // held a copy — and any application the dedupe missed appeared twice while
+  // any it over-matched disappeared. There is one row per application now.
+  const allLeaves = state.leaves || [];
 
   const pendingCount = allLeaves.filter(L => L.status === 'Pending').length;
   if (pendingCount > 0) { tabPend.textContent = `(${pendingCount})`; } else tabPend.textContent = '';
 
   let list = allLeaves;
   if (leavesTab !== "all") list = list.filter(L => L.status === leavesTab);
-  list.sort((a,b) => (b.applied_at||'').localeCompare(a.applied_at||''));
+  list = [...list].sort((a,b) => (b.applied_at||'').localeCompare(a.applied_at||''));
 
   if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-gray-500 py-12">No leave applications in this view.</td></tr>`; return; }
   tbody.innerHTML = list.map(L => {
     const e = empById(L.employee_id);
-    const isPortal = L._origin === 'portal' && !L.source_id;  // unpromoted teacher-portal request
-    const originBadge = L._origin === 'portal'
-      ? '<span class="text-[10px] font-semibold uppercase tracking-wider text-eurokids-blue ml-1">via portal</span>'
+    // How it arrived, which is still worth knowing: 'anonymous' means it was
+    // filed from the login screen without signing in, so nobody authenticated
+    // it, and 'legacy' means it predates this table.
+    const originBadge = L.source === 'anonymous'
+      ? '<span class="text-[10px] font-semibold uppercase tracking-wider text-amber-700 ml-1" title="Filed from the login screen without signing in">not signed in</span>'
+      : L.source === 'legacy'
+      ? '<span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 ml-1" title="Recorded before the leave table existed">legacy</span>'
+      : L.source === 'hr'
+      ? '<span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 ml-1" title="Entered by the office">entered by office</span>'
       : '';
-    // For unpromoted teacher-portal requests, Approve/Reject route through the Inbox handlers
-    // so the leave_requests row gets properly updated and the blob promotion happens.
+    // Every row is a row in the same table now, so every row uses the same
+    // handlers. There is no longer an "unpromoted" kind that could only be
+    // triaged from the Inbox and not edited here.
     const actionButtons = L.status === 'Pending'
-      ? (isPortal
-          ? ` · <button onclick="approveRequest('${L.id}')" class="btn-link" style="color:#15803D">Approve</button> · <button onclick="rejectRequest('${L.id}')" class="btn-link" style="color:#B91C1C">Reject</button>`
-          : ` · <button onclick="approveLeave('${L.id}')" class="btn-link" style="color:#15803D">Approve</button> · <button onclick="rejectLeave('${L.id}')" class="btn-link" style="color:#B91C1C">Reject</button>`)
+      ? ` · <button onclick="approveRequest('${L.id}')" class="btn-link" style="color:#15803D">Approve</button> · <button onclick="rejectRequest('${L.id}')" class="btn-link" style="color:#B91C1C">Reject</button>`
       : '';
-    const editButton = isPortal
-      ? ''  // teacher-portal requests aren't editable from HR side until promoted; use Inbox for triage
-      : `<button onclick="openLeaveForm('${L.id}')" class="btn-link">Edit</button>`;
-    const deleteButton = isPortal
-      ? ''  // can't delete portal requests directly — reject them instead
-      : ` · <button onclick="deleteLeave('${L.id}')" class="btn-danger">Delete</button>`;
+    const editButton   = `<button onclick="openLeaveForm('${L.id}')" class="btn-link">Edit</button>`;
+    const deleteButton = ` · <button onclick="deleteLeave('${L.id}')" class="btn-danger">Delete</button>`;
     return `<tr>
       <td class="font-medium">${e?.display_name||"?"}${originBadge}</td>
       <td><span class="badge ${L.leave_type==='EL'?'b-el':L.leave_type==='CL'?'b-cl':'b-lwp'}">${L.leave_type}</span></td>
@@ -2601,32 +2614,31 @@ function appliedCell(L){
           <div style="${colour}">${escapeHtml(n.text)}</div>`;
 }
 
-async function approveLeave(id){
-  const L = state.leaves.find(x=>x.id===id); if (!L) return;
-  L.status = "Approved"; L.reviewed_at = new Date().toISOString();
-  await saveStateNow();
-  rerunForDateRange(L.start_date, L.end_date); renderAll();
-  const sent = await tellTeacher(id, 'approved');
-  if (sent && !sent.ok) alert('Approved — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
-}
-async function rejectLeave(id){
-  const L = state.leaves.find(x=>x.id===id); if (!L) return;
-  const note = prompt("Rejection reason (optional):", "");
-  if (note === null) return;
-  L.status = "Rejected"; L.reviewed_at = new Date().toISOString(); L.reviewer_note = note || "";
-  await saveStateNow();
-  rerunForDateRange(L.start_date, L.end_date); renderAll();
-  const sent = await tellTeacher(id, 'rejected');
-  if (sent && !sent.ok) alert('Recorded — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
-}
-function deleteLeave(id){
-  if (!confirm("Delete this leave application?")) return;
-  const L = state.leaves.find(x => x.id === id);
-  const s = L?.start_date, e = L?.end_date;
-  state.leaves = state.leaves.filter(x => x.id !== id);
-  saveState();
-  if (s && e) rerunForDateRange(s, e);
-  renderAll();
+/* approveLeave and rejectLeave used to be the blob's own pair of decision
+   handlers, sitting alongside approveRequest and rejectRequest which did the
+   same job to the table. Two ways to approve the same thing is how a leave
+   came to be Approved on one screen and Pending on another — and how the
+   email refused to send, correctly, on stale data. They are kept only as
+   names, forwarding to the one implementation, so any handler or bookmark
+   still pointing here lands somewhere real. */
+const approveLeave = id => approveRequest(id);
+const rejectLeave  = id => rejectRequest(id);
+
+async function deleteLeave(id){
+  const L = (state.leaves || []).find(x => x.id === id);
+  if (!L) return;
+  const e = empById(L.employee_id);
+  if (!confirm(`Delete ${L.leave_type} for ${e?.display_name || 'this person'}, `
+             + `${fmtDateShort(L.start_date)} to ${fmtDateShort(L.end_date)}?\n\n`
+             + `This removes the application entirely and cannot be undone. To refuse it `
+             + `and tell the teacher why, use Reject instead.`)) return;
+  try {
+    const { error } = await getSb().from('leave_requests').delete().eq('id', id);
+    if (error) return alert('Could not delete it: ' + error.message);
+    await loadInbox();
+    rerunForDateRange(L.start_date, L.end_date);
+    renderAll();
+  } catch (err) { alert('Could not delete it: ' + err.message); }
 }
 
 // Re-runs reconciliation for the active month so leave changes propagate
@@ -4095,7 +4107,6 @@ async function saveLeave(id){
   // they hear about it.
   const wasStatus = prev?.status || null;
   const decidedNow = status !== wasStatus && (status === 'Approved' || status === 'Rejected');
-  const材 = null;  // placeholder removed below
   const changedDetails = !!prev && (status === 'Approved' || status === 'Rejected') && (
     prev.start_date !== start || prev.end_date !== end ||
     String(prev.total_days) !== String(days) || prev.leave_type !== type ||
@@ -4103,16 +4114,49 @@ async function saveLeave(id){
   );
   const decided = decidedNow || changedDetails;
 
+  // One write, straight to the table, and awaited. The old version mutated
+  // the in-memory blob and relied on a debounced save catching up, which is
+  // the race that made /api/leave-decision read back a Pending row and refuse
+  // to send the email it had just been asked to send.
+  const sb = getSb();
+  let reviewer = null;
+  try { reviewer = (await sb.auth.getUser()).data?.user?.id || null; } catch (_) {}
+
+  const row = {
+    employee_id: empId,
+    leave_type: type,
+    status,
+    start_date: start,
+    end_date: end,
+    total_days: days,
+    reason,
+    reviewer_note: note,
+    half_day: days === 0.5 && start === end,
+    reviewed_at: status !== 'Pending' ? new Date().toISOString() : null,
+    reviewed_by: status !== 'Pending' ? reviewer : null,
+  };
+
   if (id) {
-    const L = state.leaves.find(x=>x.id===id);
-    Object.assign(L, { employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note });
-    if (status !== "Pending") L.reviewed_at = new Date().toISOString();
+    const { error } = await sb.from('leave_requests').update(row).eq('id', id);
+    if (error) return alert('Could not save the leave: ' + error.message);
   } else {
-    state.leaves.push({ id: uid(), employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note, applied_at:new Date().toISOString(), reviewed_at: status!=="Pending" ? new Date().toISOString() : null });
+    // Entered by the office rather than applied for, and marked as such so
+    // the list can say so and nobody is emailed about a record they never
+    // submitted.
+    const { error } = await sb.from('leave_requests').insert({
+      ...row,
+      source: 'hr',
+      source_details: 'Entered in the staff portal by the office',
+      applied_at: new Date().toISOString(),
+      user_id: null,
+    });
+    if (error) {
+      return alert(error.code === '23505'
+        ? 'There is already a live application for that person over those exact dates.'
+        : 'Could not save the leave: ' + error.message);
+    }
   }
-  // Wait for the write, or the server reads the old status back and refuses
-  // to send — the same race that made approving look broken.
-  await saveStateNow();
+  await loadInbox();
   rerunForDateRange(start, end);
   if (prevStart && prevEnd && (prevStart !== start || prevEnd !== end)) rerunForDateRange(prevStart, prevEnd);
   renderAll();
