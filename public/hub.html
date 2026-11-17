@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=111">
-<link rel="prefetch" href="/brand/enquiries.js?v=111" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=112">
+<link rel="prefetch" href="/brand/enquiries.js?v=112" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -5725,6 +5725,46 @@ function statementHtml(c, ledger, items){
     })()}`;
 }
 
+// What a parent has already been given, and what that is against everyone
+// else.
+//
+// This sits above the fee block because it is the thing the conversation is
+// actually about. A parent comes back at enrolment and asks for more, and
+// the number on its own is no help — "we gave you seven and a half thousand"
+// invites "so give me nine". The same number with its standing against the
+// other fifty-one is an answer: this is already the largest concession in
+// the school, against an average of under four thousand.
+//
+// The year comes out of the UIN, which has carried it all along in its last
+// segment and which nothing had ever read. Today every child has exactly one
+// year so the history is one line; the structure is here so that when 27-28
+// UINs start arriving it has somewhere to go.
+function concessionPanel(c){
+  if (!c) return '';                      // not a finance user, or no plan yet
+  const amt = Number(c.amount || 0);
+  const tile = (cap, n, sub) =>
+    `<div class="snap-tile"><span class="cap">${cap}</span>
+       <span class="n${n === null ? ' none' : ''}">${n === null ? '&mdash;' : n}</span>
+       <span class="sub">${sub || ''}</span></div>`;
+  const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th','st','nd','rd'][n % 10] || 'th');
+  return `<div class="grp sec s-conc"><h3>Concession${c.academic_year ? ' &middot; ' + esc(c.academic_year) : ''}</h3>
+    <div class="box">
+      <div class="snap-tiles">
+        ${tile('Given', amt > 0 ? money(amt) : null,
+               amt > 0 && c.pct_of_fee ? c.pct_of_fee + '% of the fee' : 'nothing off our margin')}
+        ${tile('Standing', amt > 0 ? ord(Number(c.rank_in_year)) : null,
+               amt > 0 ? `of ${c.given_count} given` : `${c.given_count} families have one`)}
+        ${tile('Typical', money(c.avg_amount || 0), `most given ${money(c.max_amount || 0)}`)}
+      </div>
+      <div class="row"><div class="l">What for</div>
+        <div class="v ${c.reason ? '' : 'mute'}">${c.reason ? esc(c.reason) : 'not recorded'}</div></div>
+      <div class="row"><div class="l">Agreed</div>
+        <div class="v ${c.agreed_on ? '' : 'mute'}">${c.agreed_on ? longDate(c.agreed_on) : '&mdash;'}</div></div>
+      <div class="row"><div class="l">All concessions this year<span class="sub">across every child on the roll</span></div>
+        <div class="v">${money(c.year_total || 0)}</div></div>
+    </div></div>`;
+}
+
 async function openPlan(uin){
   _planUin = uin;
   _unsaved = null;          // the sheet being replaced no longer has a claim
@@ -5747,7 +5787,7 @@ async function openPlan(uin){
   // the money depends on did not arrive, the sheet says so and offers to retry
   // rather than presenting a half-loaded statement as fact.
   const q = p => p.then(r => r, e => ({ data: null, error: e }));
-  const [kidRes, planRes, itemRes, contactRes, ledgerRes, promiseRes, mailRes] = await Promise.all([
+  const [kidRes, planRes, itemRes, contactRes, ledgerRes, promiseRes, mailRes, concRes] = await Promise.all([
     // Always re-read this child, even when the roster gave us a row to paint
     // instantly: that copy can be minutes old, and a fee that changed in the
     // meantime would otherwise sit on screen as though it were current.
@@ -5758,6 +5798,7 @@ async function openPlan(uin){
     q(s.schema('eurokids').from('v_child_ledger').select('*').eq('uin', uin).order('on_date')),
     q(s.schema('eurokids').from('payment_promise').select('*').eq('uin', uin).order('promised_on', { ascending: false }).limit(20)),
     q(s.schema('eurokids').from('email_message').select('sent_at,subject,to_addrs,status').eq('uin', uin).order('sent_at', { ascending: false }).limit(20)),
+    q(s.schema('eurokids').from('v_concession').select('*').eq('uin', uin).maybeSingle()),
   ]);
   const lost = [kidRes, planRes, itemRes, ledgerRes].find(r => r && r.error);
   if (lost) {
@@ -5769,7 +5810,8 @@ async function openPlan(uin){
     return;
   }
   const plan = planRes.data, items = itemRes.data, contact = contactRes.data,
-        ledger = ledgerRes.data, promises = promiseRes.data, mails = mailRes.data;
+        ledger = ledgerRes.data, promises = promiseRes.data, mails = mailRes.data,
+        conc = concRes.data;
   const kid = kidRes.data || known;
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
   const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
@@ -5781,6 +5823,8 @@ async function openPlan(uin){
   const openPromise = (promises || []).find(p => p.status === 'open');
   body.innerHTML = `
     ${statementHtml(kid || {}, ledger, items)}
+
+    ${concessionPanel(conc)}
 
     <div class="grp sec s-money"><h3>Fee</h3><div class="box">
       ${Number(kid?.list_fee) > 0 ? `<div class="row"><div class="l">Full fee for the year<span class="sub">${esc(kid.program_name || '')} joining ${kid.admission_date ? longDate(kid.admission_date) : '—'}, from the EuroKids fee calculator</span></div>
@@ -6343,7 +6387,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=111"></script>
+<script src="/brand/enquiries.js?v=112"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

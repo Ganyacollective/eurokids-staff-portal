@@ -970,3 +970,11 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .ui2 .sec:not(:has(.sechd))>h3{display:block;margin:0 0 8px 6px;
   font-size:11.5px;line-height:15px;font-weight:700;letter-spacing:.075em;
   text-transform:uppercase;color:var(--tk)}
+
+/* Concession gets its own hue because it is the one block on this sheet that
+   is an argument rather than a record — it is read when a parent is sitting
+   opposite asking for more. */
+.ui2 .s-conc{ --t1:#FBE8CF; --t2:#FDF6EC; --tk:#8A5A13 }
+.ui2 .s-conc .snap-tiles{grid-template-columns:1fr 1fr 1fr;margin:0;padding:12px 13px 13px;gap:8px}
+.ui2 .s-conc .snap-tile{background:rgba(255,255,255,.8);box-shadow:none}
+.ui2 .s-conc .snap-tile .cap{color:color-mix(in srgb, var(--tk) 62%, var(--label-3))}
