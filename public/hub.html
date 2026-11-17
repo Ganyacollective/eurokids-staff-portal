@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=123">
-<link rel="prefetch" href="/brand/enquiries.js?v=123" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=124">
+<link rel="prefetch" href="/brand/enquiries.js?v=124" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -111,6 +111,31 @@ const curAY = () => { const d = new Date(), y = d.getFullYear(), a = d.getMonth(
   return String(a).slice(2) + '-' + String(a + 1).slice(2); };
 let _ay = (() => { try { return localStorage.getItem('ek-ay') || curAY(); } catch (_) { return curAY(); } })();
 let _ayAll = [];
+
+// Which years you may choose.
+//
+// This used to be "the years the roster contains", which meant the only
+// option was ever 26-27 — the one year that has been pulled. But the choice
+// is which books you are working in, and you need to open next year's before
+// there is anything in them to find, and last year's precisely because
+// nothing new is being added to them.
+//
+// So the list is the calendar's, not the data's: three years back, the year
+// we are in, and the one ahead — plus any year the data turns out to contain,
+// in case it reaches further than that.
+const ayShift = (n) => {
+  const d = new Date(), y = d.getFullYear(), a = (d.getMonth() + 1 >= 4 ? y : y - 1) + n;
+  return String(a).slice(2) + '-' + String(a + 1).slice(2);
+};
+const ayList = () => [...new Set([
+  ayShift(1), ayShift(0), ayShift(-1), ayShift(-2), ayShift(-3),
+  ..._ayAll, _ay,
+].filter(Boolean))].sort().reverse();
+
+// The same markup wherever a year is picked, so the two never drift apart.
+const ayOptions = () => ayList().map(y =>
+    `<option value="${y}" ${y === _ay ? 'selected' : ''}>${y}${y === curAY() ? ' · this year' : ''}</option>`).join('')
+  + `<option value="all" ${_ay === 'all' ? 'selected' : ''}>All years</option>`;
 
 // One read of everything, filtered in the browser. The alternative is a
 // round trip every time somebody changes the year, to re-fetch rows that are
@@ -437,9 +462,7 @@ function renderChooser(){
   el('out').onclick = async () => { await getSb().auth.signOut(); };
   (() => {
     const sel = el('ch-ay'); if (!sel) return;
-    const years = [...new Set([..._ayAll, curAY(), _ay].filter(Boolean))].sort().reverse();
-    sel.innerHTML = years.map(y => `<option value="${y}" ${y === _ay ? 'selected' : ''}>${y}</option>`).join('')
-      + `<option value="all" ${_ay === 'all' ? 'selected' : ''}>All years</option>`;
+    sel.innerHTML = ayOptions();
     const note = () => el('ch-ay-note').textContent =
       _ay === 'all' ? 'Every year at once — useful for looking back, not for recording anything.'
       : _ay === curAY() ? 'The year we are in now.'
@@ -452,12 +475,9 @@ function renderChooser(){
     };
     // The roster is what knows which years exist, and it may not be loaded
     // yet on a cold start. Fill the list again once it is.
-    rosterRaw().then(() => {
-      if (!el('ch-ay')) return;
-      const ys = [...new Set([..._ayAll, curAY(), _ay].filter(Boolean))].sort().reverse();
-      el('ch-ay').innerHTML = ys.map(y => `<option value="${y}" ${y === _ay ? 'selected' : ''}>${y}</option>`).join('')
-        + `<option value="all" ${_ay === 'all' ? 'selected' : ''}>All years</option>`;
-    }).catch(() => {});
+    // The data may reach further back than the calendar list assumes, so
+    // refresh once the roster has said what it actually holds.
+    rosterRaw().then(() => { if (el('ch-ay')) el('ch-ay').innerHTML = ayOptions(); }).catch(() => {});
   })();
   document.querySelectorAll('.door[data-key]').forEach(b => {
     b.onclick = () => {
@@ -2644,10 +2664,11 @@ async function tabChildren(){
     el('body').innerHTML = `<div class="vhead"><h2>Children</h2>
         <div class="hint">Academic year ${esc(_ay)}</div></div>
       <div class="empty" style="padding:48px 16px"><div class="ic">🗓</div>
-        <h3>Nobody on the roll for ${esc(_ay)} yet</h3>
-        <div>Children appear here once EPMS has admitted them for this year.
-          Use the year picker at the top to look at another year${
-            _ayAll.length ? ' — so far there is ' + _ayAll.join(' and ') : ''}.</div>
+        <h3>Nothing on the roll for ${esc(_ay)}</h3>
+        <div>Two things look the same here, so neither is assumed: either nobody
+          has been admitted into ${esc(_ay)} yet, or the sync is not fetching that
+          year. The sync pulls only the years named in EPMS_FYIDS${
+            _ayAll.length ? `, and so far it has brought back ${_ayAll.join(' and ')}` : ''}.</div>
         <div style="margin-top:14px"><button class="btn line" id="ay-all">Show every year</button></div></div>`;
     el('ay-all').onclick = () => {
       _ay = 'all';
@@ -5759,9 +5780,7 @@ if (!window._slashBound) {
 function paintYearPicker(){
   const sel = el('tb-ay');
   if (!sel) return;
-  const years = [...new Set([..._ayAll, curAY(), _ay].filter(Boolean))].sort().reverse();
-  sel.innerHTML = years.map(y => `<option value="${y}" ${y === _ay ? 'selected' : ''}>${y}</option>`).join('')
-    + `<option value="all" ${_ay === 'all' ? 'selected' : ''}>All years</option>`;
+  sel.innerHTML = ayOptions();
   sel.onchange = () => {
     _ay = sel.value;
     try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
@@ -6744,7 +6763,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=123"></script>
+<script src="/brand/enquiries.js?v=124"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
