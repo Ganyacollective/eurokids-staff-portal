@@ -979,6 +979,13 @@ async function submitLeave(ev){
     }
     // Fire-and-forget notification — don't block the UI if it fails or the env isn't configured
     if (inserted?.id && session) {
+      // And a copy to the teacher, so applying produces something in their
+      // own inbox rather than silence until somebody decides.
+      fetch('/api/leave-decision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ request_id: inserted.id, kind: 'applied' }),
+      }).catch(err => console.warn('[leave-decision]', err));
       fetch('/api/notify-leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },

@@ -1892,6 +1892,26 @@ function renderInbox(){
 
 function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// Telling the teacher. Fire-and-forget on purpose: the decision is already
+// recorded by the time this runs, and a mail server having a bad minute must
+// not make an approval look like it failed. It reports quietly if it could
+// not send, so nobody assumes a message went out that did not.
+async function tellTeacher(requestId, kind){
+  try {
+    const sb = getSb();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+    const r = await fetch('/api/leave-decision', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ request_id: requestId, kind }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok) console.warn('[leave-decision] not sent:', j.error);
+    return j;
+  } catch (e) { console.warn('[leave-decision]', e); }
+}
+
 async function approveRequest(id){
   const r = _inbox.find(x => x.id === id);
   if (!r) return;
@@ -1925,8 +1945,10 @@ async function approveRequest(id){
     });
     saveState();
     rerunActiveMonth();
+    const sent = await tellTeacher(id, 'approved');
     await loadInbox();
     renderAll();
+    if (sent && !sent.ok) alert('Approved — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
   } catch (e) { alert('Approval failed: ' + e.message); }
 }
 
@@ -1946,9 +1968,11 @@ async function rejectRequest(id){
       reviewed_by: user.id,
     }).eq('id', id);
     if (error) return alert('Rejection failed: ' + error.message);
+    const sent = await tellTeacher(id, 'rejected');
     await loadInbox();
     renderInbox();
     updateNavBadges();
+    if (sent && !sent.ok) alert('Recorded — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
   } catch (e) { alert('Rejection failed: ' + e.message); }
 }
 
