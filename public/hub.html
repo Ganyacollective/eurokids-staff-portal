@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=124">
-<link rel="prefetch" href="/brand/enquiries.js?v=124" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=125">
+<link rel="prefetch" href="/brand/enquiries.js?v=125" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -3337,7 +3337,8 @@ async function tabLiability(){
           <input class="in wide" id="lb-jname" placeholder="Full name" autocomplete="off"></div>
         <div class="row"><div class="l">Admission expected<span class="sub">The month the fee will be set from</span></div>
           <input class="in" id="lb-jfrom" type="month"></div>
-      </div><div class="foot">This is tuition and it is not ours — but there is nothing to pay EuroKids yet, because they have not invoiced a child who is not on the roll. It waits in its own line until you link it.</div></div>
+      </div><div class="foot" id="lb-jyear"></div>
+      <div class="foot">This is tuition and it is not ours — but there is nothing to pay EuroKids yet, because they have not invoiced a child who is not on the roll. It waits in its own line until you link it.</div></div>
 
       <div class="grp" id="lb-child-row"><h3>Child</h3><div class="box">
         <div class="row"><div class="l">Child</div><input class="in wide" id="lb-child" list="lb-kids" placeholder="Start typing a name" autocomplete="off"><datalist id="lb-kids">${options}</datalist></div>
@@ -3393,8 +3394,45 @@ async function tabLiability(){
   el('lb-mode').addEventListener('change', toggleCheque);
   toggleCheque();
 
+  // Which academic year this money will file under, said as the month is
+  // chosen rather than discovered afterwards.
+  //
+  // Cash can arrive for next year long before the child exists in EPMS — the
+  // fee is still being argued with the centre heads and nothing can be
+  // punched in. The month entered here is the only thing that decides which
+  // year's books the receipt lands in, so it should not be a quiet
+  // consequence of a date field.
+  const ayOfMonth = m => {
+    if (!m) return null;
+    const [y, mo] = m.split('-').map(Number);
+    if (!y || !mo) return null;
+    const a = mo >= 4 ? y : y - 1;
+    return String(a).slice(2) + '-' + String(a + 1).slice(2);
+  };
+  const paintJoinYear = () => {
+    const box = el('lb-jyear'); if (!box) return;
+    const y = ayOfMonth((el('lb-jfrom')?.value || '').trim());
+    if (!y) { box.textContent = 'Pick the month the admission is expected from.'; box.className = 'foot'; return; }
+    if (_ay !== 'all' && y !== _ay) {
+      box.innerHTML = `<span style="color:var(--orange)">This files under <strong>${esc(y)}</strong>, `
+        + `but you are working in <strong>${esc(_ay)}</strong> — it will not appear on this screen afterwards. `
+        + `Change the month, or switch year first.</span>`;
+    } else {
+      box.innerHTML = `Files under <strong>${esc(y)}</strong>.`;
+    }
+    box.className = 'foot';
+  };
+
   const setWho = who => {
     _liab.who = who;
+    // Default the month to April of the year being worked in, which is the
+    // answer nine times in ten when somebody has switched to next year in
+    // order to record exactly this.
+    if (who === 'joining' && el('lb-jfrom') && !el('lb-jfrom').value && _ay !== 'all') {
+      const start = 2000 + Number(String(_ay).slice(0, 2));
+      el('lb-jfrom').value = `${start}-04`;
+    }
+    if (who === 'joining') paintJoinYear();
     el('lb-t-child').classList.toggle('on', who === 'child');
     el('lb-t-joining').classList.toggle('on', who === 'joining');
     el('lb-t-other').classList.toggle('on', who === 'other');
@@ -3431,6 +3469,7 @@ async function tabLiability(){
     const other = _liab.who !== 'child' || el('lb-purpose').value === 'other';
     el('lb-purpose-note-wrap').style.display = other ? '' : 'none';
   };
+  if (el('lb-jfrom')) el('lb-jfrom').oninput = () => { paintJoinYear(); lbDraftSave(); };
   el('lb-t-child').onclick = () => { setWho('child'); lbDraftSave(); };
   el('lb-t-joining').onclick = () => { setWho('joining'); lbDraftSave(); };
   el('lb-t-other').onclick = () => { setWho('other'); lbDraftSave(); };
@@ -6763,7 +6802,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=124"></script>
+<script src="/brand/enquiries.js?v=125"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
