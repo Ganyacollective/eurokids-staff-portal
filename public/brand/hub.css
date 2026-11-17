@@ -1013,3 +1013,22 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 /* Concession keeps its tiles, not a colour. */
 .ui2 .s-conc .snap-tiles{grid-template-columns:1fr 1fr 1fr;margin:0;padding:12px 13px 13px;gap:8px}
 .ui2 .s-conc .snap-tile{background:var(--bg-grouped);box-shadow:none}
+
+/* The academic year belongs to the whole app, so it sits with the app's name
+   rather than in the top bar.
+   In the bar it was a lone control floating in an otherwise empty strip,
+   unlabelled, pushing every page down by its height to say one word. Here it
+   is next to "Fees & Children", which is the thing it qualifies, and it is
+   always on screen without costing the content any room. */
+.sb-ay{margin:0 10px 10px}
+.sb-ay label{display:block;font-size:10.5px;line-height:14px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--label-3);margin-bottom:4px}
+.sb-ay select{width:100%;appearance:none;-webkit-appearance:none;cursor:pointer;
+  font:inherit;font-size:var(--fs-co);font-weight:600;color:var(--label);
+  padding:7px 26px 7px 10px;min-height:32px;border:0;border-radius:8px;
+  background:rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(0,0,0,.07);
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239A9AA3' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center}
+.sb-ay select:hover{background-color:#fff}
+.sb-ay select:focus{outline:none;box-shadow:var(--focus)}
+@media(max-width:767px){ .sb-ay{margin:0 0 8px;min-width:150px} .sb-ay label{display:none} }

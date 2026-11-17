@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=121">
-<link rel="prefetch" href="/brand/enquiries.js?v=121" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=122">
+<link rel="prefetch" href="/brand/enquiries.js?v=122" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -614,6 +614,8 @@ function renderApp(){
       <nav class="sb" id="sb">
         <div class="sb-brand"><span class="dot"></span><span>EuroKids JMD</span></div>
         <div class="hint" style="margin:-10px 0 6px 10px;font-size:12px">${APP_NAME[app] || ''}</div>
+        ${app === 'admissions' ? `<div class="sb-ay"><label for="tb-ay">Academic year</label>
+          <select id="tb-ay" title="Which academic year the roster shows"></select></div>` : ''}
         ${SECTIONS.map(sec => { const ts = avail.filter(t => TABS[t].sect === sec); return ts.length
           ? `<div class="sb-h">${sec}</div>${ts.map(item).join('')}` : ''; }).join('')}
         <div class="sb-h">Apps</div>
@@ -624,8 +626,7 @@ function renderApp(){
         <div class="sb-foot"><span title="${esc(session.user.email)}">${esc(who)}</span><a id="out">Sign Out</a></div>
       </nav>
       <main class="main" id="main">
-        <div class="tbar" id="tbar"><button class="ib" id="tb-back" aria-label="All apps" style="display:none">${ICON.back}</button><div class="tt" id="tb-title"></div>
-          <div id="tb-right">${app === 'admissions' ? `<select class="in" id="tb-ay" title="Which academic year the roster shows" style="width:auto;min-width:112px"></select>` : ''}</div></div>
+        <div class="tbar" id="tbar"><button class="ib" id="tb-back" aria-label="All apps" style="display:none">${ICON.back}</button><div class="tt" id="tb-title"></div><div></div></div>
         <div class="content" id="body"><div class="loading">Loading…</div></div>
         <nav class="tabbar" id="tabbar"></nav>
       </main></div>`;
@@ -2563,9 +2564,21 @@ function wireSync(s, afterSync){
             if (bits.length) matched = ' · ' + bits.join(' · ');
           } catch (_) { /* matching is a convenience, never a blocker */ }
 
+          // Which academic years this run actually asked EPMS for.
+          //
+          // The sync can pull more than one year now, and after the first run
+          // there was no way to tell whether it had: 27-28 has no children in
+          // it yet, so one year and two years both finish with 230 rows and
+          // look identical. The answer was in the response the whole time and
+          // nothing showed it.
+          const yrs = Array.isArray(j.years) && j.years.length
+            ? ' · years ' + j.years.map(f => ({ '23':'24-25','24':'25-26','25':'26-27','26':'27-28' }[String(f)] || 'FYID ' + f))
+                .join(', ') + (j.rows_per_year
+                  ? ' (' + Object.values(j.rows_per_year).join('/') + ')' : '')
+            : '';
           el('sync-info').textContent = (j.new_payments
             ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
-            : `Synced ${j.invoices} records · ${j.active} active`) + extra + matched;
+            : `Synced ${j.invoices} records · ${j.active} active`) + yrs + extra + matched;
           b.textContent = 'Synced ✓';
           invalidate();                    // everyone's next read is the new figures
           setTimeout(afterSync, 900);
@@ -6670,7 +6683,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=121"></script>
+<script src="/brand/enquiries.js?v=122"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
