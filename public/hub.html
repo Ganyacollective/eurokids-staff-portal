@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=114">
-<link rel="prefetch" href="/brand/enquiries.js?v=114" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=115">
+<link rel="prefetch" href="/brand/enquiries.js?v=115" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -3879,8 +3879,16 @@ async function dcOpenCustomer(id){
         <span class="chip ${m.status === 'sent' ? 'c-good' : m.status === 'failed' ? 'c-crit' : ''}">${esc(m.status)}</span>
       </div>`).join('') || '<div class="rowx hint">Nothing sent yet.</div>'}
     </div><div class="foot">Every invoice, reminder and letter, whether or not it arrived.</div></div>`;
-  el('drawer-foot').innerHTML = `<button class="btn line" id="cu-close">Close</button>`;
+  // Remove belongs on the customer's own card as well as in the editor.
+  //
+  // It was only in the editor, which is the wrong place to have put it: the
+  // card is where you are standing when you decide a customer should not be
+  // there, and "Edit this customer" is not where anybody looks for a way to
+  // get rid of one. Both sheets now offer it and both call the same thing.
+  el('drawer-foot').innerHTML = `<button class="btn line danger" id="cu-del">Remove&hellip;</button>
+    <button class="btn line" id="cu-close">Close</button>`;
   el('cu-close').onclick = closeDrawer;
+  el('cu-del').onclick = () => dcRemoveCustomer(p.id, p.display_name, el('cu-del'));
   if (el('cu-welcome')) el('cu-welcome').onclick = async () => {
     const b = el('cu-welcome'); b.disabled = true; b.textContent = 'Sending…';
     const r = await dcApi('/customer', { action: 'welcome', id: p.id });
@@ -3949,24 +3957,7 @@ async function dcCustomerDrawer(editId){
     <button class="btn line" id="cu-cancel">Cancel</button><button class="btn" id="cu-save">${p ? 'Save' : 'Add'}</button>`;
   el('cu-cancel').onclick = closeDrawer;
 
-  if (el('cu-del')) el('cu-del').onclick = async () => {
-    // What is about to happen is spelled out before it happens, because
-    // "Remove" means two different things depending on what is attached and
-    // the person pressing it cannot see which.
-    if (!confirm(`Remove ${p.display_name}?\n\nIf they have never been invoiced or messaged, the record goes for good.`
-               + `\nIf they have, it is archived instead — out of the lists, with the invoices and history kept.`)) return;
-    const b = el('cu-del'); b.disabled = true; b.textContent = 'Removing…';
-    const r = await dcApi('/customer', { action: 'remove', id: editId });
-    if (!r.ok) { b.disabled = false; b.textContent = 'Remove…';
-      return el('cu-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`; }
-    // Matches every other destructive path in this file: say what happened in
-    // plain words, then reload before repainting so the list does not come
-    // back still holding the row that has just gone.
-    alert(r.archived
-      ? `${r.name} has ${r.why}, so the record was archived rather than deleted.\n\nThey are out of both lists; the invoices and the history are untouched.`
-      : `${r.name} removed.`);
-    await dcLoad(true); closeDrawer(true); dcRefresh();
-  };
+  if (el('cu-del')) el('cu-del').onclick = () => dcRemoveCustomer(editId, p.display_name, el('cu-del'));
 
   const roster = await schedule().catch(() => []);
   const byLabel = {};
@@ -5792,6 +5783,33 @@ function concessionPanel(c){
     </div></div>`;
 }
 
+// Removing a customer, from whichever sheet you are on.
+//
+// "Remove" is two operations wearing one word, and which one happens depends
+// on whether anything is attached to the record — something the person
+// pressing the button cannot see. So the confirmation spells out both
+// branches beforehand, and the answer afterwards says which one it did
+// rather than leaving them to guess from the list.
+async function dcRemoveCustomer(id, name, btn){
+  if (!confirm(`Remove ${name}?\n\nIf they have never been invoiced or messaged, the record goes for good.`
+             + `\nIf they have, it is archived instead — out of the lists, with the invoices and history kept.`)) return;
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Removing…'; }
+  const r = await dcApi('/customer', { action: 'remove', id });
+  if (!r.ok) {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+    const box = el('cu-msg');
+    if (box) box.innerHTML = `<div class="err">${esc(r.error)}</div>`; else alert(r.error);
+    return;
+  }
+  alert(r.archived
+    ? `${r.name} has ${r.why}, so the record was archived rather than deleted.\n\nThey are out of both lists; the invoices and the history are untouched.`
+    : `${r.name} removed.`);
+  // Reload before repainting, or the list comes back still holding the row
+  // that has just gone.
+  await dcLoad(true); closeDrawer(true); dcRefresh();
+}
+
 async function openPlan(uin){
   _planUin = uin;
   _unsaved = null;          // the sheet being replaced no longer has a claim
@@ -6414,7 +6432,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=114"></script>
+<script src="/brand/enquiries.js?v=115"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
