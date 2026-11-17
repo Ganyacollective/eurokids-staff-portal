@@ -6,26 +6,11 @@
   "scope": "/kiosk",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#FCF8F6",
-  "theme_color": "#FF2217",
+  "background_color": "#0B0B0D",
+  "theme_color": "#0B0B0D",
   "icons": [
-    {
-      "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "https://saqefzgnvznuurupqpsw.supabase.co/storage/v1/object/public/site/brand/maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    { "src": "/kiosk-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/kiosk-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/kiosk-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

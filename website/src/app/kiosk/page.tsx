@@ -33,6 +33,10 @@ export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Inquiry Form",
+  // Black, so the installed app is not a second red EuroKids icon sitting
+  // next to the hub's on the same tablet. Two apps that look identical on a
+  // home screen are two apps somebody opens the wrong one of.
+  themeColor: "#0B0B0D",
   // Its own manifest, so the installed icon returns to /kiosk rather than to
   // the public home page.
   manifest: "/kiosk.webmanifest",

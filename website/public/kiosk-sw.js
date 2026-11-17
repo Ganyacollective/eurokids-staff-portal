@@ -16,11 +16,11 @@
  * marketing pages keep being served straight from the network, which is what
  * a site that changes with every deploy wants.
  */
-const V = 'ek-kiosk-v2';   // bumped: manifest name and orientation changed
+const V = 'ek-kiosk-v3';   // bumped: the icon and theme colour went black
 
 // The shell only. Not the card artwork — that is tens of megabytes of
 // posters and the tablet does not need them to take an enquiry.
-const SHELL = ['/kiosk'];
+const SHELL = ['/kiosk', '/kiosk-icon-192.png', '/kiosk-icon-512.png', '/kiosk-maskable-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
