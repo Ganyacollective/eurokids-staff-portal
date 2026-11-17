@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=110">
-<link rel="prefetch" href="/brand/enquiries.js?v=110" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=111">
+<link rel="prefetch" href="/brand/enquiries.js?v=111" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -563,7 +563,12 @@ function renderApp(){
   if (!el('shell')) {
     const who = profile?.full_name || session.user.email;
     const canStaff = has('staff_portal') || has('payroll');
-    el('stage').innerHTML = `<div class="shell" id="shell" data-app="${app}">
+    // ui2 is the opt-in. An app gets it once its screens have actually been
+    // redesigned rather than merely restyled — adding the class to an app
+    // that has not been through that leaves it half converted, which looks
+    // worse than leaving it alone.
+    const UI2_APPS = ['enquiries', 'admissions'];
+    el('stage').innerHTML = `<div class="shell${UI2_APPS.includes(app) ? ' ui2' : ''}" id="shell" data-app="${app}">
       <nav class="sb" id="sb">
         <div class="sb-brand"><span class="dot"></span><span>EuroKids JMD</span></div>
         <div class="hint" style="margin:-10px 0 6px 10px;font-size:12px">${APP_NAME[app] || ''}</div>
@@ -5483,9 +5488,10 @@ function openDrawer(title, subtitle){
   // Any drawer that is not a child's plan clears the flag; openPlan sets it
   // again straight after calling this.
   _planSheet = false;
-  // Likewise the enquiry card's own palette: it is set by openEnquiry and must
-  // not survive into the next drawer, or a fee sheet opens wearing coral.
-  dr.classList.remove('enq');
+  // Likewise the sheet's own palette: it is set by whoever opens the drawer
+  // and must not survive into the next one, or a fee sheet opens wearing the
+  // enquiry card's coral.
+  dr.classList.remove('ui2', 'd-admissions');
   el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
   let wide = false; try { wide = localStorage.getItem('ek-drawer-wide') === '1'; } catch (_) {}
   dr.classList.toggle('wide', wide);
@@ -5768,6 +5774,7 @@ async function openPlan(uin){
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
   const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
 
+  el('drawer').classList.add('ui2', 'd-admissions');
   el('drawer-title').textContent = kid?.student_name || uin;
   el('drawer-sub').textContent = `${kid?.program_name || ''}${kid?.batch ? ' · ' + kid.batch : ''}${kid?.father_name ? ' · ' + kid.father_name : ''} · ${uin}`;
   paintStep();
@@ -5775,7 +5782,7 @@ async function openPlan(uin){
   body.innerHTML = `
     ${statementHtml(kid || {}, ledger, items)}
 
-    <div class="grp"><h3>Fee</h3><div class="box">
+    <div class="grp sec s-money"><h3>Fee</h3><div class="box">
       ${Number(kid?.list_fee) > 0 ? `<div class="row"><div class="l">Full fee for the year<span class="sub">${esc(kid.program_name || '')} joining ${kid.admission_date ? longDate(kid.admission_date) : '—'}, from the EuroKids fee calculator</span></div>
         <div class="v mute">${money(kid.list_fee)}</div></div>` : ''}
       ${Number(kid?.scheme_discount) > 0 ? `<div class="row"><div class="l">${esc(kid.epms_discount_kind)}<span class="sub">EuroKids applied this before invoicing, so it is already inside the figure below. The parent now sees it on their statement.</span></div>
@@ -5794,7 +5801,7 @@ async function openPlan(uin){
       <div class="row"><div class="l"><strong>Agreed fee</strong></div><input class="in num" id="pf-final" type="number" value="${plan?.final_fee ?? total}" readonly tabindex="-1"></div>
     </div><div id="pf-fee-warn"></div></div>
 
-    <div class="grp"><h3>Instalments</h3><div class="box">
+    <div class="grp sec s-money"><h3>Instalments</h3><div class="box">
       <div id="pf-items"></div>
       <button class="linkrow" id="pf-add">Add instalment</button>
       <button class="linkrow" id="pf-terms">Set from the EuroKids terms</button>
@@ -5803,21 +5810,21 @@ async function openPlan(uin){
       A family paying to their own rhythm — a booking amount now, the rest of Term 1 before school
       starts — gets extra rows dated whenever they agreed to pay.</div></div>
 
-    <div class="grp"><h3>Parents</h3><div class="box">
+    <div class="grp sec s-people"><h3>Parents</h3><div class="box">
       <div class="row"><div class="l">Email 1</div><input class="in wide" id="pf-em1" type="email" value="${esc(contact?.parent_email1||'')}" placeholder="none on file"></div>
       <div class="row"><div class="l">Email 2</div><input class="in wide" id="pf-em2" type="email" value="${esc(contact?.parent_email2||'')}" placeholder="optional"></div>
       <div class="row"><div class="l">Note in letters</div><input class="in wide" id="pf-note" value="${esc(plan?.note||'')}" placeholder="e.g. Booking amount covers the welcome kit."></div>
     </div>
     ${plan?.welcome_sent_at ? `<div class="foot">Welcome letter sent ${new Date(plan.welcome_sent_at).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}.</div>` : ''}</div>
 
-    <div class="grp"><h3>Letters sent</h3><div class="box">
+    <div class="grp sec s-paper"><h3>Letters sent</h3><div class="box">
       ${(mails || []).length ? mails.map(m => `<div class="row"><div class="l">${esc(m.subject)}
           <span class="sub">${new Date(m.sent_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})} · ${esc((m.to_addrs||[]).join(', '))}</span></div>
         <div class="v ${m.status === 'sent' ? 'credit' : 'due'}">${m.status === 'sent' ? '✓' : 'failed'}</div></div>`).join('')
         : '<div class="rowx hint">Nothing has been sent to this family yet.</div>'}
     </div><div class="foot">The office is no longer copied on every message — this is the record.</div></div>
 
-    <div class="grp"><h3>Payment standing</h3><div class="box">
+    <div class="grp sec s-standing"><h3>Payment standing</h3><div class="box">
       <div class="row"><div class="l">${payDot(kid?.pay_colour)} ${esc(COLOUR[kid?.pay_colour]?.d || '—')}
           <span class="sub">${esc(recordFacts(kid))}</span></div>
         <div class="v hint">${kid?.watch_level && kid.watch_level !== 'auto' ? 'set by hand' : 'worked out'}</div></div>
@@ -5837,11 +5844,11 @@ async function openPlan(uin){
         ? `Set to ${esc(COLOUR[kid.watch_level]?.l || kid.watch_level)} by ${esc(kid.watch_set_by)} on ${longDate(String(kid.watch_set_at).slice(0,10))}. `
         : `Left alone, this follows the payments on its own — ${esc(COLOUR[kid?.pay_colour_auto]?.l || 'green')} today. `}Written in the knowledge that it may one day be read aloud.</div></div>
 
-    <div class="grp" id="promise-sec"><h3>Promise to pay</h3><div class="box" id="promise-box">
+    <div class="grp sec s-standing" id="promise-sec"><h3>Promise to pay</h3><div class="box" id="promise-box">
       ${promiseBoxHtml(openPromise, kid)}
     </div><div class="foot">It appears on the dashboard on the day, and the note goes into the log below.</div></div>
 
-    <div class="grp" id="notes-sec"><h3>Call log &amp; notes</h3><div class="box">
+    <div class="grp sec s-paper" id="notes-sec"><h3>Call log &amp; notes</h3><div class="box">
       <div class="note-in"><textarea class="in" id="cn-body" rows="1" placeholder="What happened on the call — e.g. spoke to father, will pay Thursday."></textarea>
         <button class="btn sm" id="cn-add">Add</button></div>
       <div id="cn-list"></div>
@@ -6336,7 +6343,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=110"></script>
+<script src="/brand/enquiries.js?v=111"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

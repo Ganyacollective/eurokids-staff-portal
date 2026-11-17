@@ -770,26 +770,30 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .fcard .seg{margin-top:0}
 .fand{font-size:var(--fs-sub);text-transform:uppercase;letter-spacing:.06em}
 
-/* ══ the enquiries surfaces ═══════════════════════════════════════════════
-   Two accents were fighting. The sidebar's app icons are EuroKids coral and
-   the content's accent was a navy — every selected chip, every primary
-   button, every row hover in a different family from the brand three inches
-   to its left. None of the work that got looked at for this used more than
-   one accent, and that is not a style choice: a second accent costs you the
-   first one's meaning, because "this is the thing to press" stops being a
-   colour and starts being a guess.
+/* ══ the redesigned surfaces ══════════════════════════════════════════════
+   Everything below is behind .ui2, which a shell or a drawer opts into. It
+   is not global yet on purpose: the hub is in use every day, and a screen
+   that has not been looked at properly is better left alone than half
+   converted. Adding ui2 to an app is the whole switch.
 
-   So the enquiries shell and the enquiry card run on coral, darkened from
-   the brand red to #CC3A26 so white text on it clears 5:1 rather than the
-   4.2:1 the brand value gives. Scoped, not global — the rest of the hub is
-   untouched until it is looked at properly, and one line here takes it
-   everywhere when it is. */
-#shell[data-app="enquiries"], #drawer.enq{
+   Two accents used to fight. The sidebar's app icons carry a colour per app
+   and the content's accent was one fixed navy, so every selected chip and
+   primary button sat in a different family from the icon three inches to its
+   left. A second accent costs you the first one's meaning: "this is the
+   thing to press" stops being a colour and becomes a guess.
+
+   So the accent follows the app. Each is darkened from its icon colour until
+   white text on it clears 4.5:1 — the raw icon colours are tuned to be seen
+   at 16px, not to be sat on. */
+.shell.ui2, .ui2{
   --accent:#CC3A26; --accent-dk:#B02F1D; --accent-wash:rgba(204,58,38,.09);
+}
+.shell.ui2[data-app="admissions"], .ui2.d-admissions{
+  --accent:#0B61C4; --accent-dk:#084E9F; --accent-wash:rgba(11,97,196,.09);
 }
 /* Row hover at full accent-wash was a coral flood across eight columns.
    A table is read, not pressed. */
-#shell[data-app="enquiries"] tbody tr:hover td{background:rgba(0,0,0,.035)}
+.shell.ui2 tbody tr:hover td{background:rgba(0,0,0,.035)}
 
 /* Selection as a tint, not a fill.
    Eight stage pills and nine programme pills in solid navy made the chosen
@@ -797,28 +801,28 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    three groups of them had three shouts. A wash plus a ring says "chosen"
    just as unambiguously at a fraction of the weight — which is what every
    one of those references does with its tags. */
-#drawer.enq .chips .chip.on{
+.ui2 .chips .chip.on{
   background:var(--accent-wash);color:var(--accent-dk);font-weight:600;
   box-shadow:inset 0 0 0 1px rgba(204,58,38,.45)}
-#drawer.enq .chips .chip.on:hover{background:rgba(204,58,38,.15)}
+.ui2 .chips .chip.on:hover{background:rgba(204,58,38,.15)}
 
 /* Headings stop competing with the content under them. 14px semibold black
    sat at the same weight as the field labels it was introducing; small caps
    in grey read as a divider, which is all a section title is. */
-#drawer.enq .grp{margin-top:28px}
-#drawer.enq .grp>h3{font-size:var(--fs-fn);line-height:var(--lh-fn);font-weight:700;
+.ui2 .grp{margin-top:28px}
+.ui2 .grp>h3{font-size:var(--fs-fn);line-height:var(--lh-fn);font-weight:700;
   letter-spacing:.07em;text-transform:uppercase;color:var(--label-3);margin:0 0 9px 4px}
-#drawer.enq .box{box-shadow:0 0 0 1px rgba(0,0,0,.055),0 1px 2px rgba(0,0,0,.03)}
-#drawer.enq .row{min-height:54px;padding:11px 16px 11px 0}
+.ui2 .box{box-shadow:0 0 0 1px rgba(0,0,0,.055),0 1px 2px rgba(0,0,0,.03)}
+.ui2 .row{min-height:54px;padding:11px 16px 11px 0}
 
 /* ── the list ──
    Same product as the card it opens, which it did not look like. */
-#shell[data-app="enquiries"] thead th{
+.shell.ui2 thead th{
   font-size:var(--fs-fn);font-weight:700;letter-spacing:.07em;text-transform:uppercase;
   color:var(--label-3);padding:11px 14px}
-#shell[data-app="enquiries"] tbody td{padding:13px 14px}
-#shell[data-app="enquiries"] tbody tr:nth-child(even) td{background:transparent}
-#shell[data-app="enquiries"] tbody td{border-bottom:1px solid rgba(60,60,67,.09)}
+.shell.ui2 tbody td{padding:13px 14px}
+.shell.ui2 tbody tr:nth-child(even) td{background:transparent}
+.shell.ui2 tbody td{border-bottom:1px solid rgba(60,60,67,.09)}
 
 /* Heat as a judgement you can read down the column, not eight loose digits
    of different colours floating in white space. */
@@ -830,10 +834,10 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 /* The two inline controls were boxes drawn around every row of an eight-row
    table — sixteen borders doing nothing but marking where you may type.
    They are flat until pointed at. */
-#shell[data-app="enquiries"] td .in{background:transparent;border-color:transparent;box-shadow:none}
-#shell[data-app="enquiries"] td .in:hover{background:var(--field)}
-#shell[data-app="enquiries"] td .in:focus{background:#fff;border-color:var(--accent);box-shadow:var(--focus)}
-#shell[data-app="enquiries"] td .in.is-empty{color:var(--label-3)}
+.shell.ui2 td .in{background:transparent;border-color:transparent;box-shadow:none}
+.shell.ui2 td .in:hover{background:var(--field)}
+.shell.ui2 td .in:focus{background:#fff;border-color:var(--accent);box-shadow:var(--focus)}
+.shell.ui2 td .in.is-empty{color:var(--label-3)}
 
 /* ── choosing one of a list ──
    The options used to live in the value column, right-aligned, which for a
@@ -841,12 +845,12 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    edge of the sheet. A label on its own line and the options under it, all
    starting at the same left edge, is both calmer and quicker to scan — and
    it leaves room for the shortlist to be a shortlist. */
-#drawer.enq .pick .chip.hid{display:none}
-#drawer.enq .pick.open .chip.hid{display:inline-flex}
-#drawer.enq .pick.open .chip.more{display:none}
-#drawer.enq .pick .chip.more{color:var(--label-2);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);
+.ui2 .pick .chip.hid{display:none}
+.ui2 .pick.open .chip.hid{display:inline-flex}
+.ui2 .pick.open .chip.more{display:none}
+.ui2 .pick .chip.more{color:var(--label-2);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);
   background:transparent;font-weight:600;cursor:pointer}
-#drawer.enq .pick .chip.more:hover{background:var(--fill);color:var(--label)}
+.ui2 .pick .chip.more:hover{background:var(--fill);color:var(--label)}
 
 /* ── fields as cells, not as a settings list ──
    Label-left-control-right gives the name and the value the same size and
@@ -859,34 +863,34 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    The hairlines are a 1px grid gap over a grey ground rather than borders on
    the cells, so a cell that spans both columns still rules off correctly
    with no special casing. */
-#drawer.enq .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--sep)}
-#drawer.enq .cell{background:var(--bg-card);padding:11px 16px 12px;min-width:0}
-#drawer.enq .cell.wide{grid-column:1 / -1}
-#drawer.enq .cell>.cap{display:block;font-size:11.5px;line-height:15px;font-weight:700;
+.ui2 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--sep)}
+.ui2 .cell{background:var(--bg-card);padding:11px 16px 12px;min-width:0}
+.ui2 .cell.wide{grid-column:1 / -1}
+.ui2 .cell>.cap{display:block;font-size:11.5px;line-height:15px;font-weight:700;
   letter-spacing:.06em;text-transform:uppercase;color:var(--label-3);margin-bottom:4px}
-#drawer.enq .cell>.sub{display:block;margin-top:3px;font-size:var(--fs-fn);line-height:var(--lh-fn);color:var(--label-3)}
-#drawer.enq .cell>.sub:empty{display:none}
+.ui2 .cell>.sub{display:block;margin-top:3px;font-size:var(--fs-fn);line-height:var(--lh-fn);color:var(--label-3)}
+.ui2 .cell>.sub:empty{display:none}
 
 /* The control is the value: no box until you reach for it. */
-#drawer.enq .cell .in{width:100%;max-width:none;min-height:30px;text-align:left;
+.ui2 .cell .in{width:100%;max-width:none;min-height:30px;text-align:left;
   font-size:var(--fs-t3);line-height:var(--lh-t3);font-weight:600;letter-spacing:-.012em;
   background:transparent;border:0;box-shadow:none;border-radius:7px;
   padding:3px 7px;margin:0 -7px;color:var(--label)}
-#drawer.enq .cell .in:hover{background:var(--field)}
-#drawer.enq .cell .in:focus{background:#fff;box-shadow:var(--focus)}
-#drawer.enq .cell .in::placeholder{font-weight:500;color:var(--label-3)}
-#drawer.enq .cell select.in{padding-right:20px}
-#drawer.enq .cell .inst{display:flex;align-items:center;gap:6px;justify-content:flex-start}
-#drawer.enq .cell .inst .in{flex:1 1 auto;min-width:0}
+.ui2 .cell .in:hover{background:var(--field)}
+.ui2 .cell .in:focus{background:#fff;box-shadow:var(--focus)}
+.ui2 .cell .in::placeholder{font-weight:500;color:var(--label-3)}
+.ui2 .cell select.in{padding-right:20px}
+.ui2 .cell .inst{display:flex;align-items:center;gap:6px;justify-content:flex-start}
+.ui2 .cell .inst .in{flex:1 1 auto;min-width:0}
 /* Call and WhatsApp next to a number: small, quiet, and out of the way of
    the number itself, which is the thing being read. */
-#drawer.enq .cell .inst .ic{flex:none;font-size:var(--fs-fn);font-weight:700;letter-spacing:.03em;
+.ui2 .cell .inst .ic{flex:none;font-size:var(--fs-fn);font-weight:700;letter-spacing:.03em;
   padding:4px 8px;border-radius:999px;text-decoration:none;color:var(--label-2);
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
-#drawer.enq .cell .inst .ic:hover{background:var(--fill);color:var(--label)}
-#drawer.enq .cell .seg{margin-top:1px}
-#drawer.enq .cell .chips{justify-content:flex-start;gap:7px;margin-top:2px}
-@media (max-width:460px){ #drawer.enq .fgrid{grid-template-columns:1fr} }
+.ui2 .cell .inst .ic:hover{background:var(--fill);color:var(--label)}
+.ui2 .cell .seg{margin-top:1px}
+.ui2 .cell .chips{justify-content:flex-start;gap:7px;margin-top:2px}
+@media (max-width:460px){ .ui2 .fgrid{grid-template-columns:1fr} }
 
 /* ── four cards, four tints ──
    A single grey box with eleven identical rows in it separates nothing: the
@@ -899,41 +903,70 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    gradient itself showing through a 1px grid gap — which is why each card's
    rules pick up its own hue without a single extra rule, and why a cell
    spanning both columns still divides correctly. */
-#drawer.enq .sec{margin-top:16px}
-#drawer.enq .sec>h3{display:none}
+.ui2 .sec{margin-top:16px}
+.ui2 .sec>h3{display:none}
 /* The gradient used to run out to pure white by the middle of the card, so
    the bottom half of every section was the same colourless box it replaced
    and only the header strip carried the hue. It now stays tinted the whole
    way down and the cells sit at 74% white over it, which is the most
    transparency 15px semibold black will take without losing contrast. */
-#drawer.enq .sec>.box{
+.ui2 .sec>.box{
   background:linear-gradient(145deg, var(--t1) 0%, var(--t2) 70%, var(--t1) 100%);
   border-radius:18px;overflow:hidden;
   box-shadow:0 0 0 1px rgba(0,0,0,.04), 0 1px 2px rgba(0,0,0,.03), 0 14px 34px -22px rgba(0,0,0,.3)}
-#drawer.enq .sec .sechd{display:flex;align-items:center;gap:8px;padding:14px 17px 12px;
+.ui2 .sec .sechd{display:flex;align-items:center;gap:8px;padding:14px 17px 12px;
   font-size:11.5px;line-height:15px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;color:var(--tk)}
-#drawer.enq .sec .sechd .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.7;flex:none}
-#drawer.enq .sec .fgrid{background:transparent;gap:1px}
-#drawer.enq .sec .cell{background:rgba(255,255,255,.74);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ui2 .sec .sechd .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.7;flex:none}
+.ui2 .sec .fgrid{background:transparent;gap:1px}
+.ui2 .sec .cell{background:rgba(255,255,255,.74);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 
 /* A chosen chip belongs to the card it is standing in. The programme picked
    inside the child's card went on being the same coral as everything else,
    which undoes the point of tinting the card in the first place. */
-#drawer.enq .sec .chips .chip.on{
+.ui2 .sec .chips .chip.on{
   background:color-mix(in srgb, var(--tk) 12%, transparent);
   color:var(--tk);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--tk) 42%, transparent)}
-#drawer.enq .sec .chips .chip.on:hover{background:color-mix(in srgb, var(--tk) 19%, transparent)}
-#drawer.enq .sec .cell>.cap{color:color-mix(in srgb, var(--tk) 62%, var(--label-3))}
-#drawer.enq .sec .cell .in:hover{background:color-mix(in srgb, var(--t1) 70%, #fff)}
-#drawer.enq .sec .cell .in:focus{background:#fff}
+.ui2 .sec .chips .chip.on:hover{background:color-mix(in srgb, var(--tk) 19%, transparent)}
+.ui2 .sec .cell>.cap{color:color-mix(in srgb, var(--tk) 62%, var(--label-3))}
+.ui2 .sec .cell .in:hover{background:color-mix(in srgb, var(--t1) 70%, #fff)}
+.ui2 .sec .cell .in:focus{background:#fff}
 
 /* Pale enough that 15px semibold black still sits at full contrast on top of
    it, and distinct enough in hue that the four are told apart at a glance
    with the screen at arm's length. Mother is teal and father is indigo
    because the obvious pair would be pink and blue, and that is a stereotype
    doing a job that two neutral hues do just as well. */
-#drawer.enq .s-where { --t1:#FDE4DC; --t2:#FEF4F0; --tk:#A8381F }
-#drawer.enq .s-child { --t1:#E4F2D8; --t2:#F4FAEE; --tk:#3F6B1E }
-#drawer.enq .s-father{ --t1:#E2E8FB; --t2:#F3F6FE; --tk:#3C4F96 }
-#drawer.enq .s-mother{ --t1:#D9EFEA; --t2:#F0FAF7; --tk:#1C6757 }
-#drawer.enq .s-home  { --t1:#F0ECE3; --t2:#F9F7F3; --tk:#6B5E46 }
+.ui2 .s-where { --t1:#FDE4DC; --t2:#FEF4F0; --tk:#A8381F }
+.ui2 .s-child { --t1:#E4F2D8; --t2:#F4FAEE; --tk:#3F6B1E }
+.ui2 .s-father{ --t1:#E2E8FB; --t2:#F3F6FE; --tk:#3C4F96 }
+.ui2 .s-mother{ --t1:#D9EFEA; --t2:#F0FAF7; --tk:#1C6757 }
+.ui2 .s-home  { --t1:#F0ECE3; --t2:#F9F7F3; --tk:#6B5E46 }
+
+/* The child sheet's sections.
+   Money is not an attribute, so it does not become two-column cells: a fee,
+   a concession and an agreed fee are read down a single column of
+   right-aligned numerals, and splitting that across a grid would cost more
+   than the tidier labels are worth. The rows stay rows. What they gain is
+   the same thing the enquiry card gained — a card per subject, so the fee
+   block, the people and the paperwork stop being one undifferentiated run. */
+.ui2 .s-money   { --t1:#DDE9FA; --t2:#F1F6FD; --tk:#0B4E9E }
+.ui2 .s-people  { --t1:#D9EFEA; --t2:#F0FAF7; --tk:#1C6757 }
+.ui2 .s-paper   { --t1:#F0ECE3; --t2:#F9F7F3; --tk:#6B5E46 }
+.ui2 .s-standing{ --t1:#EDE6F7; --t2:#F8F5FC; --tk:#55407F }
+
+/* A section that still uses rows needs its own hairlines, because the grid
+   gap that draws them in a cell layout is not there. */
+.ui2 .sec .row + .row, .ui2 .sec .rowx + .row,
+.ui2 .sec .row + .rowx, .ui2 .sec .rowx + .rowx{
+  border-top:1px solid color-mix(in srgb, var(--tk) 13%, transparent)}
+.ui2 .sec .row, .ui2 .sec .rowx{background:rgba(255,255,255,.74)}
+.ui2 .sec .row:first-child, .ui2 .sec .rowx:first-child{border-top:0}
+/* The whole heading row is inside the card now, so the group's own h3 is
+   hidden and .sechd draws it. Sections that have not been given a .sechd
+   keep their h3, sitting on the tint. */
+/* These sections keep their heading above the card rather than inside it,
+   because here the h3 is a sibling of the box rather than a child of it.
+   Same caps, same hue — it reads as the card's label either way. */
+.ui2 .sec:not(:has(.sechd))>h3{display:block;margin:0 0 8px 6px;
+  font-size:11.5px;line-height:15px;font-weight:700;letter-spacing:.075em;
+  text-transform:uppercase;color:var(--tk)}
