@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=115">
-<link rel="prefetch" href="/brand/enquiries.js?v=115" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=116">
+<link rel="prefetch" href="/brand/enquiries.js?v=116" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -563,12 +563,20 @@ function renderApp(){
   if (!el('shell')) {
     const who = profile?.full_name || session.user.email;
     const canStaff = has('staff_portal') || has('payroll');
-    // ui2 is the opt-in. An app gets it once its screens have actually been
-    // redesigned rather than merely restyled — adding the class to an app
-    // that has not been through that leaves it half converted, which looks
-    // worse than leaving it alone.
-    const UI2_APPS = ['enquiries', 'admissions'];
-    el('stage').innerHTML = `<div class="shell${UI2_APPS.includes(app) ? ' ui2' : ''}" id="shell" data-app="${app}">
+    // ui2 everywhere now.
+    //
+    // It was an opt-in list of two while the question was whether the
+    // treatment held up; it does, and keeping the other seven apps on the old
+    // chrome was costing more than it protected. Crossing from Enquiries to
+    // Reimbursements and finding a different-looking product is friction of
+    // its own — you stop reading and start orienting.
+    //
+    // What goes global is only the chrome: the accent, heading weights, table
+    // density, chip selection, field spacing. The parts that need markup —
+    // the tinted sections, the two-column cells — apply where that markup
+    // exists and are simply absent everywhere else, so no screen can end up
+    // half converted by this.
+    el('stage').innerHTML = `<div class="shell ui2" id="shell" data-app="${app}">
       <nav class="sb" id="sb">
         <div class="sb-brand"><span class="dot"></span><span>EuroKids JMD</span></div>
         <div class="hint" style="margin:-10px 0 6px 10px;font-size:12px">${APP_NAME[app] || ''}</div>
@@ -5462,6 +5470,37 @@ async function tabPlans(){
 
 // One drawer for a child, used from every tab. Opening it never re-renders
 // the list behind it, so filters and scroll position survive.
+// Press / to search, anywhere in the hub.
+//
+// Every list in this application has a search box and every one of them is
+// reached by moving a hand to the mouse, finding the box and clicking it —
+// a dozen times an afternoon for a coordinator working down a roster. The
+// key is free, it is what every other tool with a list uses, and it costs
+// nothing to ignore.
+//
+// Bound once on the document rather than per screen, because the boxes are
+// rebuilt every time a tab repaints and a listener per box would leak one
+// for each repaint.
+if (!window._slashBound) {
+  window._slashBound = true;
+  document.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    // Not while somebody is typing — a slash is a character in a note, an
+    // address or a UIN before it is ever a shortcut.
+    if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+    // The drawer sits over the list, so its search wins while it is open.
+    const scope = document.getElementById('drawer')?.classList.contains('on')
+      ? document.getElementById('drawer') : document;
+    const box = [...scope.querySelectorAll('.search input')]
+      .find(i => i.offsetParent !== null);
+    if (!box) return;
+    e.preventDefault();
+    box.focus();
+    box.select?.();
+  });
+}
+
 function openDrawer(title, subtitle){
   let bg = el('drawer-bg'), dr = el('drawer');
   if (!bg) {
@@ -5503,10 +5542,14 @@ function openDrawer(title, subtitle){
   // Any drawer that is not a child's plan clears the flag; openPlan sets it
   // again straight after calling this.
   _planSheet = false;
-  // Likewise the sheet's own palette: it is set by whoever opens the drawer
-  // and must not survive into the next one, or a fee sheet opens wearing the
-  // enquiry card's coral.
-  dr.classList.remove('ui2', 'd-admissions');
+  // A drawer is a child of the body, not of the shell, so it cannot inherit
+  // the app's palette through the cascade — it has to be told. Told here,
+  // once, from whichever app is on screen, rather than by every one of the
+  // thirty functions that open one.
+  dr.className = dr.className.replace(/\bd-[a-z]+\b/g, '').trim();
+  dr.classList.add('ui2');
+  const curApp = el('shell')?.dataset.app;
+  if (curApp) dr.classList.add('d-' + curApp);
   el('drawer-title').textContent = title; el('drawer-sub').textContent = subtitle || '';
   let wide = false; try { wide = localStorage.getItem('ek-drawer-wide') === '1'; } catch (_) {}
   dr.classList.toggle('wide', wide);
@@ -5861,7 +5904,6 @@ async function openPlan(uin){
   const it = items && items.length ? items : [{ seq:1, amount:'', due_date:'' }];
   const total = plan?.total_fee ?? kid?.epms_invoiced ?? 0;
 
-  el('drawer').classList.add('ui2', 'd-admissions');
   el('drawer-title').textContent = kid?.student_name || uin;
   el('drawer-sub').textContent = `${kid?.program_name || ''}${kid?.batch ? ' · ' + kid.batch : ''}${kid?.father_name ? ' · ' + kid.father_name : ''} · ${uin}`;
   paintStep();
@@ -6432,7 +6474,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=115"></script>
+<script src="/brand/enquiries.js?v=116"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

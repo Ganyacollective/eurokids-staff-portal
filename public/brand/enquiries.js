@@ -1000,7 +1000,6 @@ async function openEnquiry(id, opts = {}){
     return;
   }
   if (!e) { body.innerHTML = '<div class="err">Enquiry not found.</div>'; return; }
-  el('drawer').classList.add('ui2');
   el('drawer-title').textContent = enqName(e);
   el('drawer-sub').textContent = [(e.programs || []).join(', '), (e.sources || []).join(', '), e.academic_year, 'since ' + longDate((e.first_contact_at || e.created_at).slice(0, 10))].filter(Boolean).join(' · ');
 

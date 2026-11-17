@@ -788,9 +788,29 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .shell.ui2, .ui2{
   --accent:#CC3A26; --accent-dk:#B02F1D; --accent-wash:rgba(204,58,38,.09);
 }
-.shell.ui2[data-app="admissions"], .ui2.d-admissions{
-  --accent:#0B61C4; --accent-dk:#084E9F; --accent-wash:rgba(11,97,196,.09);
-}
+/* One hue per app, so where you are is answerable without reading the
+   sidebar — and so the primary button, the selected chip and the focus ring
+   in a given app all belong to each other.
+   Every one is checked against white: the figure after each is the contrast
+   ratio of white text on that colour, and none ships below 4.5:1. The raw
+   icon colours were all under it — they are tuned to be seen at 16px, not to
+   be sat on. */
+.shell.ui2[data-app="admissions"], .ui2.d-admissions{      /* 5.96:1 */
+  --accent:#0B61C4; --accent-dk:#084E9F; --accent-wash:rgba(11,97,196,.09) }
+.shell.ui2[data-app="billing"], .ui2.d-billing{            /* 6.17:1 */
+  --accent:#0F6E5C; --accent-dk:#0B5648; --accent-wash:rgba(15,110,92,.09) }
+.shell.ui2[data-app="reimb"], .ui2.d-reimb{                /* 6.74:1 */
+  --accent:#7A3DAF; --accent-dk:#63318D; --accent-wash:rgba(122,61,175,.09) }
+.shell.ui2[data-app="staff"], .ui2.d-staff{                /* 4.87:1 */
+  --accent:#B05A10; --accent-dk:#8E480C; --accent-wash:rgba(176,90,16,.10) }
+.shell.ui2[data-app="letters"], .ui2.d-letters{            /* 6.70:1 */
+  --accent:#1F6090; --accent-dk:#194E75; --accent-wash:rgba(31,96,144,.09) }
+.shell.ui2[data-app="website"], .ui2.d-website{            /* 6.52:1 */
+  --accent:#A33072; --accent-dk:#85275D; --accent-wash:rgba(163,48,114,.09) }
+.shell.ui2[data-app="users"], .ui2.d-users{                /* 7.53:1 */
+  --accent:#4A5568; --accent-dk:#3A4454; --accent-wash:rgba(74,85,104,.10) }
+.shell.ui2[data-app="setup"], .ui2.d-setup{                /* 6.00:1 */
+  --accent:#5A6472; --accent-dk:#48505C; --accent-wash:rgba(90,100,114,.10) }
 /* Row hover at full accent-wash was a coral flood across eight columns.
    A table is read, not pressed. */
 .shell.ui2 tbody tr:hover td{background:rgba(0,0,0,.035)}
@@ -801,10 +821,14 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    three groups of them had three shouts. A wash plus a ring says "chosen"
    just as unambiguously at a fraction of the weight — which is what every
    one of those references does with its tags. */
+/* Derived, not typed out. These were literal coral values, which meant the
+   ring round a selected chip stayed EuroKids red in the blue app, the green
+   app and the violet one — the exact failure the per-app accent exists to
+   prevent, committed in the rule that was meant to express it. */
 .ui2 .chips .chip.on{
   background:var(--accent-wash);color:var(--accent-dk);font-weight:600;
-  box-shadow:inset 0 0 0 1px rgba(204,58,38,.45)}
-.ui2 .chips .chip.on:hover{background:rgba(204,58,38,.15)}
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent)}
+.ui2 .chips .chip.on:hover{background:color-mix(in srgb, var(--accent) 15%, transparent)}
 
 /* Headings stop competing with the content under them. 14px semibold black
    sat at the same weight as the field labels it was introducing; small caps
@@ -978,3 +1002,20 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .ui2 .s-conc .snap-tiles{grid-template-columns:1fr 1fr 1fr;margin:0;padding:12px 13px 13px;gap:8px}
 .ui2 .s-conc .snap-tile{background:rgba(255,255,255,.8);box-shadow:none}
 .ui2 .s-conc .snap-tile .cap{color:color-mix(in srgb, var(--tk) 62%, var(--label-3))}
+
+
+/* The primary button follows the app.
+   .btn ships a hardcoded blue gradient and a blue shadow, so every app's
+   main action was iOS blue no matter what its accent said — the single
+   control the per-app palette most needed to reach, and the one it was not
+   reaching. Flat accent rather than a gradient: a gradient built from one
+   custom property needs two more to shade it, and the flat fill is what all
+   the work this was drawn from uses anyway. */
+.shell.ui2 .btn:not(.line):not(.danger),
+.ui2 .btn:not(.line):not(.danger){
+  background:var(--accent);
+  box-shadow:0 1px 2px color-mix(in srgb, var(--accent) 32%, transparent),
+             inset 0 1px 0 rgba(255,255,255,.14)}
+.shell.ui2 .btn:not(.line):not(.danger):hover,
+.ui2 .btn:not(.line):not(.danger):hover{background:var(--accent-dk);filter:none}
+.ui2 .lnk, .shell.ui2 .lnk, .shell.ui2 a[onclick]{color:var(--accent-dk)}
