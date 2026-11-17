@@ -18,7 +18,7 @@ const VALID_MODULES = new Set([
   "staff_portal", "epms_admin", "pulse", "payroll", "fees", "kits", "admission", "receipts", "finance", "salary",
   "letters", "inventory", "daycare_billing", "reimbursements",
   // Added with the enum, not after somebody noticed a switch doing nothing.
-  "enquiry_photos", "website",
+  "enquiry_photos", "website", "mailbox",
 ]);
 
 async function requireOwner(req: NextRequest): Promise<{ ok: true; userId: string } | { ok: false; status: number; message: string }> {

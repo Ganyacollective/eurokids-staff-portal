@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=119">
-<link rel="prefetch" href="/brand/enquiries.js?v=119" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=120">
+<link rel="prefetch" href="/brand/enquiries.js?v=120" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -209,14 +209,15 @@ const TABS = {
   templates:  { label: 'Letter templates', icon: 'mail', sect: 'Setup',       need: () => has('finance') },
   letters:    { app: 'letters', label: 'Appointment letters', icon: 'mail', sect: 'Staff', need: () => has('letters') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
+  mailbox:    { app: 'mailbox', label: 'Inbox', icon: 'mail', sect: 'Communication', need: () => has('mailbox') },
 };
 const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reimbursements', 'Billing', 'School', 'Reference', 'Setup'];
 const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters',
-  billing: 'Day care billing', reimb: 'Reimbursements', website: 'Website' };
+  billing: 'Day care billing', reimb: 'Reimbursements', website: 'Website', mailbox: 'Mailbox' };
 // The four that earn a place on the phone's tab bar; the rest sit under More.
 const TABBAR = { admissions: ['overview', 'children', 'views', 'plans'], enquiries: ['enq_today', 'enq_list', 'enq_calls', 'enq_reports'], letters: ['letters'],
   billing: ['bill_home', 'bill_customers', 'bill_recurring'], reimb: ['rb_home', 'rb_customers', 'rb_recurring'],
-  website: ['website'] };
+  website: ['website'], mailbox: ['mailbox'] };
 const tabsFor = a => Object.keys(TABS).filter(t => (TABS[t].app || 'admissions') === (a || 'admissions') && TABS[t].need());
 
 /* ── boot ─────────────────────────────────────────────── */
@@ -369,6 +370,8 @@ function renderChooser(){
     desc:'Write, send and track staff appointment letters; signed on their phone.', ok:true, href:null });
   if (has('website') || isOwner()) doors.push({ key:'website', name:'Website',
     desc:'The public site: the cards on the front, their artwork, photos and videos.', ok:true, href:null });
+  if (has('mailbox')) doors.push({ key:'mailbox', name:'Mailbox',
+    desc:'What parents have written in to admin@ — read-only, alongside everything the hub has sent them.', ok:true, href:null });
   if (isOwner()) doors.push({ key:'users', name:'Users & Access',
     desc:'Accounts for coordinators and HR; what each may open.', ok:true, href:null });
   writeUrl(false);
@@ -409,7 +412,7 @@ function renderChooser(){
 
 /* ── users & access (owner only) ─────────────────────── */
 const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','enquiry_photos','receipts',
-  'daycare_billing','reimbursements','finance','salary','letters','inventory','website'];
+  'daycare_billing','reimbursements','finance','salary','letters','inventory','website','mailbox'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
   payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
   enquiry_photos:'Enquiry photos (sees families’ faces)',
@@ -419,7 +422,8 @@ const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pul
   salary:'Salaries (staff pay)',
   letters:'Appointment letters (shows salary)',
   inventory:'Inventory (equipment & supplies)',
-  website:'Website (the public site)' };
+  website:'Website (the public site)',
+  mailbox:'Mailbox (reads everything sent to admin@)' };
 
 async function hubUsersApi(method, body){
   const { data: { session: s } } = await getSb().auth.getSession();
@@ -635,7 +639,120 @@ function renderApp(){
      assets: tabAssets, supplies: tabSupplies,
      rb_home: tabReimbursements, rb_customers: tabCustomers, rb_recurring: tabRecurring,
      bill_home: tabDaycareBilling, bill_customers: tabCustomers, bill_recurring: tabRecurring,
-     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_reports: tabEnqReports, enq_setup: tabEnqSetup, website: tabWebsite, rb_fees: tabFeeCheck }[tab] || tabOverview)();
+     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_reports: tabEnqReports, enq_setup: tabEnqSetup, website: tabWebsite, rb_fees: tabFeeCheck, mailbox: tabMailbox }[tab] || tabOverview)();
+}
+
+/* ── The mailbox ──────────────────────────────────────────────────────────
+   What parents wrote back.
+
+   The hub has sent mail for months and read none of it, so its record of a
+   family stopped at what we said to them. A reply correcting an email
+   address, a question about a fee, an answer to a welcome letter — all of it
+   lived in Gmail and nowhere the hub could see.
+
+   Read-only on purpose. Opening a message here does not mark it read, and
+   there is nothing to delete or file with, because the person actually
+   working the mailbox in Gmail should not find it rearranged behind them. */
+const _mail = { rows: [], q: '', loading: false, address: '' };
+
+async function mailApi(qs){
+  const { data: { session: s } } = await getSb().auth.getSession();
+  if (!s) return { ok: false, error: 'Your session has expired — please sign in again.' };
+  try {
+    const r = await fetch('/api/inbox' + (qs || ''), { headers: { Authorization: `Bearer ${s.access_token}` } });
+    return await r.json().catch(() => ({ ok: false, error: 'The server did not answer.' }));
+  } catch (e) { return { ok: false, error: 'Could not reach the server: ' + e.message }; }
+}
+
+async function tabMailbox(){
+  el('tb-title').textContent = 'Inbox';
+  el('body').innerHTML = `
+    <div class="vhead"><h2>Inbox</h2>
+      <div class="hint" id="mb-sub">${_mail.address ? esc(_mail.address) : 'Reading the mailbox…'}</div></div>
+    <div class="tools">
+      <div class="search"><input class="in" id="mb-q" type="search" placeholder="Search sender, subject or words in the message" value="${esc(_mail.q)}"></div>
+      <button class="btn line" id="mb-reload">Reload</button>
+    </div>
+    <div class="panel"><div id="mb-list"><div class="loading">Loading…</div></div></div>`;
+
+  // A search goes to the IMAP server rather than filtering what is on screen,
+  // so it reaches the whole mailbox and not just the last forty.
+  const run = async () => {
+    el('mb-list').innerHTML = '<div class="loading">Loading…</div>';
+    const r = await mailApi(_mail.q ? '?q=' + encodeURIComponent(_mail.q) : '');
+    if (!r.ok) { el('mb-list').innerHTML = `<div class="err" style="margin:16px">${esc(r.error)}</div>`; return; }
+    _mail.rows = r.messages || [];
+    _mail.address = r.address || '';
+    el('mb-sub').textContent = _mail.address;
+    paintMail();
+  };
+  el('mb-reload').onclick = run;
+  el('mb-q').onchange = () => { _mail.q = el('mb-q').value.trim(); run(); };
+  el('mb-q').oninput = debounce(() => { _mail.q = el('mb-q').value.trim(); run(); }, 400);
+  run();
+}
+
+function paintMail(){
+  if (!_mail.rows.length) {
+    el('mb-list').innerHTML = `<div class="empty"><div class="ic">📭</div><h3>${_mail.q ? 'Nothing matches' : 'Nothing here'}</h3>
+      <div>${_mail.q ? 'Try fewer words.' : 'The mailbox is empty.'}</div></div>`;
+    return;
+  }
+  el('mb-list').innerHTML = `<div class="tw"><table><thead><tr>
+      <th>From</th><th>Subject</th><th class="r">When</th></tr></thead><tbody>${
+    _mail.rows.map(m => `<tr data-uid="${m.uid}" style="cursor:pointer">
+      <td><strong>${esc(m.fromName || m.from || '—')}</strong>
+        <div class="hint">${esc(m.from)}</div></td>
+      <td>${m.seen ? '' : '<span class="chip c-acc">new</span> '}${esc(m.subject)}
+        ${m.hasAttachments ? ' <span class="hint">· attachment</span>' : ''}
+        ${m.answered ? ' <span class="hint">· replied</span>' : ''}</td>
+      <td class="r hint">${m.date ? dtLocal(m.date) : ''}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+  el('mb-list').querySelectorAll('tr[data-uid]').forEach(tr =>
+    tr.onclick = () => openMail(Number(tr.dataset.uid)));
+}
+
+async function openMail(uid){
+  const known = _mail.rows.find(m => m.uid === uid);
+  const body = openDrawer(known?.subject || 'Message',
+    known ? `${known.fromName || known.from}${known.date ? ' · ' + dtLocal(known.date) : ''}` : '');
+  body.innerHTML = '<div class="loading">Loading…</div>';
+  const r = await mailApi('?uid=' + uid);
+  if (!r.ok) { body.innerHTML = `<div class="err">${esc(r.error)}</div>`; return; }
+  const m = r.message;
+  el('drawer-title').textContent = m.subject;
+  el('drawer-sub').textContent = `${m.fromName || m.from}${m.date ? ' · ' + dtLocal(m.date) : ''}`;
+
+  // The body is somebody else's HTML, so it goes in a sandboxed iframe rather
+  // than into this document. Pasting a stranger's markup straight into the
+  // page would let a mail with a script tag in it run with the coordinator's
+  // session — which is the whole reason mail clients do this.
+  const safe = m.html
+    ? `<iframe id="mb-frame" sandbox="" referrerpolicy="no-referrer"
+         style="width:100%;border:0;background:#fff;min-height:320px"></iframe>`
+    : `<pre style="white-space:pre-wrap;word-break:break-word;font:inherit;margin:0">${esc(m.text || '(no message body)')}</pre>`;
+
+  body.innerHTML = `
+    <div class="grp sec"><div class="box"><div class="fgrid">
+      <div class="cell wide"><span class="cap">From</span><div class="v">${esc(m.from)}</div><span class="sub"></span></div>
+      <div class="cell wide"><span class="cap">To</span><div class="v">${esc(m.to || '')}</div><span class="sub"></span></div>
+    </div></div></div>
+    <div class="grp sec"><h3>Message</h3><div class="box" style="padding:14px 16px">${safe}</div></div>`;
+
+  if (m.html) {
+    const f = el('mb-frame');
+    f.srcdoc = `<base target="_blank"><style>body{font:14px/1.5 -apple-system,system-ui,sans-serif;color:#1D1D1F;margin:0}
+      img{max-width:100%;height:auto}</style>` + m.html;
+    // Grow to fit rather than leaving a scroll box inside a scrolling sheet.
+    f.onload = () => { try { f.style.height = Math.min(2400, f.contentDocument.body.scrollHeight + 24) + 'px'; } catch (_) {} };
+  }
+
+  el('drawer-foot').innerHTML = `<a class="btn line" href="https://mail.google.com/mail/u/0/#search/rfc822msgid" target="_blank" rel="noopener" id="mb-gmail">Open in Gmail</a>
+    <button class="btn" id="mb-close">Close</button>`;
+  el('mb-close').onclick = closeDrawer;
+  // Replying belongs in Gmail. A reply box here would need send, drafts and
+  // threading, and the mailbox is already open in a tab next door.
+  el('mb-gmail').href = 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent(m.subject || '');
 }
 
 /* ── Forms for signature ──────────────────────────────────────────────────
@@ -6474,7 +6591,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=119"></script>
+<script src="/brand/enquiries.js?v=120"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
