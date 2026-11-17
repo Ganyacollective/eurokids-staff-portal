@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=117">
-<link rel="prefetch" href="/brand/enquiries.js?v=117" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=118">
+<link rel="prefetch" href="/brand/enquiries.js?v=118" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -6474,7 +6474,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=117"></script>
+<script src="/brand/enquiries.js?v=118"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
@@ -6506,6 +6506,23 @@ boot();
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
     }).catch(() => {}));
   }
+
+  // Let the tablet turn, even on a copy installed before the manifest was
+  // corrected.
+  //
+  // Android builds the installed app from the manifest at install time and
+  // bakes the orientation into it. Fixing "portrait" to "any" in the file
+  // therefore does nothing to an icon already on a home screen: Chrome only
+  // regenerates that app on its own schedule, which can be days away, so
+  // the coordinator's tablet would go on refusing to turn while the
+  // repository insisted the bug was fixed.
+  //
+  // unlock() releases the lock for the running document, which is the one
+  // thing that takes effect immediately and without reinstalling. It throws
+  // on browsers that do not have it and on pages that are not fullscreen or
+  // installed, and none of that matters — a desktop browser was never
+  // locked in the first place.
+  try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch (_) {}
 </script>
 </body>
 </html>
