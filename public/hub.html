@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=126">
-<link rel="prefetch" href="/brand/enquiries.js?v=126" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=128">
+<link rel="prefetch" href="/brand/enquiries.js?v=128" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -127,6 +127,28 @@ const ayShift = (n) => {
   const d = new Date(), y = d.getFullYear(), a = (d.getMonth() + 1 >= 4 ? y : y - 1) + n;
   return String(a).slice(2) + '-' + String(a + 1).slice(2);
 };
+// Which academic year a receipt belongs to.
+//
+// In order of authority: the child it is against carries the year in their
+// UIN; failing that, the month the admission is expected from; failing both,
+// the date the money was taken.
+//
+// That last fallback matters. The first version left those receipts with no
+// year at all and showed them in every one, so fifty thousand rupees of
+// 26-27 cash appeared on the 27-28 screen under "Ours to keep" — which is
+// exactly the confusion the year is supposed to end. Money taken in April
+// 2026 was taken for 26-27 unless something says otherwise, and received_on
+// is never null, so every receipt now has an answer.
+const ayOfDate = d => {
+  if (!d) return null;
+  const t = new Date(String(d).slice(0, 10) + 'T00:00:00Z');
+  if (isNaN(t)) return null;
+  const y = t.getUTCFullYear(), a = t.getUTCMonth() + 1 >= 4 ? y : y - 1;
+  return String(a).slice(2) + '-' + String(a + 1).slice(2);
+};
+const recYear = r => uinYear(r.uin) || ayOfDate(r.for_admission_from) || ayOfDate(r.received_on);
+const inYear = r => _ay === 'all' || recYear(r) === _ay;
+
 const ayList = () => [...new Set([
   ayShift(1), ayShift(0), ayShift(-1), ayShift(-2), ayShift(-3),
   ..._ayAll, _ay,
@@ -2413,11 +2435,17 @@ async function tabOverview(){
     const sumQ = s.schema('eurokids').from('v_live_summary').select('*');
     const dueQ = s.schema('eurokids').from('v_dues').select('student_name,uin,program_name,term1_due,term2_due,true_due')
          .gt('true_due', 0).order('true_due', { ascending: false }).limit(10);
-    const [{ data: sum, error: e1 }, { data: due, error: e2 }] = await Promise.all([
-      (_ay === 'all' ? sumQ.is('academic_year', null) : sumQ.eq('academic_year', _ay)).maybeSingle(),
+    // Deliberately not maybeSingle(). It raises "JSON object requested,
+    // multiple (or no) rows returned" rather than quietly giving back
+    // nothing, and this query legitimately returns no row for a year that
+    // has not been pulled — which is the normal case the screen below is
+    // written to handle. limit(1) and take the first; a year cannot have two.
+    const [{ data: sums, error: e1 }, { data: due, error: e2 }] = await Promise.all([
+      (_ay === 'all' ? sumQ.is('academic_year', null) : sumQ.eq('academic_year', _ay)).limit(1),
       uinLike ? dueQ.like('uin', uinLike) : dueQ,
     ]);
     if (e1 || e2) return el('body').innerHTML = fail(e1 || e2);
+    const sum = (sums || [])[0] || null;
     // No row for this year is not an error and not a reason to show another
     // year's money. It means nothing has been pulled into it.
     if (!sum) {
@@ -3245,10 +3273,14 @@ async function tabLiability(){
     s.schema('eurokids').from('epms_payment').select('*').is('voided_at', null).order('paid_on', { ascending: false }).limit(500),
   ]);
   if (error) return el('body').innerHTML = fail(error);
-  _liab.recs = recs || [];
+  // Filtered here rather than in each panel: the receipts table, the summary
+  // cards, the pending queue and the lookups all read _liab.recs, and three
+  // of them were showing every year because only one had been changed.
+  _liab.recs = (recs || []).filter(inYear);
   _liab.chain = chain || [];
   _liab.kids = kids || [];
-  _liab.asks = asks || [];
+  // A question about a payment belongs to the year of the child it is about.
+  _liab.asks = (asks || []).filter(a => _ay === 'all' || uinYear(a.uin) === _ay);
   _liab.pays = pays || [];
 
   // "Name — Class" keeps two children of the same name apart.
@@ -3261,31 +3293,7 @@ async function tabLiability(){
     return `<option value="${esc(label)}">`;
   }).join('');
 
-  // Money belongs to the year it was taken for, and the page shows one year.
-  //
-  // This used to show every year at once, on the reasoning that a receipt
-  // should stay findable whatever the roster is displaying. That was wrong:
-  // a receipt is for an academic year, and mixing 26-27's cash into a 27-28
-  // screen is exactly the confusion the year picker exists to remove.
-  //
-  // Which year a receipt belongs to, in order:
-  //   it is against a child     -> that child's UIN carries the year
-  //   it is money taken early   -> the month the admission is expected from
-  //   neither                   -> it has no year yet, and that is the point
-  //
-  // The last case is the "taken before admission" queue. Those receipts are
-  // deliberately shown in every year, because a receipt that belongs to no
-  // year would otherwise be invisible in all of them — and the two sitting
-  // there now are 50,000 rupees of somebody's money.
-  const recYear = r => uinYear(r.uin)
-    || (r.for_admission_from ? (() => {
-         const d = new Date(r.for_admission_from + 'T00:00:00Z');
-         const y = d.getUTCFullYear(), a = d.getUTCMonth() + 1 >= 4 ? y : y - 1;
-         return String(a).slice(2) + '-' + String(a + 1).slice(2);
-       })() : null);
-  const inYear = r => _ay === 'all' || recYear(r) === _ay || recYear(r) === null;
-
-  const live = _liab.recs.filter(r => !r.voided_at && inYear(r));
+  const live = _liab.recs.filter(r => !r.voided_at);
   const sum = f => live.filter(f).reduce((a, r) => a + Number(r.amount_rupees), 0);
   // Fee money for a child with no UIN is not "owed to EuroKids": they have
   // not invoiced a child who is not on the roll, so there is nothing to pay
@@ -6830,7 +6838,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=126"></script>
+<script src="/brand/enquiries.js?v=128"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
