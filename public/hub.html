@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=120">
-<link rel="prefetch" href="/brand/enquiries.js?v=120" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=121">
+<link rel="prefetch" href="/brand/enquiries.js?v=121" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -95,10 +95,40 @@ const SCHED_COLS = 'uin,student_name,father_name,program_name,batch,admission_da
   + 'promises_made,promises_kept,promises_broken,letters_sent,pay_score,'
   + 'pay_colour,pay_colour_auto,open_promise_on,'
   + 'watch_level,watch_reason,watch_review_on,watch_set_by,watch_set_at';
-const schedule = () => cached('sched', async () => {
+// Which academic year the roster is showing.
+//
+// Until now there was one year of data and the question never came up. From
+// April there are two live at once — 26-27 finishing and 27-28 enrolling —
+// and 25-26 behind them, so "the roster" stops being a thing that can be
+// shown without saying which.
+//
+// The year is in the UIN's last segment and always has been:
+// EK/1769/0134/2627 is child 0134 of 26-27. Nothing else has to be stored
+// or synced to know this.
+const uinYear = u => { const m = /(\d{2})(\d{2})$/.exec(String(u || '')); return m ? m[1] + '-' + m[2] : null; };
+// April to March, like the school year and like EPMS.
+const curAY = () => { const d = new Date(), y = d.getFullYear(), a = d.getMonth() + 1 >= 4 ? y : y - 1;
+  return String(a).slice(2) + '-' + String(a + 1).slice(2); };
+let _ay = (() => { try { return localStorage.getItem('ek-ay') || curAY(); } catch (_) { return curAY(); } })();
+let _ayAll = [];
+
+// One read of everything, filtered in the browser. The alternative is a
+// round trip every time somebody changes the year, to re-fetch rows that are
+// already here — and the whole roster is two hundred rows, not two hundred
+// thousand.
+const rosterRaw = () => cached('sched', async () => {
   const { data, error } = await getSb().schema('eurokids').from('v_schedule').select(SCHED_COLS).limit(2000);
-  if (error) throw error; return data || [];
+  if (error) throw error;
+  const rows = data || [];
+  _ayAll = [...new Set(rows.map(r => uinYear(r.uin)).filter(Boolean))].sort().reverse();
+  return rows;
 });
+const schedule = () => rosterRaw().then(rows => _ay === 'all' ? rows : rows.filter(r => uinYear(r.uin) === _ay));
+
+// Every year, for the screens that must not be filtered. Money already taken
+// does not stop existing because the roster is showing a different year, so
+// the cash book and the liabilities page read this one.
+const scheduleAll = () => rosterRaw();
 const invalidate = (prefix) => {
   if (!prefix) return _cache.clear();
   [..._cache.keys()].filter(k => k.startsWith(prefix)).forEach(k => _cache.delete(k));
@@ -594,7 +624,8 @@ function renderApp(){
         <div class="sb-foot"><span title="${esc(session.user.email)}">${esc(who)}</span><a id="out">Sign Out</a></div>
       </nav>
       <main class="main" id="main">
-        <div class="tbar" id="tbar"><button class="ib" id="tb-back" aria-label="All apps" style="display:none">${ICON.back}</button><div class="tt" id="tb-title"></div><div></div></div>
+        <div class="tbar" id="tbar"><button class="ib" id="tb-back" aria-label="All apps" style="display:none">${ICON.back}</button><div class="tt" id="tb-title"></div>
+          <div id="tb-right">${app === 'admissions' ? `<select class="in" id="tb-ay" title="Which academic year the roster shows" style="width:auto;min-width:112px"></select>` : ''}</div></div>
         <div class="content" id="body"><div class="loading">Loading…</div></div>
         <nav class="tabbar" id="tabbar"></nav>
       </main></div>`;
@@ -602,6 +633,7 @@ function renderApp(){
     const se = el('sb-enq'); if (se) se.onclick = () => { app = 'enquiries'; tab = 'enq_today'; renderApp(); };
     const sf = el('sb-fees'); if (sf) sf.onclick = () => { app = 'admissions'; tab = 'overview'; renderApp(); };
     el('out').onclick = async () => { await getSb().auth.signOut(); };
+    paintYearPicker();
     // scroll-edge effect: the bar earns its hairline and title once content moves under it
     const main = el('main'), bar = el('tbar');
     const onScroll = () => bar.classList.toggle('edge', (window.innerWidth < 768 ? window.scrollY : main.scrollTop) > 36);
@@ -633,6 +665,9 @@ function renderApp(){
   writeUrl(true);
   el('body').innerHTML = '<div class="loading">Loading…</div>';
   el('main').scrollTop = 0; window.scrollTo({ top: 0 });
+  // _ayAll is only known after the first roster read, so the options are
+  // refreshed on every tab change rather than once at startup.
+  paintYearPicker();
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
      templates: tabTemplates, letters: tabLetters, docs: tabDocs,
@@ -2553,6 +2588,25 @@ async function tabChildren(){
   el('body').innerHTML = '<div class="loading">Loading roster…</div>';
   let rows;
   try { rows = await schedule(); } catch (e) { return el('body').innerHTML = fail(e); }
+  // An empty year is the normal state of the one you are about to enrol
+  // into, not a fault. Saying so beats an empty table, which is what
+  // somebody opening this in April would otherwise read as a failed load.
+  if (!rows.length && _ay !== 'all') {
+    el('body').innerHTML = `<div class="vhead"><h2>Children</h2>
+        <div class="hint">Academic year ${esc(_ay)}</div></div>
+      <div class="empty" style="padding:48px 16px"><div class="ic">🗓</div>
+        <h3>Nobody on the roll for ${esc(_ay)} yet</h3>
+        <div>Children appear here once EPMS has admitted them for this year.
+          Use the year picker at the top to look at another year${
+            _ayAll.length ? ' — so far there is ' + _ayAll.join(' and ') : ''}.</div>
+        <div style="margin-top:14px"><button class="btn line" id="ay-all">Show every year</button></div></div>`;
+    el('ay-all').onclick = () => {
+      _ay = 'all';
+      try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
+      paintYearPicker(); renderTab();
+    };
+    return;
+  }
   _kids = rows.slice()
     .map(r => ({ ...r, total_invoiced: r.epms_invoiced, total_collected: r.collected }))
     .sort((a, b2) => (b2.admission_date || '').localeCompare(a.admission_date || '')
@@ -3080,7 +3134,10 @@ async function tabLiability(){
   const s = getSb();
   const [{ data: recs, error }, { data: kids }, { data: chain }, { data: asks }, { data: pays }] = await Promise.all([
     s.schema('eurokids').from('receipt_offline').select('*').order('received_on', { ascending: false }).limit(2000),
-    schedule().then(rows => ({ data: rows.slice().sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || '')) })),
+    // Every year, not the one on screen: a receipt taken in 26-27 still has
+    // to be findable while the roster is showing 27-28, and cash in hand does
+    // not belong to an academic year at all.
+    scheduleAll().then(rows => ({ data: rows.slice().sort((a, b2) => (a.student_name || '').localeCompare(b2.student_name || '')) })),
     // Not select('*') — signature_png is a base64 image per row, and the list
     // reads the whole chain.
     s.schema('eurokids').from('receipt_custody')
@@ -5618,6 +5675,28 @@ if (!window._slashBound) {
   });
 }
 
+// The year picker, filled from the years the roster actually contains.
+//
+// Not a fixed list: a hard-coded 25-26/26-27/27-28 is wrong the moment a
+// year passes, and it would offer years with nothing in them. The one
+// exception is the year we are in, which is offered even when empty —
+// in April, 27-28 has no children yet and that is exactly when somebody
+// needs to switch to it.
+function paintYearPicker(){
+  const sel = el('tb-ay');
+  if (!sel) return;
+  const years = [...new Set([..._ayAll, curAY(), _ay].filter(Boolean))].sort().reverse();
+  sel.innerHTML = years.map(y => `<option value="${y}" ${y === _ay ? 'selected' : ''}>${y}</option>`).join('')
+    + `<option value="all" ${_ay === 'all' ? 'selected' : ''}>All years</option>`;
+  sel.onchange = () => {
+    _ay = sel.value;
+    try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
+    // The rows are already here; only the filter changed. Repaint, do not
+    // re-fetch.
+    renderTab();
+  };
+}
+
 function openDrawer(title, subtitle){
   let bg = el('drawer-bg'), dr = el('drawer');
   if (!bg) {
@@ -6591,7 +6670,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=120"></script>
+<script src="/brand/enquiries.js?v=121"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
