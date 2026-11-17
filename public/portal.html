@@ -271,7 +271,7 @@
 
         <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
           <table>
-            <thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Applied</th><th>Status</th><th></th></tr></thead>
             <tbody id="leaves-tbody"></tbody>
           </table>
         </div>
@@ -679,6 +679,26 @@ function saveState(){
   _savePending = true;
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(_flushSave, 350);
+}
+
+// Save and wait for it.
+//
+// saveState() is debounced by 350ms and deliberately fire-and-forget, which
+// is right for typing but wrong before telling a server to go and read what
+// was just written. Approving a leave did exactly that: the blob was still
+// on its way when /api/leave-decision read it back, found the row still
+// Pending, and refused to send the email — the refusal working correctly on
+// stale data, which is the most confusing kind of correct.
+async function saveStateNow(){
+  if (!_stateLoaded) return;
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  _savePending = true;
+  await _flushSave();
+  // _flushSave reschedules itself rather than queueing when a save is already
+  // in flight, so wait for the dust to settle rather than assuming one pass.
+  for (let i = 0; i < 60 && (_saveInflight || _savePending); i++) {
+    await new Promise(r => setTimeout(r, 100));
+  }
 }
 
 async function _flushSave(){
@@ -1943,7 +1963,7 @@ async function approveRequest(id){
       source:      'teacher_portal',
       source_id:   r.id,
     });
-    saveState();
+    await saveStateNow();
     rerunActiveMonth();
     const sent = await tellTeacher(id, 'approved');
     await loadInbox();
@@ -2490,7 +2510,7 @@ function renderLeaves(){
   if (leavesTab !== "all") list = list.filter(L => L.status === leavesTab);
   list.sort((a,b) => (b.applied_at||'').localeCompare(a.applied_at||''));
 
-  if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500 py-12">No leave applications in this view.</td></tr>`; return; }
+  if (list.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="text-center text-gray-500 py-12">No leave applications in this view.</td></tr>`; return; }
   tbody.innerHTML = list.map(L => {
     const e = empById(L.employee_id);
     const isPortal = L._origin === 'portal' && !L.source_id;  // unpromoted teacher-portal request
@@ -2516,11 +2536,53 @@ function renderLeaves(){
       <td class="text-gray-600">${fmtDateShort(L.start_date)} → ${fmtDateShort(L.end_date)}</td>
       <td>${L.total_days}</td>
       <td class="text-gray-600 text-xs max-w-xs">${escapeHtml(L.reason||'')}</td>
+      <td class="text-xs whitespace-nowrap">${appliedCell(L)}</td>
       <td><span class="badge ${L.status==='Approved'?'b-approved':L.status==='Rejected'?'b-rejected':'b-pending'}">${L.status}</span></td>
       <td>${editButton}${actionButtons}${deleteButton}</td>
     </tr>`;
   }).join('');
 }
+
+// When it was applied, and how much warning that gave.
+//
+// The list showed the dates asked for and nothing about when the asking
+// happened, so "did they tell us in time" could not be answered from this
+// screen — and across the sixty applications on file, twenty-one were
+// submitted AFTER the leave had already begun, one of them nearly three
+// months late. That is the single most useful fact for deciding an
+// application and it was the one fact not on the page.
+//
+// No rule is enforced here. The notice period is a judgement the office
+// makes, and a system that silently applied eight or twelve hours would be
+// guessing at a policy nobody has written down. It states the facts and
+// colours the ones worth a second look.
+const LEAVE_START_HOUR = 9;   // the working day starts at 09:00
+
+function leaveNotice(L){
+  if (!L || !L.applied_at || !L.start_date) return null;
+  const applied = new Date(L.applied_at);
+  if (isNaN(applied)) return null;
+  // Local time, because the people reading this are in it.
+  const start = new Date(L.start_date + 'T00:00:00');
+  start.setHours(LEAVE_START_HOUR, 0, 0, 0);
+  const hours = (start - applied) / 3600000;
+  const abs = Math.abs(hours);
+  const span = abs < 1 ? 'under an hour'
+    : abs < 36 ? `${Math.round(abs)} h`
+    : `${Math.round(abs / 24)} days`;
+  return {
+    appliedAt: applied,
+    hours,
+    late: hours < 0,
+    // "short notice" is flagged, not forbidden: under half a day is worth
+    // looking at, under nothing at all is worth questioning.
+    short: hours >= 0 && hours < 12,
+    text: hours < 0 ? `${span} after it began` : `${span} before`,
+  };
+}
+
+const fmtWhen = d => d.toLocaleString('en-IN',
+  { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 
 // These two handle leaves that live in the blob — applications made from the
 // teacher portal without logging in. They are a separate system from the
@@ -2528,10 +2590,22 @@ function renderLeaves(){
 // for a while only that other pair told the teacher anything. Approving here
 // flipped a field and sent nothing, which is indistinguishable from a broken
 // feature by the person waiting for the email.
+// Date and time on one line, how much notice it gave on the next. Late is
+// red because it is the case that changes the decision; short notice is
+// amber because it is worth a look and nothing more.
+function appliedCell(L){
+  const n = leaveNotice(L);
+  if (!n) return '<span class="text-gray-400">—</span>';
+  const colour = n.late ? 'color:#B91C1C' : n.short ? 'color:#B45309' : 'color:#6B7280';
+  return `<div class="text-gray-700">${escapeHtml(fmtWhen(n.appliedAt))}</div>
+          <div style="${colour}">${escapeHtml(n.text)}</div>`;
+}
+
 async function approveLeave(id){
   const L = state.leaves.find(x=>x.id===id); if (!L) return;
   L.status = "Approved"; L.reviewed_at = new Date().toISOString();
-  saveState(); rerunForDateRange(L.start_date, L.end_date); renderAll();
+  await saveStateNow();
+  rerunForDateRange(L.start_date, L.end_date); renderAll();
   const sent = await tellTeacher(id, 'approved');
   if (sent && !sent.ok) alert('Approved — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
 }
@@ -2540,7 +2614,8 @@ async function rejectLeave(id){
   const note = prompt("Rejection reason (optional):", "");
   if (note === null) return;
   L.status = "Rejected"; L.reviewed_at = new Date().toISOString(); L.reviewer_note = note || "";
-  saveState(); rerunForDateRange(L.start_date, L.end_date); renderAll();
+  await saveStateNow();
+  rerunForDateRange(L.start_date, L.end_date); renderAll();
   const sent = await tellTeacher(id, 'rejected');
   if (sent && !sent.ok) alert('Recorded — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
 }
