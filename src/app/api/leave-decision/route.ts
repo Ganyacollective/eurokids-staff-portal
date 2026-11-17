@@ -55,7 +55,55 @@ export async function POST(req: NextRequest) {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const { data: lr } = await admin.from("leave_requests").select("*").eq("id", requestId).maybeSingle();
+  // There are two leave systems in this building and both have to be served.
+  //
+  //   leave_requests  — a table. The teacher portal's signed-in modal writes
+  //                     here, and the Inbox approves it.
+  //   portal_state    — a JSON blob. /api/public/apply-leave writes here for
+  //                     applications made without logging in, and the Leaves
+  //                     tab approves those with approveLeave().
+  //
+  // The first version of this route only knew about the table, so approving
+  // a blob leave sent nothing and looked like a broken feature. The id tells
+  // them apart: a table row is a uuid, a blob leave is an eight-character
+  // id like "359ac7af".
+  type AnyLeave = {
+    id: string; leave_type: string; start_date: string; end_date: string;
+    total_days: number | string; reason?: string; status: string;
+    reviewer_note?: string; user_id?: string; employee_id?: string;
+  };
+
+  let lr: AnyLeave | null = null;
+  let to = "";
+  let name = "";
+
+  const { data: row } = await admin.from("leave_requests").select("*").eq("id", requestId).maybeSingle();
+  if (row) {
+    lr = row as AnyLeave;
+    // The address is the account they sign in with. employees.email is empty
+    // for every one of the twenty-four rows in that table.
+    const { data: teacher } = await admin.auth.admin.getUserById(String(lr.user_id));
+    to = (teacher?.user?.email || "").trim();
+    const { data: link } = await admin.from("teacher_links")
+      .select("display_name").eq("user_id", lr.user_id).maybeSingle();
+    name = (link?.display_name || to.split("@")[0] || "").trim();
+  } else {
+    const { data: ps } = await admin.from("portal_state").select("data").eq("id", "main").maybeSingle();
+    const blob = (ps?.data || {}) as {
+      employees?: { id: string; display_name?: string; email?: string }[];
+      leaves?: AnyLeave[];
+    };
+    const found = (blob.leaves || []).find(l => l.id === requestId) || null;
+    if (found) {
+      lr = found;
+      // Here the address lives on the employee record inside the blob, which
+      // is where the apply-time email gets it from too.
+      const emp = (blob.employees || []).find(e => e.id === found.employee_id);
+      to = (emp?.email || "").trim();
+      name = (emp?.display_name || "").trim();
+    }
+  }
+
   if (!lr) return NextResponse.json({ ok: false, error: "That request no longer exists." }, { status: 404 });
 
   // Who may send which. A teacher can trigger their own "we have it";
@@ -63,7 +111,7 @@ export async function POST(req: NextRequest) {
   // an approval email would mean a teacher could mail themselves one.
   const { data: me } = await admin.from("profiles").select("role").eq("id", who.user.id).maybeSingle();
   const isStaff = me?.role === "admin" || me?.role === "hr";
-  if (kind === "applied" && lr.user_id !== who.user.id && !isStaff) {
+  if (kind === "applied" && lr && lr.user_id && lr.user_id !== who.user.id && !isStaff) {
     return NextResponse.json({ ok: false, error: "That is not your leave application." }, { status: 403 });
   }
   if (kind !== "applied" && !isStaff) {
@@ -80,19 +128,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `This request is ${lr.status}, not Rejected.` }, { status: 409 });
   }
 
-  const { data: teacher } = await admin.auth.admin.getUserById(lr.user_id);
-  const to = (teacher?.user?.email || "").trim();
   if (!to) {
-    return NextResponse.json({ ok: false, error: "There is no email address on this teacher's account." }, { status: 400 });
+    return NextResponse.json({ ok: false,
+      error: "There is no email address on file for this person, so nothing could be sent." }, { status: 400 });
   }
   if (!mailReady("hr")) {
     return NextResponse.json({ ok: false, error: "The HR mailbox is not configured to send." }, { status: 503 });
   }
-
-  const { data: link } = await admin.from("teacher_links")
-    .select("display_name").eq("user_id", lr.user_id).maybeSingle();
-  const name = (link?.display_name || to.split("@")[0] || "").trim();
-  const first = name.split(/\s+/)[0];
+  const first = (name || to.split("@")[0]).split(/\s+/)[0];
 
   const days = Number(lr.total_days);
   const dayText = `${days} day${days === 1 ? "" : "s"}`;

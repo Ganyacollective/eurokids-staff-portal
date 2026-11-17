@@ -2522,16 +2522,27 @@ function renderLeaves(){
   }).join('');
 }
 
-function approveLeave(id){
+// These two handle leaves that live in the blob — applications made from the
+// teacher portal without logging in. They are a separate system from the
+// Inbox's approveRequest/rejectRequest, which act on leave_requests rows, and
+// for a while only that other pair told the teacher anything. Approving here
+// flipped a field and sent nothing, which is indistinguishable from a broken
+// feature by the person waiting for the email.
+async function approveLeave(id){
   const L = state.leaves.find(x=>x.id===id); if (!L) return;
   L.status = "Approved"; L.reviewed_at = new Date().toISOString();
   saveState(); rerunForDateRange(L.start_date, L.end_date); renderAll();
+  const sent = await tellTeacher(id, 'approved');
+  if (sent && !sent.ok) alert('Approved — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
 }
-function rejectLeave(id){
+async function rejectLeave(id){
   const L = state.leaves.find(x=>x.id===id); if (!L) return;
   const note = prompt("Rejection reason (optional):", "");
+  if (note === null) return;
   L.status = "Rejected"; L.reviewed_at = new Date().toISOString(); L.reviewer_note = note || "";
   saveState(); rerunForDateRange(L.start_date, L.end_date); renderAll();
+  const sent = await tellTeacher(id, 'rejected');
+  if (sent && !sent.ok) alert('Recorded — but the email to the teacher did not go:\n\n' + (sent.error || 'unknown'));
 }
 function deleteLeave(id){
   if (!confirm("Delete this leave application?")) return;
