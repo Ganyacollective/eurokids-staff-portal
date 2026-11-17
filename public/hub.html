@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=112">
-<link rel="prefetch" href="/brand/enquiries.js?v=112" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=113">
+<link rel="prefetch" href="/brand/enquiries.js?v=113" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -5760,6 +5760,9 @@ function concessionPanel(c){
         <div class="v ${c.reason ? '' : 'mute'}">${c.reason ? esc(c.reason) : 'not recorded'}</div></div>
       <div class="row"><div class="l">Agreed</div>
         <div class="v ${c.agreed_on ? '' : 'mute'}">${c.agreed_on ? longDate(c.agreed_on) : '&mdash;'}</div></div>
+      ${Number(c.prior_total || 0) > 0 ? `<div class="row"><div class="l">Given in earlier years
+        <span class="sub">${c.prior_years} earlier enrolment${Number(c.prior_years) === 1 ? '' : 's'} &middot; ${money(c.lifetime_total)} to this family in total</span></div>
+        <div class="v">${money(c.prior_total)}</div></div>` : ''}
       <div class="row"><div class="l">All concessions this year<span class="sub">across every child on the roll</span></div>
         <div class="v">${money(c.year_total || 0)}</div></div>
     </div></div>`;
@@ -6387,7 +6390,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=112"></script>
+<script src="/brand/enquiries.js?v=113"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
