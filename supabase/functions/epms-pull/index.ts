@@ -1,3 +1,26 @@
+// ⚠ THIS FILE IS NOT WHAT IS RUNNING.
+//
+// Checked 17 Nov 2026: Supabase has version 6 of epms-pull deployed; this
+// copy is version 3. It is missing the v5 change that lets the nightly cron
+// authenticate with the service-role key, and the v6 change that pulls more
+// than one academic year. The commit "Let the scheduled sync authenticate as
+// the server" touched this path but not this file.
+//
+// So deploying from this file would silently revert both. The deployed
+// function is the source of truth; read it with the Supabase MCP or the
+// dashboard before changing anything here.
+//
+// What v6 does, in short:
+//   • EPMS_FYIDS takes a comma list of academic years ("25,26") and the run
+//     pulls each. Unset, it falls back to EPMS_FYID — the old behaviour.
+//   • FYID is what selects the year: 23 → 24-25, 24 → 25-26, 25 → 26-27,
+//     26 → 27-28 (measured against the live account).
+//   • POST /AcademicYear/AcademicYear answered 302 to /Users/LogIn every
+//     time, so EPMS_AY_ID never did anything. The call is gone.
+//   • A year with no children is skipped, not failed — that is next year,
+//     every year, until admissions open.
+//   • epms.children rows now carry academic_year.
+
 // epms-pull — one button, everything refreshed.
 //
 // Pulls from EPMS:
