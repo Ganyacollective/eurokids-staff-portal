@@ -153,6 +153,10 @@ export async function POST(req: NextRequest) {
     </table>`;
 
   let subject: string, title: string, subtitle: string, bodyHtml: string;
+  // Green for granted, red for refused. A teacher should know which it is
+  // from the shape of the thing before reading a word of it — and the two
+  // arriving in the same blue made them look like the same email twice.
+  let theme: "school" | "calm" | "sombre" = "school";
 
   if (kind === "applied") {
     subject = `We have your ${lr.leave_type} application (${dayText})`;
@@ -161,7 +165,9 @@ export async function POST(req: NextRequest) {
     bodyHtml = `<p>Dear ${esc(first)},</p>
       <p>Your application has been received and is with the office.</p>${facts}
       <p>You will get another email the moment it is decided. There is no need to follow up in the meantime.</p>`;
+    theme = "school";
   } else if (kind === "approved") {
+    theme = "calm";
     subject = updated ? `Updated — your approved leave has changed (${dates})`
                       : `Approved — ${lr.leave_type}, ${dates}`;
     title = updated ? "Your approved leave has been changed" : "Your leave has been approved";
@@ -169,16 +175,17 @@ export async function POST(req: NextRequest) {
     bodyHtml = `<p>Dear ${esc(first)},</p>
       <p>${updated
           ? "Your leave is still approved, but the details have been changed. This is what is on record now:"
-          : "Your leave has been approved."}</p>${facts}
-      <p>Please make sure your class is handed over before you go.</p>`;
+          : "Good news — your leave has been approved. Enjoy the time off."}</p>${facts}
+      <p>Please hand your class over before you go, and let the office know if anything changes.</p>`;
   } else {
+    theme = "sombre";
     subject = updated ? `Updated — ${lr.leave_type}, ${dates}`
                       : `Not approved — ${lr.leave_type}, ${dates}`;
     title = updated ? "Your rejected leave has been changed" : "Your leave has not been approved";
     subtitle = updated ? "These are the details as they now stand." : "";
     bodyHtml = `<p>Dear ${esc(first)},</p>
       <p>${updated ? "This application is still not approved, and the details have changed:"
-                   : "This application has not been approved."}</p>${facts}
+                   : "I am sorry — this application has not been approved."}</p>${facts}
       ${lr.reviewer_note ? `<p style="margin-top:14px"><strong>Reason given:</strong><br>${esc(lr.reviewer_note)}</p>` : ""}
       <p>If you need to discuss it, speak to the office — replying to this email reaches HR.</p>`;
   }
@@ -187,7 +194,7 @@ export async function POST(req: NextRequest) {
     to: [to],
     subject,
     from: "hr",
-    html: renderEmail({ title, subtitle, bodyHtml, contactEmail: HR_EMAIL }),
+    html: renderEmail({ title, subtitle, bodyHtml, theme, contactEmail: HR_EMAIL }),
     text: `${title}\n\n${lr.leave_type} · ${dates} · ${dayText}`
       + (kind === "rejected" && lr.reviewer_note ? `\n\nReason: ${lr.reviewer_note}` : ""),
   });

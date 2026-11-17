@@ -35,7 +35,7 @@ export const esc = (s: unknown) =>
 // The default is the school's blue. The rest are for occasions — pick one in
 // the compose screen and the header changes without anyone touching code.
 export type ThemeKey =
-  | "school" | "celebration" | "festive" | "warm" | "notice" | "calm";
+  | "school" | "celebration" | "festive" | "warm" | "notice" | "calm" | "sombre";
 
 type Theme = { label: string; bg: string; fg: string; sub: string; accent: string };
 
@@ -46,6 +46,10 @@ export const THEMES: Record<ThemeKey, Theme> = {
   warm:        { label: "Warm rose",             bg: "#BE185D", fg: "#FFFFFF", sub: "rgba(255,255,255,.9)",  accent: "#9D174D" },
   notice:      { label: "Payment notice amber",  bg: "#B45309", fg: "#FFFFFF", sub: "rgba(255,255,255,.9)",  accent: "#92400E" },
   calm:        { label: "Calm green",            bg: "#15803D", fg: "#FFFFFF", sub: "rgba(255,255,255,.9)",  accent: "#166534" },
+  // For news nobody wanted. "Celebration" is the brand red and is the right
+  // colour for this and entirely the wrong name, so bad news gets its own
+  // entry rather than borrowing a word that means the opposite.
+  sombre:      { label: "Sombre red",            bg: "#9F1239", fg: "#FFFFFF", sub: "rgba(255,255,255,.88)", accent: "#881337" },
 };
 
 export const themeList = () =>
