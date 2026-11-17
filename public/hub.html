@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=122">
-<link rel="prefetch" href="/brand/enquiries.js?v=122" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=123">
+<link rel="prefetch" href="/brand/enquiries.js?v=123" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -410,6 +410,18 @@ function renderChooser(){
     <div class="page"><div class="chooser">
       <div class="sb-brand" style="padding:0 0 22px"><span class="dot"></span><span>EuroKids JMD Enclave</span></div>
       <h1 class="hello">Hello${profile?.full_name ? ', ' + esc(profile.full_name.split(' ')[0]) : ''}</h1>
+      <!-- Which year, asked before which app.
+           The academic year is not a filter on one screen, it is which set of
+           books you are working in: the roster, the fees, the receipts and the
+           cash all belong to one. Asking on the way in means nobody records
+           next year's admission fee against this year by not noticing a
+           dropdown somewhere. It defaults to the year we are actually in, so
+           for most of the year nobody has to touch it. -->
+      <div class="ay-ask">
+        <label for="ch-ay">Academic year</label>
+        <select id="ch-ay"></select>
+        <span class="hint" id="ch-ay-note"></span>
+      </div>
       <p class="askline">Where would you like to go?</p>
       <div class="deck">${doors.filter(d => d.ok || d.soon).map(d => `
         <div class="doorwrap">
@@ -423,6 +435,30 @@ function renderChooser(){
       <p class="hint" style="margin-top:28px">${esc(who)} · <a id="out" style="cursor:pointer">Sign Out</a></p>
     </div></div>`;
   el('out').onclick = async () => { await getSb().auth.signOut(); };
+  (() => {
+    const sel = el('ch-ay'); if (!sel) return;
+    const years = [...new Set([..._ayAll, curAY(), _ay].filter(Boolean))].sort().reverse();
+    sel.innerHTML = years.map(y => `<option value="${y}" ${y === _ay ? 'selected' : ''}>${y}</option>`).join('')
+      + `<option value="all" ${_ay === 'all' ? 'selected' : ''}>All years</option>`;
+    const note = () => el('ch-ay-note').textContent =
+      _ay === 'all' ? 'Every year at once — useful for looking back, not for recording anything.'
+      : _ay === curAY() ? 'The year we are in now.'
+      : `Not the current year — everything you open will be ${_ay}.`;
+    note();
+    sel.onchange = () => {
+      _ay = sel.value;
+      try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
+      note();
+    };
+    // The roster is what knows which years exist, and it may not be loaded
+    // yet on a cold start. Fill the list again once it is.
+    rosterRaw().then(() => {
+      if (!el('ch-ay')) return;
+      const ys = [...new Set([..._ayAll, curAY(), _ay].filter(Boolean))].sort().reverse();
+      el('ch-ay').innerHTML = ys.map(y => `<option value="${y}" ${y === _ay ? 'selected' : ''}>${y}</option>`).join('')
+        + `<option value="all" ${_ay === 'all' ? 'selected' : ''}>All years</option>`;
+    }).catch(() => {});
+  })();
   document.querySelectorAll('.door[data-key]').forEach(b => {
     b.onclick = () => {
       const d = doors.find(x => x.key === b.dataset.key);
@@ -614,8 +650,8 @@ function renderApp(){
       <nav class="sb" id="sb">
         <div class="sb-brand"><span class="dot"></span><span>EuroKids JMD</span></div>
         <div class="hint" style="margin:-10px 0 6px 10px;font-size:12px">${APP_NAME[app] || ''}</div>
-        ${app === 'admissions' ? `<div class="sb-ay"><label for="tb-ay">Academic year</label>
-          <select id="tb-ay" title="Which academic year the roster shows"></select></div>` : ''}
+        <div class="sb-ay"><label for="tb-ay">Academic year</label>
+          <select id="tb-ay" title="Which academic year you are working in"></select></div>
         ${SECTIONS.map(sec => { const ts = avail.filter(t => TABS[t].sect === sec); return ts.length
           ? `<div class="sb-h">${sec}</div>${ts.map(item).join('')}` : ''; }).join('')}
         <div class="sb-h">Apps</div>
@@ -3176,7 +3212,31 @@ async function tabLiability(){
     return `<option value="${esc(label)}">`;
   }).join('');
 
-  const live = _liab.recs.filter(r => !r.voided_at);
+  // Money belongs to the year it was taken for, and the page shows one year.
+  //
+  // This used to show every year at once, on the reasoning that a receipt
+  // should stay findable whatever the roster is displaying. That was wrong:
+  // a receipt is for an academic year, and mixing 26-27's cash into a 27-28
+  // screen is exactly the confusion the year picker exists to remove.
+  //
+  // Which year a receipt belongs to, in order:
+  //   it is against a child     -> that child's UIN carries the year
+  //   it is money taken early   -> the month the admission is expected from
+  //   neither                   -> it has no year yet, and that is the point
+  //
+  // The last case is the "taken before admission" queue. Those receipts are
+  // deliberately shown in every year, because a receipt that belongs to no
+  // year would otherwise be invisible in all of them — and the two sitting
+  // there now are 50,000 rupees of somebody's money.
+  const recYear = r => uinYear(r.uin)
+    || (r.for_admission_from ? (() => {
+         const d = new Date(r.for_admission_from + 'T00:00:00Z');
+         const y = d.getUTCFullYear(), a = d.getUTCMonth() + 1 >= 4 ? y : y - 1;
+         return String(a).slice(2) + '-' + String(a + 1).slice(2);
+       })() : null);
+  const inYear = r => _ay === 'all' || recYear(r) === _ay || recYear(r) === null;
+
+  const live = _liab.recs.filter(r => !r.voided_at && inYear(r));
   const sum = f => live.filter(f).reduce((a, r) => a + Number(r.amount_rupees), 0);
   // Fee money for a child with no UIN is not "owed to EuroKids": they have
   // not invoiced a child who is not on the roll, so there is nothing to pay
@@ -3191,7 +3251,8 @@ async function tabLiability(){
   _liab.pending = pending;
 
   el('body').innerHTML = head('Liabilities',
-      'Money already in our hands. Cash still to reach the bank, fees still to reach EuroKids, and collections that were never EuroKids’ to begin with.',
+      (_ay === 'all' ? 'Every academic year. ' : `Money taken for ${_ay}. `)
+      + 'Cash still to reach the bank, fees still to reach EuroKids, and collections that were never EuroKids’ to begin with.',
       `<button class="btn line" id="lb-pay">Pay EuroKids…</button><button class="btn" id="lb-open">Record Money…</button>`)
     + `<div class="stats" style="margin-bottom:10px">
         <div class="stat warn"><div class="k">Cash in the drawer</div><div class="v">${money(notBanked)}</div>
@@ -6683,7 +6744,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=122"></script>
+<script src="/brand/enquiries.js?v=123"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

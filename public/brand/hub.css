@@ -1032,3 +1032,18 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .sb-ay select:hover{background-color:#fff}
 .sb-ay select:focus{outline:none;box-shadow:var(--focus)}
 @media(max-width:767px){ .sb-ay{margin:0 0 8px;min-width:150px} .sb-ay label{display:none} }
+
+/* Which academic year, asked before which app.
+   It sits between the greeting and the doors because that is the order the
+   decision happens in: you are working in a year, and then you open
+   something inside it. */
+.ay-ask{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 6px}
+.ay-ask label{font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--label-3)}
+.ay-ask select{appearance:none;-webkit-appearance:none;cursor:pointer;font:inherit;
+  font-size:var(--fs-t3);font-weight:650;letter-spacing:-.01em;color:var(--label);
+  padding:8px 30px 8px 12px;min-height:38px;border:0;border-radius:10px;background:#fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.09),0 1px 2px rgba(0,0,0,.04);
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239A9AA3' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 11px center}
+.ay-ask select:focus{outline:none;box-shadow:var(--focus)}
+.ay-ask .hint{font-size:var(--fs-co)}
