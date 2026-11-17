@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=125">
-<link rel="prefetch" href="/brand/enquiries.js?v=125" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=126">
+<link rel="prefetch" href="/brand/enquiries.js?v=126" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -2407,13 +2407,37 @@ async function renderSyncHealth(){
 async function tabOverview(){
   const s = getSb();
   if (has('finance')) {
+    // The figures are per academic year now, and the row whose academic_year
+    // is null is every year at once.
+    const uinLike = _ay === 'all' ? null : '%/' + _ay.replace('-', '');
+    const sumQ = s.schema('eurokids').from('v_live_summary').select('*');
+    const dueQ = s.schema('eurokids').from('v_dues').select('student_name,uin,program_name,term1_due,term2_due,true_due')
+         .gt('true_due', 0).order('true_due', { ascending: false }).limit(10);
     const [{ data: sum, error: e1 }, { data: due, error: e2 }] = await Promise.all([
-      s.schema('eurokids').from('v_live_summary').select('*').maybeSingle(),
-      s.schema('eurokids').from('v_dues').select('student_name,uin,program_name,term1_due,term2_due,true_due')
-         .gt('true_due', 0).order('true_due', { ascending: false }).limit(10)
+      (_ay === 'all' ? sumQ.is('academic_year', null) : sumQ.eq('academic_year', _ay)).maybeSingle(),
+      uinLike ? dueQ.like('uin', uinLike) : dueQ,
     ]);
     if (e1 || e2) return el('body').innerHTML = fail(e1 || e2);
-    if (!sum)     return el('body').innerHTML = `<div class="err">No finance access.</div>`;
+    // No row for this year is not an error and not a reason to show another
+    // year's money. It means nothing has been pulled into it.
+    if (!sum) {
+      // No Sync button here on purpose: the rest of this function is what
+      // wires it, and an early return would leave a button that does nothing
+      // — which is worse than not offering one.
+      el('body').innerHTML = head('Overview', `Academic year ${esc(_ay)}.`, '')
+        + `<div class="empty" style="padding:48px 16px"><div class="ic">🗓</div>
+            <h3>No figures for ${esc(_ay)}</h3>
+            <div>Nothing has been pulled into this year. Either nobody has been admitted
+              into it yet, or the sync is not fetching it — those look the same from here.</div>
+            <div style="margin-top:14px"><button class="btn line" id="ay-back">Back to ${esc(curAY())}</button></div>
+          </div>`;
+      el('ay-back').onclick = () => {
+        _ay = curAY();
+        try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
+        paintYearPicker(); renderTab();
+      };
+      return;
+    }
     el('body').innerHTML = head('Overview', 'Live from EPMS, corrected for status and discounts.',
         `<span class="hint" id="sync-info" style="margin-right:10px">Checking…</span>
          <button class="btn line sm" id="sync">Sync from EPMS</button>`)
@@ -2627,10 +2651,14 @@ function wireSync(s, afterSync){
           // it yet, so one year and two years both finish with 230 rows and
           // look identical. The answer was in the response the whole time and
           // nothing showed it.
+          // The function returns year labels now ("26-27"); older versions
+          // returned raw FYIDs. Both are handled so a stale deploy on either
+          // side does not print "FYID 26-27".
+          const asYear = f => /^\d{2}-\d{2}$/.test(String(f)) ? String(f)
+            : ({ '23':'24-25','24':'25-26','25':'26-27','26':'27-28' }[String(f)] || 'FYID ' + f);
           const yrs = Array.isArray(j.years) && j.years.length
-            ? ' · years ' + j.years.map(f => ({ '23':'24-25','24':'25-26','25':'26-27','26':'27-28' }[String(f)] || 'FYID ' + f))
-                .join(', ') + (j.rows_per_year
-                  ? ' (' + Object.values(j.rows_per_year).join('/') + ')' : '')
+            ? ' · years ' + j.years.map(asYear).join(', ')
+              + (j.rows_per_year ? ' (' + Object.values(j.rows_per_year).join('/') + ')' : '')
             : '';
           el('sync-info').textContent = (j.new_payments
             ? `${j.new_payments} new payment${j.new_payments===1?'':'s'} · ₹${j.new_payments_rupees.toLocaleString('en-IN')} received`
@@ -6802,7 +6830,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=125"></script>
+<script src="/brand/enquiries.js?v=126"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
