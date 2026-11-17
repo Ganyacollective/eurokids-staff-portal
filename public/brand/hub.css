@@ -929,42 +929,44 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    spanning both columns still divides correctly. */
 .ui2 .sec{margin-top:16px}
 .ui2 .sec>h3{display:none}
-/* The gradient used to run out to pure white by the middle of the card, so
-   the bottom half of every section was the same colourless box it replaced
-   and only the header strip carried the hue. It now stays tinted the whole
-   way down and the cells sit at 74% white over it, which is the most
-   transparency 15px semibold black will take without losing contrast. */
+/* The tint came off the cards.
+   Washing a whole card in colour asked the colour to do too much. Rows in
+   this application are inset sixteen pixels from the card's left edge, so
+   the gradient showed through that gutter as a solid bar down the side of
+   every section — which does not read as a tint, it reads as an error
+   stripe. Tinted row backgrounds striped the fee block on top of that, and
+   a fee block that looks striped is a fee block you stop trusting.
+   White cards, and the section's colour lives in its label alone. That is
+   enough to tell five sections apart — it was the labels doing that work the
+   whole time — and it is what the designs this was drawn from actually do:
+   white cards on a light ground, with colour spent on one thing at a time
+   rather than spread across everything. */
 .ui2 .sec>.box{
-  background:linear-gradient(145deg, var(--t1) 0%, var(--t2) 70%, var(--t1) 100%);
-  border-radius:18px;overflow:hidden;
-  box-shadow:0 0 0 1px rgba(0,0,0,.04), 0 1px 2px rgba(0,0,0,.03), 0 14px 34px -22px rgba(0,0,0,.3)}
+  background:var(--bg-card);
+  border-radius:16px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.03), 0 10px 26px -20px rgba(0,0,0,.25)}
 .ui2 .sec .sechd{display:flex;align-items:center;gap:8px;padding:14px 17px 12px;
-  font-size:11.5px;line-height:15px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;color:var(--tk)}
-.ui2 .sec .sechd .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.7;flex:none}
-.ui2 .sec .fgrid{background:transparent;gap:1px}
-.ui2 .sec .cell{background:rgba(255,255,255,.74);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  font-size:11.5px;line-height:15px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;color:var(--label-3)}
+.ui2 .sec .sechd .dot{display:none}
+/* The hairlines came from the gradient showing through a 1px grid gap. With
+   no gradient they come from the gap itself, over the ordinary separator
+   grey — same mechanism, same immunity to cells that span both columns. */
+.ui2 .sec .fgrid{background:var(--sep);gap:1px}
+.ui2 .sec .cell{background:var(--bg-card)}
 
 /* A chosen chip belongs to the card it is standing in. The programme picked
    inside the child's card went on being the same coral as everything else,
    which undoes the point of tinting the card in the first place. */
-.ui2 .sec .chips .chip.on{
-  background:color-mix(in srgb, var(--tk) 12%, transparent);
-  color:var(--tk);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--tk) 42%, transparent)}
-.ui2 .sec .chips .chip.on:hover{background:color-mix(in srgb, var(--tk) 19%, transparent)}
-.ui2 .sec .cell>.cap{color:color-mix(in srgb, var(--tk) 62%, var(--label-3))}
-.ui2 .sec .cell .in:hover{background:color-mix(in srgb, var(--t1) 70%, #fff)}
+
+.ui2 .sec .cell .in:hover{background:var(--field)}
 .ui2 .sec .cell .in:focus{background:#fff}
+.ui2 .sec .sechd{border-bottom:1px solid var(--sep)}
 
 /* Pale enough that 15px semibold black still sits at full contrast on top of
    it, and distinct enough in hue that the four are told apart at a glance
    with the screen at arm's length. Mother is teal and father is indigo
    because the obvious pair would be pink and blue, and that is a stereotype
    doing a job that two neutral hues do just as well. */
-.ui2 .s-where { --t1:#FDE4DC; --t2:#FEF4F0; --tk:#A8381F }
-.ui2 .s-child { --t1:#E4F2D8; --t2:#F4FAEE; --tk:#3F6B1E }
-.ui2 .s-father{ --t1:#E2E8FB; --t2:#F3F6FE; --tk:#3C4F96 }
-.ui2 .s-mother{ --t1:#D9EFEA; --t2:#F0FAF7; --tk:#1C6757 }
-.ui2 .s-home  { --t1:#F0ECE3; --t2:#F9F7F3; --tk:#6B5E46 }
 
 /* The child sheet's sections.
    Money is not an attribute, so it does not become two-column cells: a fee,
@@ -973,17 +975,11 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    than the tidier labels are worth. The rows stay rows. What they gain is
    the same thing the enquiry card gained — a card per subject, so the fee
    block, the people and the paperwork stop being one undifferentiated run. */
-.ui2 .s-money   { --t1:#DDE9FA; --t2:#F1F6FD; --tk:#0B4E9E }
-.ui2 .s-people  { --t1:#D9EFEA; --t2:#F0FAF7; --tk:#1C6757 }
-.ui2 .s-paper   { --t1:#F0ECE3; --t2:#F9F7F3; --tk:#6B5E46 }
-.ui2 .s-standing{ --t1:#EDE6F7; --t2:#F8F5FC; --tk:#55407F }
 
 /* A section that still uses rows needs its own hairlines, because the grid
    gap that draws them in a cell layout is not there. */
 .ui2 .sec .row + .row, .ui2 .sec .rowx + .row,
-.ui2 .sec .row + .rowx, .ui2 .sec .rowx + .rowx{
-  border-top:1px solid color-mix(in srgb, var(--tk) 13%, transparent)}
-.ui2 .sec .row, .ui2 .sec .rowx{background:rgba(255,255,255,.74)}
+.ui2 .sec .row + .rowx, .ui2 .sec .rowx + .rowx{border-top:1px solid var(--sep)}
 .ui2 .sec .row:first-child, .ui2 .sec .rowx:first-child{border-top:0}
 /* The whole heading row is inside the card now, so the group's own h3 is
    hidden and .sechd draws it. Sections that have not been given a .sechd
@@ -993,15 +989,8 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
    Same caps, same hue — it reads as the card's label either way. */
 .ui2 .sec:not(:has(.sechd))>h3{display:block;margin:0 0 8px 6px;
   font-size:11.5px;line-height:15px;font-weight:700;letter-spacing:.075em;
-  text-transform:uppercase;color:var(--tk)}
+  text-transform:uppercase;color:var(--label-3)}
 
-/* Concession gets its own hue because it is the one block on this sheet that
-   is an argument rather than a record — it is read when a parent is sitting
-   opposite asking for more. */
-.ui2 .s-conc{ --t1:#FBE8CF; --t2:#FDF6EC; --tk:#8A5A13 }
-.ui2 .s-conc .snap-tiles{grid-template-columns:1fr 1fr 1fr;margin:0;padding:12px 13px 13px;gap:8px}
-.ui2 .s-conc .snap-tile{background:rgba(255,255,255,.8);box-shadow:none}
-.ui2 .s-conc .snap-tile .cap{color:color-mix(in srgb, var(--tk) 62%, var(--label-3))}
 
 
 /* The primary button follows the app.
@@ -1019,3 +1008,8 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
 .shell.ui2 .btn:not(.line):not(.danger):hover,
 .ui2 .btn:not(.line):not(.danger):hover{background:var(--accent-dk);filter:none}
 .ui2 .lnk, .shell.ui2 .lnk, .shell.ui2 a[onclick]{color:var(--accent-dk)}
+
+
+/* Concession keeps its tiles, not a colour. */
+.ui2 .s-conc .snap-tiles{grid-template-columns:1fr 1fr 1fr;margin:0;padding:12px 13px 13px;gap:8px}
+.ui2 .s-conc .snap-tile{background:var(--bg-grouped);box-shadow:none}
