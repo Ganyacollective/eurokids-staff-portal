@@ -1916,7 +1916,7 @@ function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,
 // recorded by the time this runs, and a mail server having a bad minute must
 // not make an approval look like it failed. It reports quietly if it could
 // not send, so nobody assumes a message went out that did not.
-async function tellTeacher(requestId, kind){
+async function tellTeacher(requestId, kind, updated){
   try {
     const sb = getSb();
     const { data: { session } } = await sb.auth.getSession();
@@ -1924,7 +1924,7 @@ async function tellTeacher(requestId, kind){
     const r = await fetch('/api/leave-decision', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ request_id: requestId, kind }),
+      body: JSON.stringify({ request_id: requestId, kind, updated: !!updated }),
     });
     const j = await r.json().catch(() => ({}));
     if (!j.ok) console.warn('[leave-decision] not sent:', j.error);
@@ -4086,10 +4086,22 @@ async function saveLeave(id){
   const prev = id ? state.leaves.find(x=>x.id===id) : null;
   const prevStart = prev?.start_date;
   const prevEnd = prev?.end_date;
-  // Only a change of mind is worth an email. Correcting a date on a leave
-  // that was already approved should not send a second approval.
+  // Anything that changes a decided leave is worth an email.
+  //
+  // The first version only mailed when the status itself changed, on the
+  // reasoning that correcting a date is not a change of mind. That was
+  // wrong from the teacher's side: their approved leave is now different
+  // dates and nothing told them. If it has been decided and it changed,
+  // they hear about it.
   const wasStatus = prev?.status || null;
-  const decided = status !== wasStatus && (status === 'Approved' || status === 'Rejected');
+  const decidedNow = status !== wasStatus && (status === 'Approved' || status === 'Rejected');
+  const材 = null;  // placeholder removed below
+  const changedDetails = !!prev && (status === 'Approved' || status === 'Rejected') && (
+    prev.start_date !== start || prev.end_date !== end ||
+    String(prev.total_days) !== String(days) || prev.leave_type !== type ||
+    (prev.reviewer_note || '') !== note
+  );
+  const decided = decidedNow || changedDetails;
 
   if (id) {
     const L = state.leaves.find(x=>x.id===id);
@@ -4110,7 +4122,10 @@ async function saveLeave(id){
   // there is nobody waiting to hear about it. Only tell the teacher when
   // the application came from them.
   if (decided && id && prev?.applied_at) {
-    const sent = await tellTeacher(id, status === 'Approved' ? 'approved' : 'rejected');
+    // Say it is a change rather than repeating "approved", or a teacher whose
+    // dates moved gets the same email twice and has to work out which is
+    // current.
+    const sent = await tellTeacher(id, status === 'Approved' ? 'approved' : 'rejected', !decidedNow);
     if (sent && !sent.ok) {
       alert(`Saved as ${status} — but the email to the teacher did not go:\n\n` + (sent.error || 'unknown'));
     }

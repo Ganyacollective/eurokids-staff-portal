@@ -43,11 +43,15 @@ export async function POST(req: NextRequest) {
   const { data: who, error: verErr } = await verifier.auth.getUser(m[1]);
   if (verErr || !who?.user) return NextResponse.json({ ok: false, error: "Not signed in." }, { status: 401 });
 
-  let body: { request_id?: string; kind?: string };
+  let body: { request_id?: string; kind?: string; updated?: boolean };
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
 
   const requestId = String(body.request_id || "").trim();
   const kind = String(body.kind || "") as Kind;
+  // The same decision, re-sent because the dates or the reason changed. The
+  // wording has to say so, or a teacher whose leave moved gets "your leave
+  // has been approved" twice and has to work out which one is current.
+  const updated = body.updated === true;
   if (!requestId) return NextResponse.json({ ok: false, error: "request_id required" }, { status: 400 });
   if (!["applied", "approved", "rejected"].includes(kind)) {
     return NextResponse.json({ ok: false, error: "kind must be applied, approved or rejected" }, { status: 400 });
@@ -158,18 +162,23 @@ export async function POST(req: NextRequest) {
       <p>Your application has been received and is with the office.</p>${facts}
       <p>You will get another email the moment it is decided. There is no need to follow up in the meantime.</p>`;
   } else if (kind === "approved") {
-    subject = `Approved — ${lr.leave_type}, ${dates}`;
-    title = "Your leave has been approved";
-    subtitle = "";
+    subject = updated ? `Updated — your approved leave has changed (${dates})`
+                      : `Approved — ${lr.leave_type}, ${dates}`;
+    title = updated ? "Your approved leave has been changed" : "Your leave has been approved";
+    subtitle = updated ? "These are the details as they now stand." : "";
     bodyHtml = `<p>Dear ${esc(first)},</p>
-      <p>Your leave has been approved.</p>${facts}
+      <p>${updated
+          ? "Your leave is still approved, but the details have been changed. This is what is on record now:"
+          : "Your leave has been approved."}</p>${facts}
       <p>Please make sure your class is handed over before you go.</p>`;
   } else {
-    subject = `Not approved — ${lr.leave_type}, ${dates}`;
-    title = "Your leave has not been approved";
-    subtitle = "";
+    subject = updated ? `Updated — ${lr.leave_type}, ${dates}`
+                      : `Not approved — ${lr.leave_type}, ${dates}`;
+    title = updated ? "Your rejected leave has been changed" : "Your leave has not been approved";
+    subtitle = updated ? "These are the details as they now stand." : "";
     bodyHtml = `<p>Dear ${esc(first)},</p>
-      <p>This application has not been approved.</p>${facts}
+      <p>${updated ? "This application is still not approved, and the details have changed:"
+                   : "This application has not been approved."}</p>${facts}
       ${lr.reviewer_note ? `<p style="margin-top:14px"><strong>Reason given:</strong><br>${esc(lr.reviewer_note)}</p>` : ""}
       <p>If you need to discuss it, speak to the office — replying to this email reaches HR.</p>`;
   }
