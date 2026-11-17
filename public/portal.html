@@ -4035,7 +4035,7 @@ function openLeaveForm(id){
       </div>
       <div><label class="text-xs font-medium text-gray-700 block mb-1">Total days</label><input id="lf-days" type="number" step="0.5" class="input" value="${L?.total_days||1}" /></div>
       <div><label class="text-xs font-medium text-gray-700 block mb-1">Reason</label><input id="lf-reason" class="input" value="${escapeHtml(L?.reason||'')}" /></div>
-      <div><label class="text-xs font-medium text-gray-700 block mb-1">Reviewer note (for rejections)</label><input id="lf-note" class="input" value="${L?.reviewer_note||''}" /></div>
+      <div><label class="text-xs font-medium text-gray-700 block mb-1">Reviewer note <span class="text-gray-500">(required to reject — the teacher is sent this)</span></label><input id="lf-note" class="input" value="${L?.reviewer_note||''}" /></div>
       <div class="flex gap-2 pt-3">
         <button onclick="saveLeave('${id||''}')" class="btn-primary flex-1">${isEdit?'Save changes':'Create'}</button>
         <button onclick="closeModal()" class="btn-secondary">Cancel</button>
@@ -4058,7 +4058,15 @@ function rerunForDateRange(startDate, endDate){
   months.forEach(m => { if (state.attendanceMonths[m]) rerunReconciliation(m); });
 }
 
-function saveLeave(id){
+// The edit dialog is a third way to decide a leave, and for a while it was
+// the only one that told nobody.
+//
+// Approve and Reject on the row each send the teacher an email and, for a
+// rejection, insist on a reason. Changing the same field inside this form
+// did neither: a leave could go from Approved to Rejected with an empty
+// note and no message, so the person it concerns learns nothing and the
+// record does not say why. Same decision, three paths, one behaviour now.
+async function saveLeave(id){
   const empId = document.getElementById('lf-emp').value;
   const type = document.getElementById('lf-type').value;
   const status = document.getElementById('lf-status').value;
@@ -4066,24 +4074,47 @@ function saveLeave(id){
   const end = document.getElementById('lf-end').value;
   const days = parseFloat(document.getElementById('lf-days').value) || 1;
   const reason = document.getElementById('lf-reason').value;
-  const note = document.getElementById('lf-note').value;
+  const note = document.getElementById('lf-note').value.trim();
   if (!empId || !start || !end) return alert("Employee, start date, end date are required.");
+  // A rejection without a reason is the one thing the teacher will ask about,
+  // and the field is right there on the form.
+  if (status === 'Rejected' && !note) {
+    document.getElementById('lf-note').focus();
+    return alert('Please give a reason for the rejection. It is sent to the teacher and kept on the record.');
+  }
   // Capture prior dates so we can also re-run the OLD months if HR edited a leave to move it
   const prev = id ? state.leaves.find(x=>x.id===id) : null;
   const prevStart = prev?.start_date;
   const prevEnd = prev?.end_date;
+  // Only a change of mind is worth an email. Correcting a date on a leave
+  // that was already approved should not send a second approval.
+  const wasStatus = prev?.status || null;
+  const decided = status !== wasStatus && (status === 'Approved' || status === 'Rejected');
+
   if (id) {
     const L = state.leaves.find(x=>x.id===id);
     Object.assign(L, { employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note });
-    if (status !== "Pending" && !L.reviewed_at) L.reviewed_at = new Date().toISOString();
+    if (status !== "Pending") L.reviewed_at = new Date().toISOString();
   } else {
     state.leaves.push({ id: uid(), employee_id:empId, leave_type:type, status, start_date:start, end_date:end, total_days:days, reason, reviewer_note:note, applied_at:new Date().toISOString(), reviewed_at: status!=="Pending" ? new Date().toISOString() : null });
   }
-  saveState();
+  // Wait for the write, or the server reads the old status back and refuses
+  // to send — the same race that made approving look broken.
+  await saveStateNow();
   rerunForDateRange(start, end);
   if (prevStart && prevEnd && (prevStart !== start || prevEnd !== end)) rerunForDateRange(prevStart, prevEnd);
   renderAll();
   closeModal();
+
+  // A leave HR typed in themselves was never applied for by anybody, so
+  // there is nobody waiting to hear about it. Only tell the teacher when
+  // the application came from them.
+  if (decided && id && prev?.applied_at) {
+    const sent = await tellTeacher(id, status === 'Approved' ? 'approved' : 'rejected');
+    if (sent && !sent.ok) {
+      alert(`Saved as ${status} — but the email to the teacher did not go:\n\n` + (sent.error || 'unknown'));
+    }
+  }
 }
 
 function addHoliday(){
