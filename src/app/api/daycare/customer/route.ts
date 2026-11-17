@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     if (!who.canBill) return NextResponse.json({ ok: false, error: "You do not have Day care billing." }, { status: 403 });
     return welcome(a, Number(b.id), who.name);
   }
+  if (String(b.action || "save") === "remove") return remove(a, Number(b.id), who);
 
   const name = String(b.display_name || "").trim();
   if (!name) return NextResponse.json({ ok: false, error: "A customer needs a name." }, { status: 400 });
@@ -148,4 +149,66 @@ async function welcome(a: ReturnType<typeof admin>, id: number, by: string) {
   return r.ok
     ? NextResponse.json({ ok: true, sent_to: to })
     : NextResponse.json({ ok: false, error: `The welcome letter did not go: ${r.error}` }, { status: 502 });
+}
+
+// Removing a customer, which is two different operations wearing one word.
+//
+// There was no delete at all before this — not a broken one, an absent one.
+// The sheet offered Cancel and Save and nothing else, so a customer entered
+// by mistake stayed for good.
+//
+// The reason to be careful is that four tables point at this row: their
+// children, their invoices, their recurring lines and every message we have
+// sent them. A customer who was invoiced is part of the money record, and
+// deleting them would either orphan those invoices or take them down too —
+// and an invoice that silently stops existing is the worst outcome available
+// here, because the books would quietly stop adding up and nothing would say
+// so.
+//
+// So the word means what it can mean safely. Nothing attached: really gone,
+// row and children both. Anything attached: marked inactive, out of both
+// lists, invoices and history untouched and still reachable. The caller is
+// told which of the two happened rather than being left to assume.
+async function remove(a: ReturnType<typeof admin>, id: number, who: { canBill: boolean; canCertify: boolean; name: string }) {
+  if (!id) return NextResponse.json({ ok: false, error: "Which customer?" }, { status: 400 });
+
+  const { data: p } = await a.from("billing_party")
+    .select("id, display_name, in_billing, in_reimbursement").eq("id", id).maybeSingle();
+  if (!p) return NextResponse.json({ ok: false, error: "No such customer." }, { status: 404 });
+
+  // You may only remove a customer whose every book you hold. Removing a
+  // family out of a book you do not have is the same act as removing them
+  // from it, which the save path already refuses.
+  if (p.in_billing && !who.canBill) {
+    return NextResponse.json({ ok: false, error: "This is a Day care billing customer and you do not have that." }, { status: 403 });
+  }
+  if (p.in_reimbursement && !who.canCertify) {
+    return NextResponse.json({ ok: false, error: "This is a Reimbursements customer and you do not have that." }, { status: 403 });
+  }
+
+  const [inv, msg, rec] = await Promise.all([
+    a.from("daycare_invoice").select("id", { count: "exact", head: true }).eq("party_id", id),
+    a.from("billing_message").select("id", { count: "exact", head: true }).eq("party_id", id),
+    a.from("daycare_recurring").select("id", { count: "exact", head: true }).eq("party_id", id),
+  ]);
+  const invoices = inv.count || 0, messages = msg.count || 0, recurring = rec.count || 0;
+
+  if (invoices || messages || recurring) {
+    const { error } = await a.from("billing_party")
+      .update({ is_active: false, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    const why = [
+      invoices ? `${invoices} invoice${invoices === 1 ? "" : "s"}` : null,
+      messages ? `${messages} message${messages === 1 ? "" : "s"}` : null,
+      recurring ? `${recurring} recurring line${recurring === 1 ? "" : "s"}` : null,
+    ].filter(Boolean).join(" and ");
+    return NextResponse.json({ ok: true, archived: true, name: p.display_name, why });
+  }
+
+  // Children go first: nothing else points at this row, but the foreign key
+  // from billing_child does.
+  await a.from("billing_child").delete().eq("party_id", id);
+  const { error } = await a.from("billing_party").delete().eq("id", id);
+  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, archived: false, name: p.display_name });
 }

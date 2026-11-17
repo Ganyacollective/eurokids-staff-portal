@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=113">
-<link rel="prefetch" href="/brand/enquiries.js?v=113" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=114">
+<link rel="prefetch" href="/brand/enquiries.js?v=114" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -3941,8 +3941,32 @@ async function dcCustomerDrawer(editId){
       <div class="row"><div class="l">Class / group</div><input class="in wide" id="cu-class" value="${esc(kid?.class_label || '')}" placeholder="e.g. Nursery · Day care"></div>
     </div>${p ? '<div class="foot">Editing the child here changes the first child on this record.</div>' : ''}</div>
     <div id="cu-msg"></div>`;
-  el('drawer-foot').innerHTML = `<button class="btn line" id="cu-cancel">Cancel</button><button class="btn" id="cu-save">${p ? 'Save' : 'Add'}</button>`;
+  // Remove sits apart from Cancel and Save, on the left, because it is not
+  // one of the two ways out of a form — it is a third thing that happens to
+  // the record. Only for a customer who already exists: there is nothing to
+  // remove from a sheet that has not saved anything yet.
+  el('drawer-foot').innerHTML = `${p ? '<button class="btn line danger" id="cu-del">Remove&hellip;</button>' : ''}
+    <button class="btn line" id="cu-cancel">Cancel</button><button class="btn" id="cu-save">${p ? 'Save' : 'Add'}</button>`;
   el('cu-cancel').onclick = closeDrawer;
+
+  if (el('cu-del')) el('cu-del').onclick = async () => {
+    // What is about to happen is spelled out before it happens, because
+    // "Remove" means two different things depending on what is attached and
+    // the person pressing it cannot see which.
+    if (!confirm(`Remove ${p.display_name}?\n\nIf they have never been invoiced or messaged, the record goes for good.`
+               + `\nIf they have, it is archived instead — out of the lists, with the invoices and history kept.`)) return;
+    const b = el('cu-del'); b.disabled = true; b.textContent = 'Removing…';
+    const r = await dcApi('/customer', { action: 'remove', id: editId });
+    if (!r.ok) { b.disabled = false; b.textContent = 'Remove…';
+      return el('cu-msg').innerHTML = `<div class="err">${esc(r.error)}</div>`; }
+    // Matches every other destructive path in this file: say what happened in
+    // plain words, then reload before repainting so the list does not come
+    // back still holding the row that has just gone.
+    alert(r.archived
+      ? `${r.name} has ${r.why}, so the record was archived rather than deleted.\n\nThey are out of both lists; the invoices and the history are untouched.`
+      : `${r.name} removed.`);
+    await dcLoad(true); closeDrawer(true); dcRefresh();
+  };
 
   const roster = await schedule().catch(() => []);
   const byLabel = {};
@@ -6390,7 +6414,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=113"></script>
+<script src="/brand/enquiries.js?v=114"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

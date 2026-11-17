@@ -7,7 +7,10 @@ export async function GET(req: Request) {
   if (!who.ok) return NextResponse.json({ ok: false, error: who.error }, { status: who.status });
   const a = admin();
   const [parties, children, rates, invoices, lines, recurring, payments, messages, settings] = await Promise.all([
-    a.from("billing_party").select("*").order("display_name"),
+    // Archived customers stay in the table — their invoices still point at
+    // them — but they are out of the lists, which is the whole meaning of
+    // archiving one.
+    a.from("billing_party").select("*").neq("is_active", false).order("display_name"),
     a.from("billing_child").select("*").order("name"),
     a.from("daycare_rate").select("*").eq("is_active", true).order("sort"),
     a.from("daycare_invoice").select("*").order("id", { ascending: false }).limit(400),
