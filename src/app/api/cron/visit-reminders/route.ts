@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
-import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, plainFooter } from "@/lib/brand-email";
+import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, SCHOOL_PHONE_TEL, plainFooter } from "@/lib/brand-email";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { isEmail } from "@/lib/enquiry";
 
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         title: "See you tomorrow", subtitle: SCHOOL_NAME, theme: "calm",
         bodyHtml: `<p>Dear ${esc(e.father_name || e.mother_name || "Parent")},</p>
           <p>A gentle reminder that your visit to ${SCHOOL_NAME}${e.child_name ? ` with <strong>${esc(e.child_name)}</strong>` : ""} is booked for <strong>${esc(when)}</strong>.</p>
-          <p>We are at JMD Enclave, Undri. Please allow about 45 minutes — you will see the classrooms, the play area, and meet the teachers. If the time no longer suits, call us on <a href="tel:+912269622686" style="font-weight:700;text-decoration:none">${SCHOOL_PHONE}</a> and we will move it.</p>
+          <p>We are at JMD Enclave, Undri. Please allow about 45 minutes — you will see the classrooms, the play area, and meet the teachers. If the time no longer suits, call us on <a href="tel:${SCHOOL_PHONE_TEL}" style="font-weight:700;text-decoration:none">${SCHOOL_PHONE}</a> and we will move it.</p>
           <p>Looking forward to meeting you.</p>`,
       });
       const res = await sendMail({ to: emails, subject: `Your visit to ${SCHOOL_NAME} — ${when}`, html,
@@ -64,10 +64,26 @@ export async function GET(req: NextRequest) {
       const w = await sendWhatsApp({ to: phone, template: process.env.WHATSAPP_VISIT_TEMPLATE || "visit_reminder", params: [e.child_name || "your child", when] });
       r.whatsapp = w.status;
     }
-    if (!dry) {
+    // Only stamp it if something actually reached the family.
+    //
+    // The query above excludes anyone already stamped, so the stamp is what
+    // decides whether tomorrow's run tries again. Writing it regardless
+    // meant one transient SMTP error — "failed:502" — permanently retired
+    // that family's reminder: never sent, never retried, and the visit is
+    // tomorrow. A stamp is a record that it went, not a record that it was
+    // attempted.
+    const reached = (r.email && !/^(failed|err)/i.test(r.email))
+                 || (r.whatsapp && !/^(failed|err|not_configured)/i.test(r.whatsapp));
+    if (!dry && reached) {
       await admin.schema("eurokids").from("enquiry").update({ visit_reminder_sent_at: new Date().toISOString() }).eq("id", e.id);
       await admin.schema("eurokids").from("enquiry_event").insert({ enquiry_id: e.id, kind: "reminder", actor: "system",
         summary: `Visit reminder for ${when}${r.email ? " · email " + r.email : ""}${r.whatsapp && r.whatsapp !== "not_configured" ? " · WhatsApp " + r.whatsapp : ""}` });
+    } else if (!dry && !reached) {
+      // Left unstamped so the next run picks it up, and said out loud so a
+      // family whose reminder keeps failing is visible rather than silent.
+      await admin.schema("eurokids").from("enquiry_event").insert({ enquiry_id: e.id, kind: "note", actor: "system",
+        summary: `Visit reminder for ${when} did not go${r.email ? " · email " + r.email : ""}${r.whatsapp ? " · WhatsApp " + r.whatsapp : ""} — will try again` })
+        .then(() => {}, () => {});
     }
     out.push(r);
   }

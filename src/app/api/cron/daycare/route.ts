@@ -100,7 +100,17 @@ export async function GET(req: Request) {
         qty: r.qty, rate: r.rate, rate_text: r.rate_text,
         amount: r.amount, amount_is_fixed: r.amount_is_fixed };
     });
-    if (lines.length) await a.from("daycare_invoice_line").insert(lines);
+    // Checked, and the invoice is not sent if it fails. Unchecked, a failed
+    // line insert left a numbered, frozen invoice with nothing on it and a
+    // total of zero — and sendInvoice below would have emailed that to the
+    // family, who would reasonably conclude they owed nothing this month.
+    if (lines.length) {
+      const { error: lineErr } = await a.from("daycare_invoice_line").insert(lines);
+      if (lineErr) {
+        failed.push(`${child?.name || `party ${p.party_id}`}: the charges could not be written (${lineErr.message}) — invoice ${inv.id} left unsent`);
+        continue;
+      }
+    }
     await a.from("daycare_recurring").update({ next_month: advance }).eq("id", p.id);
 
     const { data: party } = await a.from("billing_party")
