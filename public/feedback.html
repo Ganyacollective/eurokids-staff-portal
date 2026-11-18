@@ -69,29 +69,24 @@
   @media (min-width:34rem){
     body{ padding:2.5rem 0; }
     .sheet{ min-height:0; border:1px solid var(--hair); padding-bottom:3rem; }
-    .masthead{ margin-top:-2rem; margin-left:-1.375rem; margin-right:-1.375rem; }
   }
 
   /* ── masthead ─────────────────────────────────────────────────────────
-     The school's mark is white on black, so it cannot simply be dropped on
-     warm paper. Rather than recolour somebody's logo, the black travels
-     with it: a full-bleed band across the top of the sheet, which reads as
-     a masthead instead of a sticker. It bleeds by cancelling the sheet's
-     own padding, so it stays flush at every width. */
-  .masthead{
-    background:#000;
-    margin:
-      calc((env(safe-area-inset-top,0px) + 2rem) * -1)
-      calc((env(safe-area-inset-right,0px) + 1.375rem) * -1)
-      2rem
-      calc((env(safe-area-inset-left,0px) + 1.375rem) * -1);
-    /* The artwork carries its own black margin, so the band needs little of
-       its own — more and the mark looks marooned. */
-    padding:.875rem 1.375rem;
-    text-align:center;
-  }
+     The mark sits on the paper, with no slab behind it.
+
+     The artwork arrived as white lettering on a solid black field with the
+     bunny in colour — fine on a dark background, unusable on a light one.
+     It is recoloured rather than boxed: the field and the lettering are
+     the only pure-greyscale parts of the drawing (black is 0,0,0 and the
+     ink is 248,248,248, both saturation 0), while the bunny's palest
+     colour, its fur, is 232,216,208 at saturation 24. So a saturation cut
+     separates the lettering from the mascot without touching a pixel of
+     him, and brightness is then mapped to opacity: white becomes solid
+     ink, black becomes nothing, and the anti-aliased edge between them
+     stays smooth. The bunny keeps his fur, ears, shirt, eyes and teeth. */
+  .masthead{ margin:0 0 1.75rem; }
   .masthead img{
-    width:12.5rem; max-width:68%; height:auto; display:block; margin:0 auto;
+    width:13rem; max-width:72%; height:auto; display:block;
   }
   .eyebrow{
     font:600 .6875rem/1.35 var(--sans); letter-spacing:.14em;
@@ -199,7 +194,7 @@
     <div class="masthead">
       <img src="/brand/jmd-enclave-mark.png"
            srcset="/brand/jmd-enclave-mark.png 1x, /brand/jmd-enclave-mark@2x.png 2x"
-           alt="EuroKids JMD Enclave" width="450" height="325">
+           alt="EuroKids JMD Enclave" width="450" height="321">
     </div>
     <div class="eyebrow">Undri, Pune</div>
     <h1>Parent survey<br>2026&ndash;27</h1>
@@ -284,7 +279,7 @@
     document.getElementById('sheet').innerHTML =
       '<div class="masthead"><img src="/brand/jmd-enclave-mark.png"'
       + ' srcset="/brand/jmd-enclave-mark.png 1x, /brand/jmd-enclave-mark@2x.png 2x"'
-      + ' alt="EuroKids JMD Enclave" width="450" height="325"></div>'
+      + ' alt="EuroKids JMD Enclave" width="450" height="321"></div>'
       + '<div class="eyebrow">Undri, Pune</div>'
       + '<div class="done"><h2>Thank you</h2><p>'
       + esc(message || 'Your answers have been recorded.') + '</p>'
