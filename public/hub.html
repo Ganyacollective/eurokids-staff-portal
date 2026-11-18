@@ -210,6 +210,7 @@ const el = id => document.getElementById(id);
 // Outline symbols for the sidebar, drawn in the spirit of SF Symbols: one
 // stroke weight, 16 px, tinted with the accent. Each is a tiny path.
 const ICON = {
+  star:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6 4.2 13.6l.7-4.3-3.1-3 4.3-.6L8 1.8z"/></svg>',
   globe:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.3"/><ellipse cx="8" cy="8" rx="2.8" ry="6.3"/><path d="M1.9 6h12.2M1.9 10h12.2"/></svg>',
   house:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2 8.5 8 3l6 5.5"/><path d="M3.5 7.5V13h3V9.5h3V13h3V7.5"/></svg>',
   people:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.5"/><path d="M1.5 13.5c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><circle cx="11.5" cy="6" r="2"/><path d="M12 9.8c1.6.3 2.7 1.5 2.7 3.2"/></svg>',
@@ -287,6 +288,7 @@ const TABS = {
   letters:    { app: 'letters', label: 'Appointment letters', icon: 'mail', sect: 'Staff', need: () => has('letters') },
   users:      { label: 'Users & Access',icon: 'key',    sect: 'Setup',         need: () => isOwner() },
   mailbox:    { app: 'mailbox', label: 'Inbox', icon: 'mail', sect: 'Communication', need: () => has('mailbox') },
+  feedback:   { label: 'Parent feedback', icon: 'star', sect: 'Communication', need: () => has('feedback') || isOwner() },
 };
 const SECTIONS = ['Enquiries', 'Fees', 'Communication', 'Staff', 'Reimbursements', 'Billing', 'School', 'Reference', 'Setup'];
 const APP_NAME = { admissions: 'Fees & Children', enquiries: 'Enquiries', letters: 'Appointment Letters',
@@ -520,7 +522,7 @@ function renderChooser(){
 
 /* ── users & access (owner only) ─────────────────────── */
 const ALL_MODULES = ['staff_portal','epms_admin','pulse','payroll','fees','kits','admission','enquiry_photos','receipts',
-  'daycare_billing','reimbursements','finance','salary','letters','inventory','website','mailbox'];
+  'daycare_billing','reimbursements','finance','salary','letters','inventory','website','mailbox','feedback'];
 const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pulse:'Site Pulse',
   payroll:'Payroll', fees:'Fees', kits:'Kits', admission:'Admission',
   enquiry_photos:'Enquiry photos (sees families’ faces)',
@@ -531,7 +533,8 @@ const MODULE_LABEL = { staff_portal:'Staff portal', epms_admin:'EPMS admin', pul
   letters:'Appointment letters (shows salary)',
   inventory:'Inventory (equipment & supplies)',
   website:'Website (the public site)',
-  mailbox:'Mailbox (reads everything sent to admin@)' };
+  mailbox:'Mailbox (reads everything sent to admin@)',
+  feedback:'Parent feedback (reads what parents said anonymously)' };
 
 async function hubUsersApi(method, body){
   const { data: { session: s } } = await getSb().auth.getSession();
@@ -753,7 +756,7 @@ function renderApp(){
      assets: tabAssets, supplies: tabSupplies,
      rb_home: tabReimbursements, rb_customers: tabCustomers, rb_recurring: tabRecurring,
      bill_home: tabDaycareBilling, bill_customers: tabCustomers, bill_recurring: tabRecurring,
-     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_reports: tabEnqReports, enq_setup: tabEnqSetup, website: tabWebsite, rb_fees: tabFeeCheck, mailbox: tabMailbox }[tab] || tabOverview)();
+     enq_today: tabEnqToday, enq_list: tabEnqList, enq_calls: tabEnqCalls, enq_reports: tabEnqReports, enq_setup: tabEnqSetup, website: tabWebsite, rb_fees: tabFeeCheck, mailbox: tabMailbox, feedback: tabFeedback }[tab] || tabOverview)();
 }
 
 /* ── The mailbox ──────────────────────────────────────────────────────────
@@ -776,6 +779,253 @@ async function mailApi(qs){
     const r = await fetch('/api/inbox' + (qs || ''), { headers: { Authorization: `Bearer ${s.access_token}` } });
     return await r.json().catch(() => ({ ok: false, error: 'The server did not answer.' }));
   } catch (e) { return { ok: false, error: 'Could not reach the server: ' + e.message }; }
+}
+
+/* ── Parent feedback ──────────────────────────────────────────────────────
+   The questionnaire is Ofsted's Parent View, adapted for a preschool: five
+   declarative statements on strongly agree / agree / disagree / strongly
+   disagree, a "don't know" that is stored as no answer rather than as a
+   middle score, and Ofsted's own yes-no recommend question.
+
+   Reported the way survey results are reported, which is NOT as a mean.
+   A mean of a four-point agreement scale is a number with no unit — 3.4 is
+   not 3.4 of anything — and it hides the only figure that matters, which is
+   how many parents disagreed. So each statement is shown as the percentage
+   who agreed, with the count who disagreed next to it, over a bar that
+   shows the whole distribution. That is how Ofsted publishes it and it is
+   the reason their reports can be argued with.
+
+   One shared anonymous link, so there is no family on any row and no way to
+   get one. Nobody to reply to — hence a status and a note per response
+   rather than a reply box.                                               */
+const FB_ITEMS = [
+  { k: 'happy',    s: 'My child is happy here' },
+  { k: 'safe',     s: 'My child is safe and well cared for' },
+  { k: 'progress', s: 'My child is learning and making progress' },
+  { k: 'teacher',  s: 'I know how my child is getting on day to day' },
+  { k: 'informed', s: 'The school tells me what I need to know, in time' },
+  { k: 'concerns', s: 'When I raise something, it is dealt with' },
+];
+const FB_LEVEL = { 4: 'Strongly agree', 3: 'Agree', 2: 'Disagree', 1: 'Strongly disagree' };
+const FB_STATUS = { new: 'New', looking: 'Looking into it', done: 'Dealt with', ignored: 'No action needed' };
+let _fb = { rows: [], filter: 'all', busy: false };
+
+const fbLink = () => location.origin + '/feedback';
+
+async function tabFeedback(){
+  el('tb-title').textContent = 'Parent feedback';
+  el('body').innerHTML = `<div class="vhead"><h2>Parent feedback</h2></div><div class="loading">Loading…</div>`;
+  try {
+    let q = getSb().from('parent_feedback')
+      .select('id, submitted_on, academic_year, q_happy, q_safe, q_progress, q_teacher, q_informed, q_concerns, recommend, comment, status, staff_note')
+      .order('submitted_on', { ascending: false }).order('id', { ascending: false }).limit(2000);
+    if (_ay !== 'all') q = q.eq('academic_year', _ay);
+    const { data, error } = await q;
+    if (error) throw error;
+    _fb.rows = data || [];
+  } catch (e) { return el('body').innerHTML = fail(e); }
+  paintFeedback();
+}
+
+function paintFeedback(){
+  const rows = _fb.rows, n = rows.length;
+
+  // Per statement: how many gave each of the four answers, and how many
+  // said they did not know. "Don't know" is reported, never averaged.
+  const tally = k => {
+    const t = { 4:0, 3:0, 2:0, 1:0, dk:0 };
+    rows.forEach(r => { const v = r['q_' + k]; if (v >= 1 && v <= 4) t[v]++; else t.dk++; });
+    const scored = t[4] + t[3] + t[2] + t[1];
+    return { ...t, scored, agree: t[4] + t[3], disagree: t[2] + t[1],
+             pct: scored ? Math.round((t[4] + t[3]) / scored * 100) : null };
+  };
+
+  const rec = { yes: rows.filter(r => r.recommend === true).length,
+                no:  rows.filter(r => r.recommend === false).length };
+  rec.scored = rec.yes + rec.no;
+  rec.pct = rec.scored ? Math.round(rec.yes / rec.scored * 100) : null;
+
+  // A stacked bar of the four answers. Agreement reads left, disagreement
+  // right, and each band carries its own count in text — a reader should
+  // never have to measure a bar with their eye to get the number, and
+  // colour alone never carries the meaning.
+  const bar = t => {
+    if (!t.scored) return `<div class="hint" style="font-size:12px">No one answered this</div>`;
+    const seg = (v, bg, fg) => t[v] ? `<div title="${FB_LEVEL[v]}: ${t[v]}"
+      style="width:${(t[v] / t.scored * 100).toFixed(2)}%;background:${bg};color:${fg};
+             font-size:11px;line-height:20px;text-align:center;overflow:hidden">${t[v]}</div>` : '';
+    return `<div style="display:flex;height:20px;border-radius:3px;overflow:hidden;background:var(--line)">
+        ${seg(4, '#15803D', '#fff')}${seg(3, '#86BF9B', '#10281A')}${seg(2, '#E7A9A4', '#5A1410')}${seg(1, '#B91C1C', '#fff')}
+      </div>`;
+  };
+
+  const statements = FB_ITEMS.map(item => {
+    const t = tally(item.k);
+    return `<div style="padding:14px 0;border-top:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:7px;flex-wrap:wrap">
+        <div style="font-weight:600">${esc(item.s)}</div>
+        <div style="white-space:nowrap">
+          <strong style="font-size:17px">${t.pct == null ? '—' : t.pct + '%'}</strong>
+          <span class="hint"> agreed</span>
+          ${t.disagree ? `<span class="chip c-crit" style="margin-left:8px">${t.disagree} disagreed</span>` : ''}
+        </div>
+      </div>
+      ${bar(t)}
+      <div class="hint" style="font-size:12px;margin-top:5px">
+        ${t.scored} answered${t.dk ? ` · ${t.dk} said they did not know` : ''}</div>
+    </div>`;
+  }).join('');
+
+  const counts = { all: rows.length };
+  Object.keys(FB_STATUS).forEach(s => { counts[s] = rows.filter(r => r.status === s).length; });
+  const withComment = rows.filter(r => (r.comment || '').trim());
+  const list = _fb.filter === 'all' ? withComment : withComment.filter(r => r.status === _fb.filter);
+
+  el('body').innerHTML = `
+    <div class="vhead"><h2>Parent feedback</h2>
+      <div class="hint">Anonymous, so nothing here can be traced to a family — which is the reason the answers are worth reading.</div></div>
+
+    <div class="panel" style="padding:16px;margin-bottom:14px">
+      <div class="hint" style="margin-bottom:8px">The survey link. One link for everybody — that is what keeps it anonymous.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input class="in" id="fb-link" readonly value="${esc(fbLink())}" style="flex:1;min-width:220px;font-family:ui-monospace,monospace;font-size:13px">
+        <button class="btn-s" onclick="fbCopy()">Copy</button>
+        <button class="btn" onclick="fbCompose()">Send to parents…</button>
+      </div>
+    </div>
+
+    ${n === 0 ? `<div class="panel" style="padding:44px 16px;text-align:center">
+        <div style="font-weight:600;margin-bottom:4px">No responses yet${_ay === 'all' ? '' : ' for ' + esc(_ay)}</div>
+        <div class="hint">Send the link and they will appear here.</div></div>`
+    : `
+    <div class="panel" style="padding:16px;margin-bottom:14px">
+      <div class="ptop" style="padding:0 0 4px">
+        <h2 style="font-size:15px">Would recommend the school</h2>
+        <div class="hint">${n} ${n === 1 ? 'response' : 'responses'}${_ay === 'all' ? '' : ' · ' + esc(_ay)}</div>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 4px">
+        <div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${rec.pct == null ? '—' : rec.pct + '%'}</div>
+        <div class="hint">${rec.yes} yes · ${rec.no} no${rec.scored < n ? ` · ${n - rec.scored} did not say` : ''}</div>
+      </div>
+      ${n < 10 ? `<div class="hint" style="font-size:12px">Ofsted does not publish a school's results below ten responses, and
+        for the same reason these figures should not be quoted yet — one more answer still moves them by several points.</div>` : ''}
+    </div>
+
+    <div class="panel" style="padding:16px;margin-bottom:14px">
+      <div class="ptop" style="padding:0"><h2 style="font-size:15px">Statement by statement</h2>
+        <div class="hint">Green is agreement, red disagreement</div></div>
+      ${statements}
+    </div>
+
+    <div class="panel">
+      <div class="ptop"><h2 style="font-size:15px">What they wrote</h2>
+        <div class="hint">${withComment.length} of ${n} added a comment</div></div>
+      <div style="padding:0 16px 12px;display:flex;gap:6px;flex-wrap:wrap">
+        ${['all'].concat(Object.keys(FB_STATUS)).map(s => `
+          <button class="btn-s ${_fb.filter === s ? 'on' : ''}" onclick="fbFilter('${s}')">
+            ${s === 'all' ? 'All' : FB_STATUS[s]}${counts[s] ? ' · ' + counts[s] : ''}</button>`).join('')}
+      </div>
+      ${list.length === 0
+        ? `<div style="padding:28px 16px;text-align:center" class="hint">Nothing in this view.</div>`
+        : list.map(fbCard).join('')}
+    </div>`}`;
+}
+
+function fbCard(r){
+  const said = FB_ITEMS.map(i => r['q_' + i.k] != null
+    ? `<span class="hint" style="white-space:nowrap">${esc(i.s.split(' ').slice(0, 3).join(' '))}… <strong>${esc(FB_LEVEL[r['q_' + i.k]])}</strong></span>` : '')
+    .filter(Boolean).join('<span class="hint"> · </span>');
+  return `<div style="padding:14px 16px;border-top:1px solid var(--line)">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
+      <div class="hint">${esc(fbDay(r.submitted_on))}${r.recommend === false ? ' · <strong>would not recommend</strong>' : ''}</div>
+      <span class="chip ${r.status === 'new' ? 'c-warn' : r.status === 'done' ? 'c-good' : 'c-mute'}">${esc(FB_STATUS[r.status] || r.status)}</span>
+    </div>
+    ${said ? `<div style="margin:6px 0 8px">${said}</div>` : ''}
+    <div style="white-space:pre-wrap;line-height:1.55">${esc(r.comment || '')}</div>
+    ${r.staff_note ? `<div class="hint" style="margin-top:8px;padding:8px 10px;background:var(--soft);border-radius:8px"><strong>Note:</strong> ${esc(r.staff_note)}</div>` : ''}
+    <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+      ${Object.keys(FB_STATUS).filter(s => s !== r.status).map(s =>
+        `<button class="btn-s" onclick="fbSetStatus(${r.id}, '${s}')">${FB_STATUS[s]}</button>`).join('')}
+      <button class="btn-s" onclick="fbNote(${r.id})">${r.staff_note ? 'Edit note' : 'Add a note'}</button>
+    </div>
+  </div>`;
+}
+
+const fbDay = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN',
+  { day: '2-digit', month: 'short', year: 'numeric' }); } catch (_) { return d || ''; } };
+
+function fbFilter(s){ _fb.filter = s; paintFeedback(); }
+
+function fbCopy(){
+  const box = el('fb-link');
+  if (box) { box.select(); box.setSelectionRange(0, 999); }
+  // There is no toast helper in this app, so say it on the button itself —
+  // quieter than an alert for something this small.
+  const done = () => {
+    const b = document.activeElement;
+    if (b && b.tagName === 'BUTTON') { const was = b.textContent; b.textContent = 'Copied'; setTimeout(() => { b.textContent = was; }, 1400); }
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(fbLink()).then(done, () => { document.execCommand('copy'); done(); });
+  else { document.execCommand('copy'); done(); }
+}
+
+async function fbSetStatus(id, status){
+  if (_fb.busy) return;
+  _fb.busy = true;
+  try {
+    const { data: { user } } = await getSb().auth.getUser();
+    const { error } = await getSb().from('parent_feedback')
+      .update({ status, handled_by: user?.id || null, handled_at: new Date().toISOString() }).eq('id', id);
+    if (error) return alert('Could not update it: ' + error.message);
+    const row = _fb.rows.find(r => r.id === id);
+    if (row) row.status = status;
+    paintFeedback();
+  } finally { _fb.busy = false; }
+}
+
+async function fbNote(id){
+  const row = _fb.rows.find(r => r.id === id);
+  if (!row) return;
+  const note = prompt('A note for the office — what was done about this, or what to watch:', row.staff_note || '');
+  if (note === null) return;
+  const { error } = await getSb().from('parent_feedback')
+    .update({ staff_note: note.trim() || null }).eq('id', id);
+  if (error) return alert('Could not save the note: ' + error.message);
+  row.staff_note = note.trim() || null;
+  paintFeedback();
+}
+
+/* Hands the link to the existing Send Email screen rather than inventing a
+   second way to mail parents: you see the recipients, the count and the
+   provider there before anything leaves. */
+function fbCompose(){
+  const link = fbLink();
+  const subject = 'Parent survey — two minutes, and completely anonymous';
+  const body = `Dear Parent,
+
+We are asking every family the same five questions about how we are doing. The survey is anonymous: we collect no name and no email, and we cannot tell who wrote what. That is deliberate — the useful answers are the honest ones.
+
+It takes about two minutes:
+${link}
+
+Thank you,
+EuroKids JMD Enclave`;
+
+  tab = 'compose';
+  renderApp();
+  // tabCompose builds its own markup and does so asynchronously, so the
+  // fields are filled once they exist rather than before. Only ever fills
+  // empty fields: if somebody already has a half-written letter open, this
+  // button must not wipe it.
+  let tries = 0;
+  const fill = () => {
+    const subj = el('cmp-subject'), msg = el('cmp-message');
+    if (!subj || !msg) { if (tries++ < 40) setTimeout(fill, 50); return; }
+    if (!subj.value.trim()) subj.value = subject;
+    if (!msg.value.trim()) msg.value = body;
+    msg.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  setTimeout(fill, 50);
 }
 
 async function tabMailbox(){
@@ -5014,7 +5264,7 @@ function dcInvoiceDrawer(editId, kind, partyId){
   const paintLines = () => {
     el('di-lines').innerHTML = rows.map((r, i) => `
       <div class="rowx" style="border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:10px">
-        <div class="row"><div class="l">Line ${i + 1}${rows.length > 1 ? ` <a style="cursor:pointer;color:var(--crit);font-size:11px" onclick="dcDropLine(${i})">remove</a>` : ''}</div>
+        <div class="row"><div class="l">Line ${i + 1}${rows.length > 1 ? ` <a style="cursor:pointer;color:var(--crit);font-size:11px" data-drop="${i}">remove</a>` : ''}</div>
           <select class="in wide" data-pick="${i}"><option value="">— pick a rate —</option>${rateOpts(r.rateId)}</select></div>
         <div class="row"><div class="l">What it says</div><input class="in wide" data-name="${i}" value="${esc(r.name)}"></div>
         <div class="row"><div class="l">Charged by</div>
@@ -5045,6 +5295,14 @@ function dcInvoiceDrawer(editId, kind, partyId){
         else { rows[i].hourly = false; rows[i].qty = 1; rows[i].rate = Number(rate.rate) || 0; }
         paintLines(); recap();
       };
+      // This was an inline onclick calling window.dcDropLine, which the
+      // drawer assigned from inside this closure so that it could reach
+      // `rows`. That worked, but it left a global pointing at one drawer's
+      // array until the next drawer overwrote it. Wired like every other
+      // control in this sheet instead: nothing escapes the closure, and the
+      // handler dies with the markup it belongs to.
+      const drop = q('data-drop');
+      if (drop) drop.onclick = () => { rows.splice(i, 1); paintLines(); recap(); };
       q('data-name').oninput = e => { rows[i].name = e.target.value; };
       q('data-mode').onchange = e => { rows[i].hourly = e.target.value === 'hourly'; paintLines(); recap(); };
       ['data-qty','data-rate','data-amt','data-hpd'].forEach(k => {
@@ -5116,7 +5374,6 @@ function dcInvoiceDrawer(editId, kind, partyId){
     dcInvoiceDrawer(editId, e.target.value, partyId);
   };
 
-  window.dcDropLine = i => { rows.splice(i, 1); paintLines(); };
   el('di-add').onclick = () => { rows.push({ name: '', qty: 1, rate: 0, amount: 0, hourly: false }); paintLines(); };
   paintLines();
 

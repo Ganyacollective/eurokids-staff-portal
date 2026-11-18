@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Parent survey · EuroKids JMD Enclave</title>
+<meta name="theme-color" content="#F7F5F2" />
+<meta name="robots" content="noindex" />
+<style>
+  /* ──────────────────────────────────────────────────────────────────────
+     WHAT IS ASKED, AND WHY THESE WORDS
+
+     The items map to Fantuzzo, Perry & Childs' Parent Satisfaction with
+     Educational Experiences scale (2006), the one parent-satisfaction
+     instrument built and validated specifically in early-childhood
+     programmes: twelve items on a four-point scale loading on three
+     factors — contact with the teacher, with the classroom, and with the
+     school. Six items here, two per factor, plus Ofsted Parent View's
+     recommend question, which is the single item that most reliably
+     separates a parent who is content from one who is merely not
+     complaining.
+
+     HOW IT IS LAID OUT, AND WHY
+
+     Tourangeau, Couper and Conrad's experiments on web-survey visual design
+     drive four decisions:
+       · One item at a time, never a grid. Grids measurably worsen data
+         quality at as few as four items.
+       · Every point on the scale is labelled. Labelling only the ends makes
+         people read the unlabelled middle off its position instead.
+       · The four options are identically sized and evenly spaced, because
+         the visual midpoint of a scale gets read as the typical answer.
+       · No colour on the scale. Shading one end shifts answers towards it.
+
+     No progress bar, no encouragement, no estimate of how long it takes.
+     A questionnaire that talks about itself reads like it is selling
+     something, and this one is asking for a favour.
+     ────────────────────────────────────────────────────────────────────── */
+  :root{
+    --ink:#171310;
+    --ink-2:#5C534B;
+    --ink-3:#766C62;
+    --hair:#DFD8CE;
+    --hair-2:#9C9080;
+    --paper:#F7F5F2;
+    --card:#FFFFFF;
+    --accent:#A8120B;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,system-ui,sans-serif;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--paper); color:var(--ink);
+    font:400 17px/1.5 var(--sans);
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    -webkit-text-size-adjust:100%; text-size-adjust:100%;
+  }
+
+  .sheet{
+    max-width:33rem; margin:0 auto; background:var(--card);
+    min-height:100dvh;
+    padding:
+      calc(env(safe-area-inset-top,0px) + 2rem)
+      calc(env(safe-area-inset-right,0px) + 1.375rem)
+      calc(env(safe-area-inset-bottom,0px) + 7rem)
+      calc(env(safe-area-inset-left,0px) + 1.375rem);
+  }
+  @media (min-width:34rem){
+    body{ padding:2.5rem 0; }
+    .sheet{ min-height:0; border:1px solid var(--hair); padding-bottom:3rem; }
+  }
+
+  /* ── head ─────────────────────────────────────────────────────────── */
+  .eyebrow{
+    font:600 .6875rem/1 var(--sans); letter-spacing:.16em;
+    text-transform:uppercase; color:var(--ink-3);
+  }
+  h1{
+    font:400 1.875rem/1.1 var(--serif); letter-spacing:-.02em;
+    margin:.875rem 0 0;
+  }
+  .anon{
+    margin:1.25rem 0 0; padding:.75rem .875rem;
+    background:var(--paper); border-left:2px solid var(--ink);
+    font-size:.875rem; line-height:1.5; color:var(--ink-2);
+  }
+  .anon b{ color:var(--ink); font-weight:600; }
+
+  /* ── items ────────────────────────────────────────────────────────── */
+  ol.items{ list-style:none; margin:2.25rem 0 0; padding:0; counter-reset:q; }
+  ol.items > li{ margin:0 0 2.25rem; counter-increment:q; }
+  .stmt{
+    font:400 1.25rem/1.3 var(--serif); letter-spacing:-.008em;
+    margin:0 0 .9375rem; display:flex; gap:.6875rem;
+  }
+  .stmt::before{
+    content:counter(q); flex:none;
+    font:600 .75rem/1.9 var(--sans); color:var(--ink-3);
+    font-variant-numeric:tabular-nums;
+  }
+
+  .scale{ display:grid; gap:1px; background:var(--hair-2); border:1px solid var(--hair-2); }
+  .scale input{ position:absolute; opacity:0; width:0; height:0; }
+  .scale label{
+    display:flex; align-items:center; gap:.75rem;
+    min-height:3.25rem; padding:.5rem .875rem; cursor:pointer;
+    background:var(--card); font-size:.9375rem;
+  }
+  .mark{
+    width:1.0625rem; height:1.0625rem; flex:none; border-radius:50%;
+    box-shadow:inset 0 0 0 1.5px var(--hair-2);
+  }
+  .scale input:checked + label{ background:var(--ink); color:#fff; }
+  .scale input:checked + label .mark{ box-shadow:inset 0 0 0 5px #fff; }
+  .scale input:focus-visible + label{ outline:2px solid var(--accent); outline-offset:-3px; }
+  /* "Don't know" sits outside the four degrees, because it is not a fifth
+     degree of agreement and is never scored as one. */
+  .scale label.aside{ color:var(--ink-3); font-size:.875rem; min-height:2.75rem; }
+  .scale input:checked + label.aside{ background:var(--ink-2); color:#fff; }
+
+  .two{ grid-template-columns:1fr 1fr; }
+
+  textarea{
+    width:100%; min-height:7.5rem; resize:vertical; display:block;
+    font:400 1rem/1.55 var(--sans); color:var(--ink);
+    background:var(--card); border:1px solid var(--hair-2); border-radius:0;
+    padding:.8125rem .875rem;
+  }
+  textarea:focus{ outline:2px solid var(--ink); outline-offset:-2px; border-color:var(--ink); }
+  textarea::placeholder{ color:var(--ink-3); }
+
+  /* ── submit ───────────────────────────────────────────────────────── */
+  .bar{
+    position:fixed; left:0; right:0; bottom:0; z-index:5;
+    background:var(--card); border-top:1px solid var(--hair);
+    padding:.75rem calc(env(safe-area-inset-right,0px) + 1.375rem)
+            calc(env(safe-area-inset-bottom,0px) + .75rem)
+            calc(env(safe-area-inset-left,0px) + 1.375rem);
+  }
+  .bar-in{ max-width:33rem; margin:0 auto; }
+  @media (min-width:34rem){ .bar{ position:static; border-top:0; padding:2rem 0 0; } }
+  button.send{
+    width:100%; min-height:3.25rem; cursor:pointer; display:block;
+    font:600 1rem/1 var(--sans); letter-spacing:.01em;
+    color:#fff; background:var(--accent); border:0; border-radius:0;
+  }
+  button.send[disabled]{ opacity:.45; cursor:default; }
+  .fine{ font-size:.75rem; line-height:1.6; color:var(--ink-3); margin:1.25rem 0 0; }
+  .err{ background:#FBF1F0; border:1px solid #E0BBB7; color:#7F0D08;
+        padding:.75rem .875rem; font-size:.875rem; margin:0 0 1.25rem; }
+
+  .done{ padding:1rem 0 0; }
+  .done h2{ font:400 1.625rem/1.2 var(--serif); margin:1.5rem 0 .625rem; }
+  .done p{ color:var(--ink-2); margin:0; }
+
+  @media (prefers-reduced-motion:reduce){ *{ transition:none !important; } }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ink:#F3EFE9; --ink-2:#ABA299; --ink-3:#938A80; --hair:#332C26;
+      --hair-2:#5E554B; --paper:#17130F; --card:#1E1A16; --accent:#F0786F;
+    }
+    .scale input:checked + label{ background:#F3EFE9; color:#17130F; }
+    .scale input:checked + label .mark{ box-shadow:inset 0 0 0 5px #17130F; }
+    button.send{ color:#1A0B09; }
+    .err{ background:#2A1614; border-color:#5A2A26; color:#F6B6B0; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet" id="sheet">
+  <form id="form" novalidate>
+    <div class="eyebrow">EuroKids JMD Enclave &middot; Undri</div>
+    <h1>Parent survey<br>2026&ndash;27</h1>
+    <p class="anon"><b>Anonymous.</b> No name, no email, no record of who opened this page.</p>
+
+    <div id="err" class="err" style="display:none" role="alert"></div>
+
+    <ol class="items" id="items"></ol>
+
+    <div class="bar"><div class="bar-in">
+      <button class="send" id="send" type="submit">Submit</button>
+    </div></div>
+
+    <p class="fine">Leave out names if you want this to stay anonymous.
+      For anything needing a reply, call 020&nbsp;696&nbsp;22&nbsp;686.</p>
+  </form>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* Two items per PSEE factor. The wording is flat and declarative: a parent
+     agrees or disagrees with something that is either true of this school or
+     is not. */
+  var ITEMS = [
+    { k:'happy',    t:'My child is happy here.' },                           // classroom
+    { k:'safe',     t:'My child is safe and well cared for.' },              // classroom
+    { k:'progress', t:'My child is learning and making progress.' },         // teacher
+    { k:'teacher',  t:'I know how my child is getting on day to day.' },     // teacher
+    { k:'informed', t:'The school tells me what I need to know, in time.' }, // school
+    { k:'concerns', t:'When I raise something, it is dealt with.' },         // school
+  ];
+
+  var SCALE = [
+    { v:4, t:'Strongly agree' },
+    { v:3, t:'Agree' },
+    { v:2, t:'Disagree' },
+    { v:1, t:'Strongly disagree' },
+  ];
+
+  var esc = function(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]; }); };
+
+  var out = ITEMS.map(function(item){
+    var opts = SCALE.map(function(s){
+      var id = item.k + s.v;
+      return '<input type="radio" name="' + item.k + '" id="' + id + '" value="' + s.v + '">'
+           + '<label for="' + id + '"><span class="mark"></span>' + s.t + '</label>';
+    }).join('');
+    opts += '<input type="radio" name="' + item.k + '" id="' + item.k + 'x" value="">'
+          + '<label for="' + item.k + 'x" class="aside"><span class="mark"></span>Don&rsquo;t know</label>';
+    return '<li><p class="stmt">' + esc(item.t) + '</p>'
+         + '<div class="scale" role="radiogroup" aria-label="' + esc(item.t) + '">' + opts + '</div></li>';
+  }).join('');
+
+  out += '<li><p class="stmt">Would you recommend us to another parent?</p>'
+       + '<div class="scale two" role="radiogroup" aria-label="Would you recommend us to another parent?">'
+       + '<input type="radio" name="recommend" id="recy" value="yes">'
+       + '<label for="recy"><span class="mark"></span>Yes</label>'
+       + '<input type="radio" name="recommend" id="recn" value="no">'
+       + '<label for="recn"><span class="mark"></span>No</label>'
+       + '</div></li>';
+
+  out += '<li><p class="stmt">Anything else?</p>'
+       + '<textarea id="comment" maxlength="2000" placeholder="Optional"></textarea></li>';
+
+  document.getElementById('items').innerHTML = out;
+
+  var form = document.getElementById('form');
+  var send = document.getElementById('send');
+  var err  = document.getElementById('err');
+
+  function fail(msg){
+    err.textContent = msg;
+    err.style.display = 'block';
+    err.scrollIntoView({ behavior:'smooth', block:'center' });
+  }
+
+  form.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    err.style.display = 'none';
+
+    var comment = document.getElementById('comment').value.trim();
+    var body = { comment: comment };
+    var answered = 0;
+
+    ITEMS.forEach(function(item){
+      var p = form.querySelector('input[name="' + item.k + '"]:checked');
+      if (!p) return;
+      answered++;
+      // "Don't know" goes as nothing: counted as read, never averaged.
+      if (p.value !== '') body['q_' + item.k] = Number(p.value);
+    });
+    var rec = form.querySelector('input[name="recommend"]:checked');
+    if (rec) { body.recommend = rec.value === 'yes'; answered++; }
+
+    if (!answered && !comment) return fail('Nothing has been answered.');
+
+    send.disabled = true;
+    send.textContent = 'Submitting';
+
+    fetch('/api/public/feedback', {
+      method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body),
+    }).then(function(r){ return r.json(); }).then(function(j){
+      if (j && j.ok) {
+        try { localStorage.setItem('ek-feedback-sent', String(Date.now())); } catch (e) {}
+        document.getElementById('sheet').innerHTML =
+          '<div class="done"><div class="eyebrow">EuroKids JMD Enclave &middot; Undri</div>'
+          + '<h2>Thank you</h2><p>' + esc(j.message || 'Recorded.') + '</p></div>';
+        window.scrollTo(0, 0);
+        return;
+      }
+      send.disabled = false; send.textContent = 'Submit';
+      fail((j && j.error) || 'Something went wrong. Please try again.');
+    }).catch(function(){
+      send.disabled = false; send.textContent = 'Submit';
+      fail('Could not reach the school. Check your connection and try again.');
+    });
+  });
+})();
+</script>
+</body>
+</html>

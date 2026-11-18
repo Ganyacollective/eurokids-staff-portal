@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
         { source: "/sign", destination: "/sign.html" },
         // Parent declarations — the street collection, the van, whatever comes next.
         { source: "/declare", destination: "/declare.html" },
+        // Anonymous parent feedback. One shared link, so this is the URL that
+        // goes out to everybody — it wants to be short enough to read down a
+        // phone line and to survive being retyped.
+        { source: "/feedback", destination: "/feedback.html" },
       ],
       afterFiles: [],
       fallback: [],
