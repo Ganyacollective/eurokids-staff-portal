@@ -840,9 +840,14 @@ function paintFeedback(){
              pct: scored ? Math.round((t[4] + t[3]) / scored * 100) : null };
   };
 
-  const rec = { yes: rows.filter(r => r.recommend === true).length,
-                no:  rows.filter(r => r.recommend === false).length };
-  rec.scored = rec.yes + rec.no;
+  // yes / maybe / no. "Maybe" is counted in the denominator and never in
+  // the numerator: a parent who would only maybe recommend you has not
+  // recommended you, and rolling them in with the yeses is the easiest way
+  // to make this number say nothing.
+  const rec = { yes:   rows.filter(r => r.recommend === 'yes').length,
+                maybe: rows.filter(r => r.recommend === 'maybe').length,
+                no:    rows.filter(r => r.recommend === 'no').length };
+  rec.scored = rec.yes + rec.maybe + rec.no;
   rec.pct = rec.scored ? Math.round(rec.yes / rec.scored * 100) : null;
 
   // A stacked bar of the four answers. Agreement reads left, disagreement
@@ -905,7 +910,7 @@ function paintFeedback(){
       </div>
       <div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 4px">
         <div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${rec.pct == null ? '—' : rec.pct + '%'}</div>
-        <div class="hint">${rec.yes} yes · ${rec.no} no${rec.scored < n ? ` · ${n - rec.scored} did not say` : ''}</div>
+        <div class="hint">${rec.yes} yes · ${rec.maybe} maybe · ${rec.no} no${rec.scored < n ? ` · ${n - rec.scored} did not say` : ''}</div>
       </div>
       ${n < 10 ? `<div class="hint" style="font-size:12px">Ofsted does not publish a school's results below ten responses, and
         for the same reason these figures should not be quoted yet — one more answer still moves them by several points.</div>` : ''}
@@ -937,7 +942,9 @@ function fbCard(r){
     .filter(Boolean).join('<span class="hint"> · </span>');
   return `<div style="padding:14px 16px;border-top:1px solid var(--line)">
     <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
-      <div class="hint">${esc(fbDay(r.submitted_on))}${r.recommend === false ? ' · <strong>would not recommend</strong>' : ''}</div>
+      <div class="hint">${esc(fbDay(r.submitted_on))}${
+        r.recommend === 'no' ? ' · <strong>would not recommend</strong>'
+        : r.recommend === 'maybe' ? ' · would only maybe recommend' : ''}</div>
       <span class="chip ${r.status === 'new' ? 'c-warn' : r.status === 'done' ? 'c-good' : 'c-mute'}">${esc(FB_STATUS[r.status] || r.status)}</span>
     </div>
     ${said ? `<div style="margin:6px 0 8px">${said}</div>` : ''}

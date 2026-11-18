@@ -78,7 +78,10 @@ export async function POST(req: NextRequest) {
 
   const scores: Record<string, number | null> = {};
   for (const k of ITEMS) scores["q_" + k] = agreement(body["q_" + k]);
-  const recommend = typeof body.recommend === "boolean" ? body.recommend : null;
+  // yes / maybe / no, named in the data so nobody has to remember what a
+  // number meant. Anything else is not an answer.
+  const raw = String(body.recommend ?? "");
+  const recommend = ["yes", "maybe", "no"].includes(raw) ? raw : null;
   const comment = cleanComment(body.comment);
   const answered = ITEMS.some((k) => scores["q_" + k] !== null) || recommend !== null;
 

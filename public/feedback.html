@@ -72,10 +72,15 @@
   }
 
   /* ── head ─────────────────────────────────────────────────────────── */
+  .brand{ display:flex; align-items:center; gap:.75rem; }
+  .brand img{
+    width:2.5rem; height:2.5rem; flex:none; border-radius:.5rem; display:block;
+  }
   .eyebrow{
-    font:600 .6875rem/1 var(--sans); letter-spacing:.16em;
+    font:600 .6875rem/1.35 var(--sans); letter-spacing:.14em;
     text-transform:uppercase; color:var(--ink-3);
   }
+  .eyebrow b{ display:block; color:var(--ink); font-weight:700; letter-spacing:.1em; }
   h1{
     font:400 1.875rem/1.1 var(--serif); letter-spacing:-.02em;
     margin:.875rem 0 0;
@@ -119,7 +124,12 @@
   .scale label.aside{ color:var(--ink-3); font-size:.875rem; min-height:2.75rem; }
   .scale input:checked + label.aside{ background:var(--ink-2); color:#fff; }
 
-  .two{ grid-template-columns:1fr 1fr; }
+  /* Three across fits at 320px: the longest label is "Maybe". Below that
+     the grid falls back to one per row rather than squeezing the text. */
+  .three{ grid-template-columns:repeat(3,1fr); }
+  .three label{ justify-content:center; gap:.5rem; padding:.5rem .375rem; }
+  @media (max-width:20rem){ .three{ grid-template-columns:1fr; }
+                            .three label{ justify-content:flex-start; padding:.5rem .875rem; } }
 
   textarea{
     width:100%; min-height:7.5rem; resize:vertical; display:block;
@@ -170,9 +180,13 @@
 <body>
 <div class="sheet" id="sheet">
   <form id="form" novalidate>
-    <div class="eyebrow">EuroKids JMD Enclave &middot; Undri</div>
+    <div class="brand">
+      <img src="/brand/icons/icon-192.png" alt="" width="40" height="40">
+      <div class="eyebrow"><b>EuroKids JMD Enclave</b>Undri, Pune</div>
+    </div>
     <h1>Parent survey<br>2026&ndash;27</h1>
-    <p class="anon"><b>Anonymous.</b> No name, no email, no record of who opened this page.</p>
+    <p class="anon">Dear Parent, kindly note that this is an <b>anonymous</b> survey.
+      We collect no name, no email and no record of who opened this page.</p>
 
     <div id="err" class="err" style="display:none" role="alert"></div>
 
@@ -225,12 +239,18 @@
          + '<div class="scale" role="radiogroup" aria-label="' + esc(item.t) + '">' + opts + '</div></li>';
   }).join('');
 
+  /* Ofsted ask this as a straight yes/no. "Maybe" is added because forcing
+     the choice pushes undecided parents to "yes" — easier to say than no
+     about somewhere your child goes every day — so the middle option mostly
+     draws off the yes column, not the no column. It is never counted as a
+     yes when the result is reported. */
   out += '<li><p class="stmt">Would you recommend us to another parent?</p>'
-       + '<div class="scale two" role="radiogroup" aria-label="Would you recommend us to another parent?">'
-       + '<input type="radio" name="recommend" id="recy" value="yes">'
-       + '<label for="recy"><span class="mark"></span>Yes</label>'
-       + '<input type="radio" name="recommend" id="recn" value="no">'
-       + '<label for="recn"><span class="mark"></span>No</label>'
+       + '<div class="scale three" role="radiogroup" aria-label="Would you recommend us to another parent?">'
+       + ['yes','maybe','no'].map(function(v){
+           return '<input type="radio" name="recommend" id="rec_' + v + '" value="' + v + '">'
+                + '<label for="rec_' + v + '"><span class="mark"></span>'
+                + v.charAt(0).toUpperCase() + v.slice(1) + '</label>';
+         }).join('')
        + '</div></li>';
 
   out += '<li><p class="stmt">Anything else?</p>'
@@ -241,6 +261,23 @@
   var form = document.getElementById('form');
   var send = document.getElementById('send');
   var err  = document.getElementById('err');
+
+  function thanks(message){
+    document.getElementById('sheet').innerHTML =
+      '<div class="brand">'
+      + '<img src="/brand/icons/icon-192.png" alt="" width="40" height="40">'
+      + '<div class="eyebrow"><b>EuroKids JMD Enclave</b>Undri, Pune</div></div>'
+      + '<div class="done"><h2>Thank you</h2><p>'
+      + esc(message || 'Your answers have been recorded.') + '</p>'
+      + '<p class="fine">Nothing on this page identifies you. If you would like a reply '
+      + 'to something, call the office on 020&nbsp;696&nbsp;22&nbsp;686.</p></div>';
+    window.scrollTo(0, 0);
+  }
+
+  // So the confirmation can be looked at without filling the form in:
+  // /feedback#thanks. Costs one line and saves submitting junk responses
+  // every time somebody wants to check how it reads.
+  if (location.hash === '#thanks') thanks();
 
   function fail(msg){
     err.textContent = msg;
@@ -264,7 +301,7 @@
       if (p.value !== '') body['q_' + item.k] = Number(p.value);
     });
     var rec = form.querySelector('input[name="recommend"]:checked');
-    if (rec) { body.recommend = rec.value === 'yes'; answered++; }
+    if (rec) { body.recommend = rec.value; answered++; }
 
     if (!answered && !comment) return fail('Nothing has been answered.');
 
@@ -276,10 +313,7 @@
     }).then(function(r){ return r.json(); }).then(function(j){
       if (j && j.ok) {
         try { localStorage.setItem('ek-feedback-sent', String(Date.now())); } catch (e) {}
-        document.getElementById('sheet').innerHTML =
-          '<div class="done"><div class="eyebrow">EuroKids JMD Enclave &middot; Undri</div>'
-          + '<h2>Thank you</h2><p>' + esc(j.message || 'Recorded.') + '</p></div>';
-        window.scrollTo(0, 0);
+        thanks(j.message);
         return;
       }
       send.disabled = false; send.textContent = 'Submit';
