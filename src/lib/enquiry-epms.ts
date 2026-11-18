@@ -147,10 +147,16 @@ export async function closeAdmitted(admin: SupabaseClient, matches: Match[], act
   let closed = 0;
 
   for (const m of matches.filter(x => x.confident)) {
-    const { error } = await tbl.from("enquiry").update({
+    // .select("id") and then check it, same as the single-enquiry route.
+    // The update is scoped to open enquiries, so for one already won or lost
+    // it matches nothing and reports no error — and without the check this
+    // went on to write "Joined — on the EuroKids roll" onto the timeline of
+    // a family somebody had just marked lost, and counted it as closed.
+    // Reachable as a race: the coordinator clicking while the EPMS sync runs.
+    const { data: hit, error } = await tbl.from("enquiry").update({
       status: "won", won_at: now, admitted_uin: m.uin, updated_at: now, updated_by: actor,
-    }).eq("id", m.enquiry_id).in("status", ["in_progress", "form_taken", "almost_lost"]);
-    if (error) continue;
+    }).eq("id", m.enquiry_id).in("status", ["in_progress", "form_taken", "almost_lost"]).select("id");
+    if (error || !hit?.length) continue;
 
     await tbl.from("enquiry_event").insert({
       enquiry_id: m.enquiry_id, at: now, kind: "won", actor,

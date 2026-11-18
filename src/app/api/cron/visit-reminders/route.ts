@@ -3,7 +3,7 @@ import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, SCHOOL_PHONE_TEL, plainFooter } from "@/lib/brand-email";
 import { sendWhatsApp } from "@/lib/whatsapp";
-import { isEmail } from "@/lib/enquiry";
+import { isRealAddress } from "@/lib/recipients";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -46,7 +46,12 @@ export async function GET(req: NextRequest) {
   for (const e of rows || []) {
     const when = new Date(e.visit_at).toLocaleString("en-IN", { weekday: "long", day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
     const r: (typeof out)[number] = { id: e.id, child: e.child_name };
-    const emails = [e.father_email, e.mother_email].filter(isEmail) as string[];
+    // isRealAddress, not isEmail. isEmail is a bare syntax test, so it
+    // passes na@na.com, test@test.com and the other placeholders the
+    // office types when a parent will not give an address — and every
+    // one of those bounces against our own sending domain, which is how
+    // a domain's reputation goes. isRealAddress knows the placeholders.
+    const emails = [e.father_email, e.mother_email].filter(isRealAddress) as string[];
     if (!dry && mailReady() && emails.length) {
       const html = renderEmail({
         title: "See you tomorrow", subtitle: SCHOOL_NAME, theme: "calm",

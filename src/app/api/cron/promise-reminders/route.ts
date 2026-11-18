@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { renderEmail, esc, money, day, SCHOOL_NAME, SCHOOL_PHONE, SCHOOL_PHONE_TEL, plainFooter } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
-import { isEmail } from "@/lib/enquiry";
+import { isRealAddress } from "@/lib/recipients";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -46,7 +46,12 @@ export async function GET(req: NextRequest) {
 
     // due today, still owing
     if (!p.remind_parent || p.reminded_at || !mailReady()) continue;
-    const to = [p.parent_email1, p.parent_email2].filter(isEmail) as string[];
+    // isRealAddress, not isEmail. isEmail is a bare syntax test, so it
+    // passes na@na.com, test@test.com and the other placeholders the
+    // office types when a parent will not give an address — and every
+    // one of those bounces against our own sending domain, which is how
+    // a domain's reputation goes. isRealAddress knows the placeholders.
+    const to = [p.parent_email1, p.parent_email2].filter(isRealAddress) as string[];
     if (!to.length) continue;
     const amount = Number(p.expected || 0);
     const html = renderEmail({

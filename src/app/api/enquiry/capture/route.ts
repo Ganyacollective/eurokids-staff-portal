@@ -16,7 +16,15 @@ async function gate(token: string) {
   if (!me?.user) return null;
   const { data } = await user.from("module_access").select("module").eq("user_id", me.user.id);
   const mods = (data || []).map((r) => r.module);
-  if (!mods.includes("admission") && !mods.includes("finance")) return null;
+  // The admin fallback every sibling enquiry route has — call, delete,
+  // summary and admitted all accept profiles.role === 'admin' alongside the
+  // module grants. Only this one demanded a literal admission or finance row,
+  // so an owner holding no modules at all was refused from filing a walk-in
+  // on a screen they can see.
+  if (!mods.includes("admission") && !mods.includes("finance")) {
+    const { data: prof } = await user.from("profiles").select("role").eq("id", me.user.id).maybeSingle();
+    if (prof?.role !== "admin") return null;
+  }
   return me.user;
 }
 
@@ -26,7 +34,7 @@ export async function POST(req: NextRequest) {
   const me = await gate(token);
   if (!me) return NextResponse.json({ ok: false, error: "You do not have access to enquiries." }, { status: 403 });
 
-  let b: { action?: string; input?: CaptureInput; id?: number; kind?: string; text?: string };
+  let b: { action?: string; input?: CaptureInput; id?: number; kind?: string; text?: string; force?: boolean };
   try { b = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
   const who = (me.user_metadata?.full_name as string) || me.email || "staff";
@@ -46,10 +54,26 @@ export async function POST(req: NextRequest) {
     // Re-send the hello to an existing enquiry (email and/or WhatsApp).
     const { data: e } = await admin.schema("eurokids").from("enquiry").select("*").eq("id", b.id).maybeSingle();
     if (!e) return NextResponse.json({ ok: false, error: "Enquiry not found" }, { status: 404 });
-    const { sendEnquiryWelcomeEmail, isEmail } = await import("@/lib/enquiry");
+    const { sendEnquiryWelcomeEmail } = await import("@/lib/enquiry");
+    const { isRealAddress } = await import("@/lib/recipients");
     const eRow = e as import("@/lib/enquiry").EnquiryRow;
     const out: Record<string, string> = {};
-    const to = [e.father_email, e.mother_email].filter(isEmail) as string[];
+
+    // This action is deliberately a re-send, so it is not guarded on
+    // welcome_email_sent_at the way the automatic first send is — somebody
+    // pressed the button on purpose. But a double-tap is not a purpose, and
+    // it costs a parent two identical emails, so anything inside two minutes
+    // of the last one is treated as the same press.
+    const lastSent = e.welcome_email_sent_at ? Date.parse(e.welcome_email_sent_at) : 0;
+    if (lastSent && Date.now() - lastSent < 120_000 && b.force !== true) {
+      return NextResponse.json({ ok: false,
+        error: "That welcome just went out moments ago.", already_sent_at: e.welcome_email_sent_at }, { status: 409 });
+    }
+
+    // isRealAddress rather than isEmail: isEmail is a bare syntax test and
+    // passes the na@na.com placeholders the office types when a parent will
+    // not give an address.
+    const to = [e.father_email, e.mother_email].filter(isRealAddress) as string[];
     if (to.length && b.kind !== "whatsapp") {
       out.email = await sendEnquiryWelcomeEmail(to, eRow);
       if (out.email === "sent") {
