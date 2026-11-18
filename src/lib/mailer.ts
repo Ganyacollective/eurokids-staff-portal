@@ -110,8 +110,28 @@ export async function sendMail(m: Mail): Promise<SendResult> {
 // A whole school-wide send. Resend keeps its 100-per-call batch endpoint;
 // SMTP goes one at a time down a pooled connection, which for 192 families is
 // under a minute and costs nothing.
-export async function sendMany(msgs: (Mail & { label: string })[], opts: { idempotencyKey?: string } = {}) {
+/* onProgress is how a run that dies halfway still leaves a record.
+   ──────────────────────────────────────────────────────────────────────────
+   The caller used to log what it had sent only after this function returned,
+   which is fine until the function does not return — a 124-family run is
+   serial and the platform kills it at 300 seconds. Nothing was written, so
+   the retry had nothing to skip and mailed everybody again.
+
+   It is awaited rather than fired off, because the point is that the row
+   exists before the next message goes out. */
+export async function sendMany(
+  msgs: (Mail & { label: string })[],
+  opts: {
+    idempotencyKey?: string;
+    onProgress?: (done: { label: string; ok: boolean; error?: string }[]) => Promise<void> | void;
+  } = {},
+) {
   const sent: string[] = [], failed: { name: string; error: string }[] = [];
+  const report = async (done: { label: string; ok: boolean; error?: string }[]) => {
+    if (!opts.onProgress) return;
+    // A failure to record must not stop the send, but it must be visible.
+    try { await opts.onProgress(done); } catch (e) { console.error("[sendMany] progress", e); }
+  };
   // The batch endpoint is Resend's; SMTP sends one at a time down a pool.
   if (provider(msgs[0]?.from === "hr" ? "hr" : "school") === "resend" && !msgs.some((m) => m.attachments?.length)) {
     const key = process.env.RESEND_API_KEY!;
@@ -124,15 +144,30 @@ export async function sendMany(msgs: (Mail & { label: string })[], opts: { idemp
             ...(opts.idempotencyKey ? { "Idempotency-Key": `${opts.idempotencyKey}-${i / 100}` } : {}) },
           body: JSON.stringify(chunk.map((m) => ({ from: fromFor(m.from), to: m.to, cc: m.cc, subject: m.subject, html: m.html, text: m.text }))),
         });
-        if (res.ok) chunk.forEach((m) => sent.push(m.label));
-        else { const why = `Resend ${res.status}: ${(await res.text()).slice(0, 160)}`; chunk.forEach((m) => failed.push({ name: m.label, error: why })); }
-      } catch (e) { chunk.forEach((m) => failed.push({ name: m.label, error: (e as Error).message })); }
+        if (res.ok) {
+          chunk.forEach((m) => sent.push(m.label));
+          await report(chunk.map((m) => ({ label: m.label, ok: true })));
+        } else {
+          const why = `Resend ${res.status}: ${(await res.text()).slice(0, 160)}`;
+          chunk.forEach((m) => failed.push({ name: m.label, error: why }));
+          await report(chunk.map((m) => ({ label: m.label, ok: false, error: why })));
+        }
+      } catch (e) {
+        const why = (e as Error).message;
+        chunk.forEach((m) => failed.push({ name: m.label, error: why }));
+        await report(chunk.map((m) => ({ label: m.label, ok: false, error: why })));
+      }
     }
     return { sent, failed };
   }
+  // SMTP, one at a time — and this is the branch this school actually uses,
+  // so it is the one that has to be safe to retry. Each message is reported
+  // before the next is attempted, so a run cut off at the platform's time
+  // limit leaves behind an exact record of how far it got.
   for (const m of msgs) {
     const r = await sendMail(m);
     if (r.ok) sent.push(m.label); else failed.push({ name: m.label, error: r.error || "failed" });
+    await report([{ label: m.label, ok: r.ok, error: r.ok ? undefined : (r.error || "failed") }]);
   }
   return { sent, failed };
 }

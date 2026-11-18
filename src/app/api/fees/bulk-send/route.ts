@@ -179,29 +179,66 @@ export async function POST(req: NextRequest) {
     }),
   ];
 
-  // An idempotency key means a retry after a dropped connection cannot send a
-  // second copy — Resend remembers the key for 24 hours.
+  // Retrying a run must not send anybody a second copy.
+  //
+  // This passed the run id to Resend as an idempotency key and called it
+  // done. The key is only honoured on Resend's batch endpoint, and this
+  // school sends over SMTP — MAIL_PROVIDER falls back to smtp whenever
+  // SMTP_HOST is set — so on the live path it did nothing at all. A run of
+  // ~124 families is serial against a 300-second limit, so being cut off
+  // part-way is the expected case, not the unlucky one, and pressing Send
+  // again mailed everyone who had already received one a second statement.
+  //
+  // Two changes make it real. Anyone already recorded against this run is
+  // dropped from the queue before sending, and each message is recorded as
+  // it goes rather than all of them at the end — because a run that is
+  // killed never reaches the end, which is exactly when the record matters.
   const runId = body.sendId || randomUUID();
+  const key = (m: { uin?: string; to: string[] }) => m.uin || m.to[0];
+
+  const { data: already } = await admin.schema("eurokids").from("email_message")
+    .select("uin, to_addrs, status").eq("run_id", runId);
+  const done = new Set((already || [])
+    .filter((r) => r.status === "sent")
+    .map((r) => r.uin || (r.to_addrs || [])[0]));
+
+  const toSend = queue.filter((m) => !done.has(key(m)));
+  const skipped = queue.length - toSend.length;
+  if (skipped) console.info(`[bulk-send] ${runId}: skipping ${skipped} already sent on an earlier attempt`);
+
+  const logOne = async (rows: { label: string; ok: boolean; error?: string }[]) => {
+    const byLabel = new Map(toSend.map((m) => [m.label, m]));
+    await admin.schema("eurokids").from("email_message").upsert(
+      rows.map((r) => {
+        const m = byLabel.get(r.label);
+        return {
+          uin: m?.uin || null, student_name: m?.uin ? r.label : null,
+          to_addrs: m?.to || [r.label], subject: m?.subject || subject,
+          kind: "bulk", run_id: runId,
+          status: r.ok ? "sent" : "failed", error: r.error || null,
+        };
+      }),
+      // dedupe_key is a generated column — the UIN where there is one, the
+      // first address otherwise — so (run_id, dedupe_key) is a real target
+      // for on_conflict. A second attempt updates the row instead of
+      // failing the insert.
+      { onConflict: "run_id,dedupe_key", ignoreDuplicates: false },
+    ).then(() => {}, (e) => console.error("[bulk-send] log", e));
+  };
 
   const { sent: okNames, failed: badOnes } = await sendMany(
     // The office is no longer copied on every message by default. 124 CCs
     // buried the mail that needed reading; the record lives in the hub now.
-    queue.map((m) => ({ ...m, cc: body.ccOffice === true ? [CC] : undefined, attachments: attachments.length ? attachments : undefined })),
-    { idempotencyKey: runId });
+    toSend.map((m) => ({ ...m, cc: body.ccOffice === true ? [CC] : undefined, attachments: attachments.length ? attachments : undefined })),
+    { idempotencyKey: runId, onProgress: logOne });
   sent.push(...okNames); failed.push(...badOnes);
 
   // One row per family, so "what did we send the Kakanis, and when" is a
   // question the child's own sheet can answer. This is what replaces copying
   // the office on all 124 messages.
-  const badBy = new Map(failed.map((f) => [f.name, f.error]));
-  await admin.schema("eurokids").from("email_message").insert(
-    queue.map((m) => ({
-      uin: m.uin || null, student_name: m.uin ? m.label : null,
-      to_addrs: m.to, subject: m.subject, kind: "bulk", run_id: runId,
-      status: badBy.has(m.label) ? "failed" : "sent",
-      error: badBy.get(m.label) || null,
-    })),
-  ).then(() => {}, () => {});   // logging must never block a send
+  // The per-family rows are written by logOne as each message goes out, so
+  // there is nothing to write here. Doing it at the end was the bug: a run
+  // killed at the time limit never got here, and the retry saw no record.
 
   // Keep a record of what went out, so nobody has to guess later.
   await admin.schema("eurokids").from("email_log").insert({
@@ -213,6 +250,9 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true, mode: "sent", sent: sent.length, failed: failed.length, provider: mailProvider(), daily_cap: dailyCap(),
+    // Say so when a retry skipped people, or a second run looks like it
+    // quietly reached fewer families than the first.
+    ...(skipped ? { skipped_already_sent: skipped } : {}),
     failures: failed.slice(0, 30), summary: sum,
   });
 }
