@@ -40,6 +40,12 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/sign") ||
     // A parent signing a declaration has no account here either.
     path.startsWith("/declare") ||
+    // The anonymous parent survey. Nobody filling it in has an account —
+    // that is the entire point of it — so without this every parent who
+    // follows the link lands on a staff sign-in screen and concludes the
+    // school sent them a broken link. Same reasoning as the three above,
+    // and I still managed to add the page without adding the path.
+    path.startsWith("/feedback") ||
     // A fee receipt a parent forwards to their employer's finance team. They
     // have no login and never will, and a receipt that bounces to a sign-in
     // screen fails silently from our side — the parent just reports that the
