@@ -72,21 +72,26 @@
   }
 
   /* ── masthead ─────────────────────────────────────────────────────────
-     The mark sits on the paper, with no slab behind it.
+     The blue wordmark, set small in the top corner. It is the one version
+     of the artwork that works here without being touched: the other file is
+     white-on-black, which needs recolouring to sit on a light page, while
+     this one is blue on a black field, so dropping the field is the whole
+     job. 8.47:1 against the paper.
 
-     The artwork arrived as white lettering on a solid black field with the
-     bunny in colour — fine on a dark background, unusable on a light one.
-     It is recoloured rather than boxed: the field and the lettering are
-     the only pure-greyscale parts of the drawing (black is 0,0,0 and the
-     ink is 248,248,248, both saturation 0), while the bunny's palest
-     colour, its fur, is 232,216,208 at saturation 24. So a saturation cut
-     separates the lettering from the mascot without touching a pixel of
-     him, and brightness is then mapped to opacity: white becomes solid
-     ink, black becomes nothing, and the anti-aliased edge between them
-     stays smooth. The bunny keeps his fur, ears, shirt, eyes and teeth. */
-  .masthead{ margin:0 0 1.75rem; }
-  .masthead img{
-    width:13rem; max-width:72%; height:auto; display:block;
+     The box interior is dropped along with the field — it is white in the
+     original, and a white patch on cream paper reads as a printing error
+     rather than as a logo. The page shows through instead. */
+  .head{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:1.25rem; margin:0 0 1.5rem;
+  }
+  .head-l{ min-width:0; }
+  /* Not .mark — that name already belongs to the radio dot further down,
+     and the dot's rule wins by order, so the logo rendered as a 17px
+     circle with an inset shadow. */
+  .sitemark{
+    flex:none; width:8.5rem; max-width:38%; height:auto; display:block;
+    margin-top:.25rem;
   }
   .eyebrow{
     font:600 .6875rem/1.35 var(--sans); letter-spacing:.14em;
@@ -94,7 +99,7 @@
   }
   h1{
     font:400 1.875rem/1.1 var(--serif); letter-spacing:-.02em;
-    margin:.875rem 0 0;
+    margin:.625rem 0 0;
   }
   .anon{
     margin:1.25rem 0 0; padding:.75rem .875rem;
@@ -191,13 +196,19 @@
 <body>
 <div class="sheet" id="sheet">
   <form id="form" novalidate>
-    <div class="masthead">
-      <img src="/brand/jmd-enclave-mark.png"
+    <div class="head">
+      <div class="head-l">
+        <div class="eyebrow">Undri, Pune</div>
+        <!-- No year on the form. The year is still recorded against every
+             response, worked out on the server from the date, so the hub can
+             filter by it — but printing it here only invites a parent to
+             wonder whether they already did this one. -->
+        <h1>Parent survey</h1>
+      </div>
+      <img class="sitemark" src="/brand/jmd-enclave-mark.png"
            srcset="/brand/jmd-enclave-mark.png 1x, /brand/jmd-enclave-mark@2x.png 2x"
-           alt="EuroKids JMD Enclave" width="450" height="321">
+           alt="EuroKids JMD Enclave" width="450" height="204">
     </div>
-    <div class="eyebrow">Undri, Pune</div>
-    <h1>Parent survey<br>2026&ndash;27</h1>
     <p class="anon">Dear Parent, kindly note that this is an <b>anonymous</b> survey.
       We collect no name, no email and no record of who opened this page.</p>
 
@@ -277,10 +288,11 @@
 
   function thanks(message){
     document.getElementById('sheet').innerHTML =
-      '<div class="masthead"><img src="/brand/jmd-enclave-mark.png"'
+      '<div class="head"><div class="head-l">'
+      + '<div class="eyebrow">Undri, Pune</div></div>'
+      + '<img class="sitemark" src="/brand/jmd-enclave-mark.png"'
       + ' srcset="/brand/jmd-enclave-mark.png 1x, /brand/jmd-enclave-mark@2x.png 2x"'
-      + ' alt="EuroKids JMD Enclave" width="450" height="321"></div>'
-      + '<div class="eyebrow">Undri, Pune</div>'
+      + ' alt="EuroKids JMD Enclave" width="450" height="204"></div>'
       + '<div class="done"><h2>Thank you</h2><p>'
       + esc(message || 'Your answers have been recorded.') + '</p>'
       + '<p class="fine">Nothing on this page identifies you. If you would like a reply '
