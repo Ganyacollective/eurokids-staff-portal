@@ -50,16 +50,34 @@ export async function POST(req: Request) {
     if (!(amount > 0)) return NextResponse.json({ ok: false, error: "Enter an amount." }, { status: 400 });
     if (!MODES.includes(b.mode)) return NextResponse.json({ ok: false, error: "Pick how it was paid." }, { status: 400 });
     // Overpaying is almost always a typo — a digit too many, or the same
-    // payment entered twice. Refusing it here is cheaper than unpicking it.
-    if (amount > Number(inv.balance_due) + 0.01) {
-      return NextResponse.json({ ok: false,
-        error: `That is more than the ${Number(inv.balance_due).toFixed(2)} still owed on ${inv.number || "this invoice"}.` }, { status: 400 });
-    }
-    const { error } = await a.from("daycare_payment").insert({
-      invoice_id: id, amount, mode: b.mode, reference: b.reference || null,
-      paid_on: b.paid_on || undefined, note: b.note ?? undefined, recorded_by: who.name,
+    // payment entered twice. Refusing it is cheaper than unpicking it.
+    //
+    // The check used to live here, against the balance_due read a moment
+    // earlier. That number is not computed on read: a trigger recalculates
+    // it after each payment. So two clicks on Record payment, or two people
+    // taking the same cash at the desk, both tested a balance from before
+    // the other had landed and both wrote a full-balance payment.
+    //
+    // It now happens inside record_daycare_payment, which takes a row lock
+    // on the invoice first, so the second attempt waits, re-reads a balance
+    // that includes the first, and is refused.
+    // admin() is already scoped to the eurokids schema.
+    const { error } = await a.rpc("record_daycare_payment", {
+      p_invoice: id,
+      p_amount: amount,
+      p_mode: b.mode,
+      p_reference: b.reference || null,
+      p_paid_on: b.paid_on || null,
+      p_note: b.note ?? null,
+      p_by: who.name,
     });
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    if (error) {
+      // 22023 is the function's own refusal — an amount bigger than what is
+      // owed. That is the operator's business, not a server fault.
+      const refused = error.code === "22023" || /more than the|more than nothing/.test(error.message || "");
+      return NextResponse.json({ ok: false, error: error.message },
+        { status: refused ? 400 : 500 });
+    }
 
     // Settled at the desk? Then take the payment link down.
     //

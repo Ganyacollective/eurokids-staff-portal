@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const token = bearer(req);
   if (!token) return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
 
-  let body: { receipt_id?: number | string; preview?: boolean };
+  let body: { receipt_id?: number | string; preview?: boolean; resend?: boolean };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   const receiptId = Number(body.receipt_id);
   if (!receiptId) return NextResponse.json({ error: "receipt_id required" }, { status: 400 });
@@ -41,6 +41,20 @@ export async function POST(req: NextRequest) {
   const { data: r } = await a.schema("eurokids").from("receipt_offline")
     .select("*").eq("id", receiptId).maybeSingle();
   if (!r) return NextResponse.json({ error: "Receipt not found." }, { status: 404 });
+
+  // receipt_sent_at was written after a successful send and then never read,
+  // so two taps on Send sent the parent two identical receipts for the same
+  // money. Sending a second one on purpose is a real thing to want — the
+  // first went to a dead address, the parent deleted it — so it is allowed,
+  // but it has to be asked for.
+  if (r.receipt_sent_at && body.resend !== true && !body.preview) {
+    return NextResponse.json({
+      error: `This receipt was already emailed on ${new Date(r.receipt_sent_at)
+        .toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}.`,
+      already_sent_at: r.receipt_sent_at,
+      hint: "Send it again only if the parent did not get the first one.",
+    }, { status: 409 });
+  }
 
   // A receipt may belong to someone who is not on the school roll at all —
   // a day-care family, say. They still get a receipt, just without any fee

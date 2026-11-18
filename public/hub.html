@@ -4014,7 +4014,15 @@ async function sendReceipt(id, a){
   a.textContent = 'sending…';
   a.style.pointerEvents = 'none';          // a second click sent a second email
   try {
-    const r = await feesApi('/api/fees/payment-receipt', { receipt_id: id });
+    // The server refuses a second receipt unless it is asked for, so the
+    // answer to the confirm above has to travel with the request. If this
+    // browser's copy was stale and the server knows better, it says when the
+    // first one went and offers the choice again with the real facts.
+    let r = await feesApi('/api/fees/payment-receipt',
+      { receipt_id: id, resend: !!rec?.receipt_sent_at });
+    if (!r.ok && r.already_sent_at && confirm((r.error || 'It was already sent.') + '\n\nSend it again anyway?')) {
+      r = await feesApi('/api/fees/payment-receipt', { receipt_id: id, resend: true });
+    }
     a.textContent = r.ok ? 'sent ✓' : 'failed';
     if (!r.ok) alert(r.error || 'Could not send the receipt.');
     else if (rec) { rec.receipt_sent_at = new Date().toISOString(); }
@@ -4532,7 +4540,13 @@ async function dcOpenCustomer(id){
   el('cu-del').onclick = () => dcRemoveCustomer(p.id, p.display_name, el('cu-del'));
   if (el('cu-welcome')) el('cu-welcome').onclick = async () => {
     const b = el('cu-welcome'); b.disabled = true; b.textContent = 'Sending…';
-    const r = await dcApi('/customer', { action: 'welcome', id: p.id });
+    // One welcome letter per family unless somebody says otherwise. The
+    // server refuses the second silently-identical one and says when the
+    // first went; sending another on purpose is still a click away.
+    let r = await dcApi('/customer', { action: 'welcome', id: p.id });
+    if (!r.ok && r.already_sent_at && confirm((r.error || 'It was already sent.') + '\n\nSend it again anyway?')) {
+      r = await dcApi('/customer', { action: 'welcome', id: p.id, resend: true });
+    }
     b.disabled = false;
     b.textContent = r.ok ? `Sent to ${r.sent_to}` : (r.error || 'It did not go');
     if (r.ok) await dcLoad(true);

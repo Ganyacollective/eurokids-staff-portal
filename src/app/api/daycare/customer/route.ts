@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   // The welcome letter is about joining day care, so it belongs to that half.
   if (String(b.action || "save") === "welcome") {
     if (!who.canBill) return NextResponse.json({ ok: false, error: "You do not have Day care billing." }, { status: 403 });
-    return welcome(a, Number(b.id), who.name);
+    return welcome(a, Number(b.id), who.name, b.resend === true);
   }
   if (String(b.action || "save") === "remove") return remove(a, Number(b.id), who);
 
@@ -84,12 +84,24 @@ export async function POST(req: Request) {
 // The welcome letter. Sent from the customer's own record, because that is
 // where you are standing the moment a family signs up — and logged in their
 // history like every other thing this system sends them.
-async function welcome(a: ReturnType<typeof admin>, id: number, by: string) {
+async function welcome(a: ReturnType<typeof admin>, id: number, by: string, resend = false) {
   const { data: p } = await a.from("billing_party")
     .select("id, display_name, email, welcome_sent_at").eq("id", id).maybeSingle();
   if (!p) return NextResponse.json({ ok: false, error: "No such customer." }, { status: 404 });
   const to = String(p.email || "").trim();
   if (!to) return NextResponse.json({ ok: false, error: "There is no email address for this family." }, { status: 400 });
+
+  // welcome_sent_at was selected here and then only ever written, never
+  // checked, so two taps sent the family two welcome letters. Resending is
+  // legitimate; doing it by accident is not.
+  if (p.welcome_sent_at && !resend) {
+    return NextResponse.json({
+      ok: false,
+      error: `A welcome letter already went to this family on ${new Date(p.welcome_sent_at)
+        .toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}.`,
+      already_sent_at: p.welcome_sent_at,
+    }, { status: 409 });
+  }
 
   const first = String(p.display_name).replace(/^(Mr|Mrs|Ms|Dr)\.?\s+/i, "").split(/\s+/)[0];
 
