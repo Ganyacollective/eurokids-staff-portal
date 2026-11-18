@@ -7084,6 +7084,10 @@ async function tabDiscounts(){
     s.schema('eurokids').from('child_discount').select('uin,amount_rupees,reason')
   ]);
   if (error) return el('body').innerHTML = fail(error);
+  // Year-scoped like everything else. Two children of the same name in
+  // different years sat next to each other in one undated list, and typing
+  // a concession against the wrong one is a money edit, not a display slip.
+  const rows2 = (rows || []).filter(r => _ay === 'all' || uinYear(r.uin) === _ay);
   const byUin = Object.fromEntries((existing || []).map(r => [r.uin, r]));
   el('body').innerHTML = head('Discounts', 'Money you took off your own margin. EPMS never sees these, so it keeps showing them as due.')
     + `<div class="panel"><div class="ptop"><h2>Per-child discount</h2>
@@ -7091,7 +7095,7 @@ async function tabDiscounts(){
       <div class="tw"><table><thead><tr><th>Child</th><th>Program</th>
         <th class="r">EPMS says due</th><th style="width:150px">Concession</th>
         <th class="r">Truly due</th><th>Reason</th></tr></thead><tbody>
-        ${(rows || []).map(r => `<tr data-uin="${esc(r.uin)}">
+        ${rows2.map(r => `<tr data-uin="${esc(r.uin)}">
           <td>${esc(r.student_name)}</td><td>${esc(r.program_name)}</td>
           <td class="r num" style="color:var(--faint)">${money(r.epms_due)}</td>
           <td><input class="in num disc" type="number" min="0" value="${Number(r.our_discount) || ''}" placeholder="0"></td>
@@ -7124,13 +7128,16 @@ async function tabKits(){
   if (error) return el('body').innerHTML = fail(error);
   const label = { handed_over:['c-good','Handed over'], ready_to_hand_over:['c-warn','Ready to hand over'],
                   awaiting_dispatch:['c-mute','Awaiting dispatch'], payment_short:['c-crit','Payment short'] };
-  const ready = (data || []).filter(r => r.state === 'ready_to_hand_over').length;
+  // The worklist spanned every academic year, so the "N ready" chip counted
+  // kits for children who left two years ago.
+  const kitRows = (data || []).filter(r => _ay === 'all' || uinYear(r.uin) === _ay);
+  const ready = kitRows.filter(r => r.state === 'ready_to_hand_over').length;
   el('body').innerHTML = head('Kits', 'EPMS knows the kit was dispatched. Only we know it reached the parent.')
     + `<div class="panel"><div class="ptop"><h2>Handover worklist</h2>
         <span class="chip ${ready ? 'c-warn' : 'c-mute'}">${ready} ready</span></div>
       <div class="tw"><table><thead><tr><th>Child</th><th>Program</th><th>Consignment</th>
         <th>Dispatched</th><th>State</th></tr></thead><tbody>
-        ${(data || []).map(r => {
+        ${kitRows.map(r => {
           const [cls, txt] = label[r.state] || ['c-mute', r.state];
           return `<tr><td>${esc(r.student_name)}</td><td>${esc(r.program_name)}</td>
             <td class="num" style="color:var(--muted)">${esc(r.lr_number || '—')}</td>
