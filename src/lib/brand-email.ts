@@ -6,8 +6,21 @@
 export const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://admin.eurokidsjmdenclave.org";
 export const SIGNATURE_IMG = `${SITE}/brand/email-signature.png`;
 export const SCHOOL_NAME = "EuroKids JMD Enclave";
+/* The school has two lines and both reach it: +91 20 6962 2686 and
+   +91 22 6962 2686. Written down here because they do not look like they
+   should both be right, and I have already once "corrected" the second into
+   the first on the assumption that 22 was a Mumbai typo. It is not.
+
+   SCHOOL_PHONE is what a parent reads and SCHOOL_PHONE_TEL is what their
+   phone dials, so the two must stay the same number as each other — that
+   was the actual fault in the reminder emails, which showed one and dialled
+   the other. Which of the two lines we publish is a choice, not a bug. */
 export const SCHOOL_PHONE = "020 6962 2686";
 export const SCHOOL_PHONE_TEL = "+912069622686";
+/* The second line, kept as a constant so it is never a bare literal in a
+   template again. Nothing publishes it at the moment. */
+export const SCHOOL_PHONE_ALT = "022 6962 2686";
+export const SCHOOL_PHONE_ALT_TEL = "+912269622686";
 export const SCHOOL_EMAIL = "admin@eurokidsjmdenclave.org";
 // Staff mail — appointment letters, leave, payroll — is answered by HR, not
 // by the shared office inbox.
