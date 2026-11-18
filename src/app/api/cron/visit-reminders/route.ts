@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendMail, mailReady } from "@/lib/mailer";
 import { createClient } from "@supabase/supabase-js";
-import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, SCHOOL_PHONE_TEL, plainFooter } from "@/lib/brand-email";
+import { renderEmail, esc, SCHOOL_NAME, SCHOOL_PHONE, phoneLinks, plainFooter } from "@/lib/brand-email";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { isRealAddress } from "@/lib/recipients";
 
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
         title: "See you tomorrow", subtitle: SCHOOL_NAME, theme: "calm",
         bodyHtml: `<p>Dear ${esc(e.father_name || e.mother_name || "Parent")},</p>
           <p>A gentle reminder that your visit to ${SCHOOL_NAME}${e.child_name ? ` with <strong>${esc(e.child_name)}</strong>` : ""} is booked for <strong>${esc(when)}</strong>.</p>
-          <p>We are at JMD Enclave, Undri. Please allow about 45 minutes — you will see the classrooms, the play area, and meet the teachers. If the time no longer suits, call us on <a href="tel:${SCHOOL_PHONE_TEL}" style="font-weight:700;text-decoration:none">${SCHOOL_PHONE}</a> and we will move it.</p>
+          <p>We are at JMD Enclave, Undri. Please allow about 45 minutes — you will see the classrooms, the play area, and meet the teachers. If the time no longer suits, call us on ${phoneLinks()} and we will move it.</p>
           <p>Looking forward to meeting you.</p>`,
       });
       const res = await sendMail({ to: emails, subject: `Your visit to ${SCHOOL_NAME} — ${when}`, html,

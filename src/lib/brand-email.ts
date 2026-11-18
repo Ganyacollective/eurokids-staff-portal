@@ -15,12 +15,26 @@ export const SCHOOL_NAME = "EuroKids JMD Enclave";
    phone dials, so the two must stay the same number as each other — that
    was the actual fault in the reminder emails, which showed one and dialled
    the other. Which of the two lines we publish is a choice, not a bug. */
-export const SCHOOL_PHONE = "020 6962 2686";
-export const SCHOOL_PHONE_TEL = "+912069622686";
-/* The second line, kept as a constant so it is never a bare literal in a
-   template again. Nothing publishes it at the moment. */
-export const SCHOOL_PHONE_ALT = "022 6962 2686";
-export const SCHOOL_PHONE_ALT_TEL = "+912269622686";
+export const SCHOOL_PHONE_1 = "020 6962 2686";
+export const SCHOOL_PHONE_1_TEL = "+912069622686";
+export const SCHOOL_PHONE_2 = "022 6962 2686";
+export const SCHOOL_PHONE_2_TEL = "+912269622686";
+
+/* Both lines, wherever a parent is told how to reach us. SCHOOL_PHONE keeps
+   its name because a dozen templates already say "call us on
+   ${SCHOOL_PHONE}" and that sentence still reads correctly. */
+export const SCHOOL_PHONE = `${SCHOOL_PHONE_1} or ${SCHOOL_PHONE_2}`;
+/* Kept for anything that needs a single dialable number on its own. */
+export const SCHOOL_PHONE_TEL = SCHOOL_PHONE_1_TEL;
+
+/* The same pair as tappable links. A phone cannot dial "020 6962 2686 or
+   022 6962 2686", so anywhere the number sits inside an <a> it has to be
+   two anchors rather than one wrapped around the whole string — which is
+   the shape the reminder emails had, and why they displayed one number and
+   dialled another. */
+export const phoneLinks = (style = "font-weight:700;text-decoration:none") =>
+  `<a href="tel:${SCHOOL_PHONE_1_TEL}" style="${style}">${SCHOOL_PHONE_1}</a>`
+  + ` or <a href="tel:${SCHOOL_PHONE_2_TEL}" style="${style}">${SCHOOL_PHONE_2}</a>`;
 export const SCHOOL_EMAIL = "admin@eurokidsjmdenclave.org";
 // Staff mail — appointment letters, leave, payroll — is answered by HR, not
 // by the shared office inbox.

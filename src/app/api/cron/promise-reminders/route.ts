@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { renderEmail, esc, money, day, SCHOOL_NAME, SCHOOL_PHONE, SCHOOL_PHONE_TEL, plainFooter } from "@/lib/brand-email";
+import { renderEmail, esc, money, day, SCHOOL_NAME, SCHOOL_PHONE, phoneLinks, plainFooter } from "@/lib/brand-email";
 import { sendMail, mailReady } from "@/lib/mailer";
 import { isRealAddress } from "@/lib/recipients";
 
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         <p>Thank you for speaking with us${p.taken_by ? "" : ""}. As discussed, the fee payment of <strong>${money(amount)}</strong> for ${esc(p.student_name)} was to be made today, ${esc(day(p.promised_on))}.</p>
         ${p.note ? `<p style="color:#4B5563;font-size:13px">Your note to us: “${esc(p.note)}”</p>` : ""}
         <p>You can pay online through the EuroKids parent link, or at the school office by UPI, cheque or cash. If it has already been paid today, please ignore this note — payments can take a day to appear on our side.</p>
-        <p>If anything has changed, call us on <a href="tel:${SCHOOL_PHONE_TEL}" style="font-weight:700;text-decoration:none">${SCHOOL_PHONE}</a> and we will work it out with you.</p>`,
+        <p>If anything has changed, call us on ${phoneLinks()} and we will work it out with you.</p>`,
       footerNote: `Sent by ${SCHOOL_NAME} because a payment date was agreed with you on the phone.`,
     });
     if (!dry) {
