@@ -55,7 +55,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "That is not your leave application." }, { status: 403 });
   }
 
-  const { data: link } = await admin.from("teacher_links").select("display_name, department, designation").eq("user_id", lr.user_id).maybeSingle();
+  // Oldest link wins. maybeSingle() throws on more than one row, and four
+  // accounts have two apiece, so for those the error was discarded, `link`
+  // was null, and HR's notification showed a raw email address instead of the
+  // teacher's name and role — with blanks in the Google Sheet mirror below.
+  const { data: links } = await admin.from("teacher_links")
+    .select("display_name, department, designation, created_at")
+    .eq("user_id", lr.user_id)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const link = links?.[0];
   const teacherName = link?.display_name || userResult.user.email || "A staff member";
   const role = link?.designation || link?.department || "";
 

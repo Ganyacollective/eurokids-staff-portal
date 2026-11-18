@@ -46,9 +46,22 @@ const STEP_COPY = (offset: number): Step => {
 function feeBlock(r: ScheduleRow) {
   const line = (k: string, v: string) =>
     `<tr><td style="padding:6px 0;color:#4B5563">${k}</td><td style="padding:6px 0;text-align:right">${v}</td></tr>`;
+  // agreed_fee is already net of our concession — recipients.ts says so, and
+  // true_due is agreed_fee minus what has been paid. Printing agreed_fee as
+  // "Annual fee" and then showing the concession as a deduction took it off
+  // twice on the page, so the lines a parent could add up did not reach the
+  // balance printed underneath them: a ₹61,000 fee with a ₹7,500 concession
+  // and ₹20,000 paid read 53,500 − 7,500 − 20,000 and then claimed ₹33,500.
+  // When a concession is shown, the top line has to be the gross fee.
+  const disc = Number(r.our_discount || 0);
+  const net = Number(r.agreed_fee ?? r.final_fee ?? 0);
+  // Derived rather than trusted: total_fee is the gross figure, but if it is
+  // missing, net + concession is gross by definition, and that keeps the
+  // column adding up whatever the view returns.
+  const gross = disc > 0 ? (Number(r.total_fee ?? 0) || net + disc) : net;
   return `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:14px">
-    ${line("Annual fee", moneyH(r.agreed_fee || r.final_fee || 0))}
-    ${Number(r.our_discount || 0) > 0 ? line("Concession", `<span style="color:#15803D">− ${moneyH(r.our_discount)}</span>`) : ""}
+    ${line("Annual fee", moneyH(gross))}
+    ${disc > 0 ? line("Concession", `<span style="color:#15803D">− ${moneyH(disc)}</span>`) : ""}
     ${line("Received so far", `<span style="color:#15803D">− ${moneyH(r.paid_so_far || 0)}</span>`)}
     <tr><td style="padding:10px 0;border-top:2px solid #1A202C;font-weight:700">Balance outstanding</td>
         <td style="padding:10px 0;border-top:2px solid #1A202C;text-align:right;font-weight:700;font-size:16px">${moneyH(r.true_due)}</td></tr>
@@ -59,12 +72,17 @@ function feeBlock(r: ScheduleRow) {
 
 export async function GET(req: NextRequest) {
   // Vercel sends the secret; a browser with the same secret can dry-run.
-  const provided = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || req.nextUrl.searchParams.get("key") || "";
+  // The secret comes from the Authorization header. ?key= is still accepted,
+  // but only for a dry run: a long-lived secret in a query string ends up in
+  // Vercel's access logs and in whatever browser history typed it, and these
+  // crons move money reminders and run the EPMS pull with the service key.
+  const dry = req.nextUrl.searchParams.get("dry") === "1";
+  const provided = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
+    || (dry ? (req.nextUrl.searchParams.get("key") || "") : "");
   if (!CRON_SECRET || provided !== CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 
-  const dry = req.nextUrl.searchParams.get("dry") === "1";
   const onParam = req.nextUrl.searchParams.get("on");
   // "today" in India, not UTC — the cron may fire either side of midnight
   const todayIST = onParam || new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
@@ -93,7 +111,15 @@ export async function GET(req: NextRequest) {
     if (Number(r.true_due || 0) <= 1) continue;          // nothing owed — never chase
     if (!r.next_due_date) continue;                      // no schedule → coordinator's job, not the parent's
     for (const step of steps) {
-      if (addDays(r.next_due_date, step) !== todayIST) continue;
+      // `<=` rather than `===`. The loop below is serial and takes roughly a
+      // second per family against maxDuration = 300, and a term's fees share
+      // one due date across about 190 families — so the run on that date was
+      // always going to be killed part-way through. With exact equality,
+      // every family it had not reached was skipped for good: the next day
+      // that step no longer matched the date, so nobody chased them at all.
+      // Matching "due on or before today" means a family missed today is
+      // simply picked up tomorrow, and `done` still stops a second copy.
+      if (addDays(r.next_due_date, step) > todayIST) continue;
       if (done.has(`${r.uin}|${r.next_due_date}|${step}`)) continue;
       candidates.push({ r, step });
     }

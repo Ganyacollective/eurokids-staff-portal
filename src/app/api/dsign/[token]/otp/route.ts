@@ -24,14 +24,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       note: "A code was just sent. Check your email, including the spam folder." });
   }
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  await a.from("signature_request").update({
-    otp_hash: await sha256(token + ":" + code),
-    otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-    otp_attempts: 0,
-  }).eq("id", r.id);
-
+  // mailReady first, and the hash written only after the send succeeds. The
+  // other way round, an expired app password meant "Resend" invalidated the
+  // code already in the inbox and replaced it with one never emailed — and
+  // every retry repeated it, so the form could never be signed.
   if (!mailReady()) return NextResponse.json({ ok: false, error: "Email is not configured on the server." }, { status: 500 });
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
   const first = String(r.party_name || "").split(/\s+/)[0];
   const sent = await sendMail({
     to: [r.to_email],
@@ -49,6 +48,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   });
   await logDocEvent(a, r.id, sent.ok ? "otp_sent" : "otp_send_failed", { to: hint(r.to_email) }, req);
   if (!sent.ok) return NextResponse.json({ ok: false, error: "The code could not be emailed. Call the school." }, { status: 502 });
+
+  const { error: upErr } = await a.from("signature_request").update({
+    otp_hash: await sha256(token + ":" + code),
+    otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    otp_attempts: 0,
+  }).eq("id", r.id);
+  if (upErr) return NextResponse.json({ ok: false, error: "The code could not be saved. Call the school." }, { status: 500 });
+
   return NextResponse.json({ ok: true, sent_to: hint(r.to_email) });
 }
 

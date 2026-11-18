@@ -109,6 +109,38 @@ const toInputDT = iso => iso ? new Date(new Date(iso).getTime() - new Date().get
 const waHref = (phone, text) => `https://wa.me/${String(phone || '').replace(/\D/g, '').replace(/^(\d{10})$/, '91$1')}?text=${encodeURIComponent(text || '')}`;
 const acadYear = (d = new Date()) => { const y = d.getFullYear(), m = d.getMonth() + 1; const a = m >= 4 ? y : y - 1; return `${String(a).slice(2)}-${String(a + 1).slice(2)}`; };
 
+/* The year this app should be showing.
+   ──────────────────────────────────────────────────────────────────────────
+   The hub's sidebar has an academic-year selector and it is on the Enquiries
+   app too, so the interface promises it applies here. It did not: this file
+   worked entirely off acadYear(), today's year, and never looked at `_ay`.
+   Switch the hub to 27-28 in April — which is the whole point of having the
+   control — and the enquiry list still filtered on 26-27, while "New Enquiry"
+   defaulted its Academic year to 26-27 and quietly filed next year's walk-in
+   into this one.
+
+   enquiries.js is a classic <script>, so it shares the global lexical scope
+   with the hub's inline script and can read `_ay` directly; the typeof guard
+   is only for the case where this file is loaded on its own. 'all' falls back
+   to today's year, because an enquiry has to be filed against some one year.  */
+const enqYear = () => {
+  try { if (typeof _ay === 'string' && _ay && _ay !== 'all') return _ay; } catch (_) {}
+  return acadYear();
+};
+
+/* Called by the hub when the year selector changes. The active filter is
+   persisted in localStorage, so without this the stale academic_year clause
+   outlived the switch and survived a reload. */
+function enqOnYearChange(){
+  try {
+    if (_eq && Array.isArray(_eq.conds)) {
+      const c = _eq.conds.find(x => x.field === 'academic_year' && x.op === '=');
+      if (c) { c.value = enqYear(); eqSaveConds(); }
+    }
+    invalidate('enq:rows');
+  } catch (_) {}
+}
+
 async function enqApi(path, body){
   const { data: { session: s } } = await getSb().auth.getSession();
   if (!s) return { ok: false, error: 'Your session has expired — please sign in again.' };
@@ -233,6 +265,13 @@ async function tabEnqToday(){
   b.innerHTML = head('Today', '', `<button class="btn" id="enq-new">New Enquiry…</button>`) + '<div class="loading">Loading…</div>';
   el('enq-new').onclick = () => openNewEnquiry();
   let rows; try { rows = await enqRows(); } catch (e) { return b.innerHTML = fail(e); }
+  // This screen applied no year filter at all, so every count on it — open
+  // enquiries, this month, visited, won, and the three follow-up lists — was
+  // computed over every enquiry ever recorded. The Today numbers therefore
+  // disagreed with the Enquiries list's numbers, and neither matched the
+  // year in the sidebar.
+  const _y = enqYear();
+  if (typeof _ay !== 'string' || _ay !== 'all') rows = rows.filter(r => r.academic_year === _y);
   const today = new Date().toISOString().slice(0, 10), monthStart = today.slice(0, 7) + '-01';
   const open = rows.filter(r => !r.closed);
   const due = open.filter(r => r.follow_up_on && r.follow_up_on <= today).sort((a, z) => (a.follow_up_on || '').localeCompare(z.follow_up_on || ''));
@@ -345,7 +384,7 @@ const EQ_OPS = {
 };
 // The school's own default: this academic year, still in play.
 const EQ_DEFAULT = [
-  { field: 'academic_year', op: '=', value: acadYear() },
+  { field: 'academic_year', op: '=', value: enqYear() },
   { field: 'status', op: '!=', value: 'lost' },
 ];
 let _eq = { conds: null, q: '', sort: { field: 'created_at', dir: 'desc' }, rows: [], last: [] };
@@ -1153,7 +1192,7 @@ async function openEnquiry(id, opts = {}){
       ${cell('Visit scheduled', inp('en-visit', toInputDT(e.visit_at), '', 'datetime-local'), e.visit_reminder_sent_at ? 'Reminder sent ' + dtLocal(e.visit_reminder_sent_at) : 'They are reminded the morning before')}
       ${cell('First visit', inp('en-visited', toInputDT(e.first_visit_at), '', 'datetime-local'))}
       ${cell('Handled by', inp('en-by', e.updated_by, who()))}
-      ${cell('Academic year', `<select class="in" id="en-ay">${[acadYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
+      ${cell('Academic year', `<select class="in" id="en-ay">${[enqYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
     `)}
 
     ${sec('child', 'The child', `

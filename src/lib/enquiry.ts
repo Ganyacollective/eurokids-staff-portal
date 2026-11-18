@@ -344,7 +344,20 @@ export async function notifySchool(e: EnquiryRow, source: Source, created: boole
         <p style="margin-top:16px"><a href="${site}/hub.html?open=enquiry&id=${e.id}" style="background:#0A7AFF;color:#fff;padding:9px 14px;border-radius:8px;text-decoration:none;font-weight:600">Open ${esc(who)}</a></p>
         ${created ? "" : "<p style='color:#4B5563;font-size:13px'>This family was already on record; this contact has been added to their card.</p>"}`,
     });
-    await sendMail({ to, subject: `${source === "Walk In" ? "Walk-in" : "New enquiry"}: ${who}`, html, text: line }).catch(() => {});
+    // Not `.catch(() => {})`. This is the only thing that tells the school a
+    // family walked in, and swallowing the failure meant the parent saw
+    // "thank you", the enquiry was saved, nobody was told, and the timeline
+    // showed nothing either — so the first anyone knew was the parent asking
+    // why no one had called.
+    const notified = await sendMail({
+      to, subject: `${source === "Walk In" ? "Walk-in" : "New enquiry"}: ${who}`, html, text: line,
+    }).catch((err) => ({ ok: false as const, error: String(err?.message || err) }));
+    if (!notified?.ok) {
+      await admin.from("enquiry_event").insert({
+        enquiry_id: e.id, kind: "note", actor: "system",
+        summary: `The school was not notified by email — ${String((notified as { error?: string })?.error || "the send failed")}`,
+      }).then(() => {}, () => {});
+    }
   }
   const cmPhone = process.env.WHATSAPP_PHONE, cmKey = process.env.WHATSAPP_API_KEY;
   if (cmPhone && cmKey) {

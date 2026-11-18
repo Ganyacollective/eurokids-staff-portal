@@ -785,9 +785,21 @@ async function loadRequests(){
 // Rendering
 // ============================================================
 function renderBalance(){
-  const approved = myRequests.filter(r => r.status === 'Approved');
-  const usedCL_raw = approved.filter(r => r.leave_type === 'CL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
-  const usedEL_raw = approved.filter(r => r.leave_type === 'EL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  // Pending counts against the balance too.
+  //
+  // This counted only Approved, and the figure it produces is the only thing
+  // the submit-time check consults. So a teacher with 12 CL could apply for
+  // 12 days, see it accepted as Pending, reopen the form — still reading
+  // "12 left" — and send a second 12-day request that was also accepted.
+  // Nothing warned her, and nothing warned HR until both were approved and
+  // the balance was 12 days under. A day already asked for is a day spoken
+  // for; it is shown separately below so the number is not mysterious.
+  const counted = myRequests.filter(r => r.status === 'Approved' || r.status === 'Pending');
+  const pending = myRequests.filter(r => r.status === 'Pending');
+  const usedCL_raw = counted.filter(r => r.leave_type === 'CL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  const usedEL_raw = counted.filter(r => r.leave_type === 'EL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  const pendCL = pending.filter(r => r.leave_type === 'CL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
+  const pendEL = pending.filter(r => r.leave_type === 'EL').reduce((a,r)=>a + parseFloat(r.total_days||0), 0);
   // Subtract credits — days you applied for but actually came in are restored
   const clCred = myCredits.filter(c => c.leave_type === 'CL').reduce((a,c)=>a + (c.days||1), 0);
   const elCred = myCredits.filter(c => c.leave_type === 'EL').reduce((a,c)=>a + (c.days||1), 0);
@@ -809,6 +821,19 @@ function renderBalance(){
   // gone, and it kept going.
   document.getElementById('cl-left').textContent  = clTotal - usedCL;
   document.getElementById('el-left').textContent  = elTotal - usedEL;
+  // Say so when part of what is spoken for has not been decided yet, or the
+  // number looks wrong to someone who knows what they have been granted.
+  const noteLeft = (id, pend) => {
+    const host = document.getElementById(id);
+    if (!host || !host.parentElement) return;
+    let n = host.parentElement.querySelector('.pend-note');
+    if (pend > 0) {
+      if (!n) { n = document.createElement('div'); n.className = 'pend-note text-xs text-amber-700 mt-0.5'; host.parentElement.appendChild(n); }
+      n.textContent = `includes ${pend} day${pend === 1 ? '' : 's'} awaiting approval`;
+    } else if (n) { n.remove(); }
+  };
+  noteLeft('cl-left', pendCL);
+  noteLeft('el-left', pendEL);
   // Kept for the application form, so it can say what a request will cost
   // before it is sent rather than after HR has approved it.
   myLeft = { CL: clTotal - usedCL, EL: elTotal - usedEL };

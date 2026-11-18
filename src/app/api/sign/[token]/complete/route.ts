@@ -122,7 +122,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     contentType: "application/pdf", upsert: true,
   });
 
-  const { error: uerr } = await a.from("appointment_letter").update({
+  // .neq("status","signed") closes a window of two to four seconds. The guard
+  // at the top of this route reads the row, and then the PDF is rendered, the
+  // file uploaded and two emails sent before this write happens — so a
+  // signatory tapping "Sign" twice on a slow phone had both requests pass the
+  // guard, the stored PDF overwritten (upsert: true), two signed events
+  // recorded, and each recipient sent two different signed copies, the second
+  // of which was missing the first from its history block.
+  const { error: uerr, data: claimed } = await a.from("appointment_letter").update({
     status: "signed", signed_at: at.toISOString(),
     signer_name: name, signature_png: png,
     otp_verified_at: at.toISOString(),
@@ -131,8 +138,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     otp_hash: null,                       // spent
     snapshot: { ...(l.snapshot as object), signed: signedData, signed_sha256: signedHash },
     updated_at: at.toISOString(),
-  }).eq("id", l.id);
+  }).eq("id", l.id).neq("status", "signed").select("id");
   if (uerr) return NextResponse.json({ ok: false, error: uerr.message }, { status: 500 });
+  // Nothing claimed means another request got there first in those few
+  // seconds. That one has sent the copies; this one stops here rather than
+  // sending a second set.
+  if (!claimed?.length) {
+    return NextResponse.json({ ok: false, error: "This letter is already signed." }, { status: 409 });
+  }
 
   await logEvent(a, l.id, "signed",
     { name, reference, sha256: signedHash, storage: up.error ? "upload failed" : path }, req);

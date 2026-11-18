@@ -30,16 +30,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       note: "A code was just sent. Check your email, including the spam folder." });
   }
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  await a.from("appointment_letter").update({
-    otp_hash: await sha256(token + ":" + code),
-    otp_sent_to: l.to_email,
-    otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-    otp_attempts: 0,
-  }).eq("id", l.id);
-
+  // Check the mail provider BEFORE replacing the stored hash. This used to
+  // write the new code's hash first and check mailReady afterwards, so if the
+  // app password had expired, pressing "Resend" invalidated the code already
+  // sitting in her inbox and replaced it with one that was never emailed.
+  // Every retry did it again, and she could never sign.
   if (!mailReady("hr")) return NextResponse.json({ ok: false, error: "Email is not configured on the server." }, { status: 500 });
 
+  const code = String(Math.floor(100000 + Math.random() * 900000));
   const first = String(l.employee_name || "").split(/\s+/)[0];
   const r = await sendMail({
     from: "hr",
@@ -59,6 +57,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
 
   await logEvent(a, l.id, r.ok ? "otp_sent" : "otp_send_failed", { to: hint(l.to_email) }, req);
   if (!r.ok) return NextResponse.json({ ok: false, error: "The code could not be emailed. Call the school." }, { status: 502 });
+
+  // Stored only once the code is actually on its way, so a failed send leaves
+  // whatever she already has in her inbox still working.
+  const { error: upErr } = await a.from("appointment_letter").update({
+    otp_hash: await sha256(token + ":" + code),
+    otp_sent_to: l.to_email,
+    otp_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    otp_attempts: 0,
+  }).eq("id", l.id);
+  // If this fails the emailed code will not verify, so say so rather than
+  // letting her type a code that cannot possibly work.
+  if (upErr) return NextResponse.json({ ok: false, error: "The code could not be saved. Call the school." }, { status: 500 });
+
   return NextResponse.json({ ok: true, sent_to: hint(l.to_email) });
 }
 

@@ -285,6 +285,10 @@ export async function POST(req: NextRequest) {
   // Keyed through coda_row_id rather than the id we just inserted, so this is
   // the same whether a row arrived now or in the first import.
   let notesAdded = 0;
+  // Anything that failed after the enquiry rows themselves landed. It has to
+  // reach the screen: the families are now "already on record", so a second
+  // import skips them, and whatever did not make it in cannot be retried.
+  const problems: string[] = [];
   if (parsed.notes.length) {
     const byCid = new Map<string, number>();
     for (let i = 0; i < ids.length; i += 200) {
@@ -297,10 +301,17 @@ export async function POST(req: NextRequest) {
     const payload = parsed.notes
       .filter((n) => freshIds.has(n.cid) && byCid.has(n.cid))
       .map((n) => ({ enquiry_id: byCid.get(n.cid)!, body: n.body, author: n.author, created_at: n.at }));
+    // A failed chunk used to be swallowed silently and the route still
+    // answered ok:true. The enquiry rows had already landed, so re-importing
+    // skipped those families as "already on record" — which meant those notes
+    // could never be loaded again, and nothing anywhere said so.
+    const noteErrors: string[] = [];
     for (let i = 0; i < payload.length; i += 200) {
       const { error } = await tbl.from("enquiry_note").insert(payload.slice(i, i + 200));
-      if (!error) notesAdded += Math.min(200, payload.length - i);
+      if (error) noteErrors.push(`notes ${i}-${i + 200}: ${error.message}`);
+      else notesAdded += Math.min(200, payload.length - i);
     }
+    if (noteErrors.length) problems.push(...noteErrors);
 
     const events = fresh.map((r) => ({
       enquiry_id: byCid.get(r.coda_row_id as string)!,
@@ -310,9 +321,11 @@ export async function POST(req: NextRequest) {
       actor: "coda import",
     })).filter((e) => e.enquiry_id);
     for (let i = 0; i < events.length; i += 200) {
-      await tbl.from("enquiry_event").insert(events.slice(i, i + 200));
+      const { error } = await tbl.from("enquiry_event").insert(events.slice(i, i + 200));
+      if (error) problems.push(`timeline ${i}-${i + 200}: ${error.message}`);
     }
   }
 
-  return NextResponse.json({ ok: true, dry_run: false, ...summary, added, notes_added: notesAdded });
+  return NextResponse.json({ ok: true, dry_run: false, ...summary, added, notes_added: notesAdded,
+    ...(problems.length ? { problems } : {}) });
 }

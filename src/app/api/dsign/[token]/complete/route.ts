@@ -105,7 +105,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     contentType: "application/pdf", upsert: true,
   });
 
-  const { error: uerr } = await a.from("signature_request").update({
+  // Conditional, for the same reason as the appointment-letter route: the
+  // already-signed guard runs seconds earlier, before the PDF render, the
+  // upload and the emails, so two taps on a slow phone both got through and
+  // each recipient received two different signed copies.
+  const { error: uerr, data: claimed } = await a.from("signature_request").update({
     status: "signed", signed_at: at.toISOString(),
     signer_name: name, signature_png: png,
     signed_ip: ip || null, signed_agent: agent,
@@ -113,8 +117,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     otp_hash: null,
     doc: signed,
     updated_at: at.toISOString(),
-  }).eq("id", r.id);
+  }).eq("id", r.id).neq("status", "signed").select("id");
   if (uerr) return NextResponse.json({ ok: false, error: uerr.message }, { status: 500 });
+  if (!claimed?.length) {
+    return NextResponse.json({ ok: false, error: "This form is already signed." }, { status: 409 });
+  }
 
   await logDocEvent(a, r.id, "signed", { name, reference, storage: up.error ? "upload failed" : path }, req);
 

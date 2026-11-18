@@ -22,7 +22,18 @@ export async function GET(req: NextRequest) {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const { data: link } = await admin.from("teacher_links").select("employee_id, display_name").eq("user_id", userId).maybeSingle();
+  // Not maybeSingle(): it throws when more than one row comes back, and four
+  // accounts have two teacher_links rows each — a second login was provisioned
+  // at some point and the first was never removed. For those four this threw,
+  // `link` came back null, and they were told "No employee link for this
+  // account" on their own attendance screen while HR could see their data
+  // perfectly well. Same bug as my-leaves had; same fix, oldest link wins.
+  const { data: links } = await admin.from("teacher_links")
+    .select("employee_id, display_name, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const link = links?.[0];
   if (!link) return NextResponse.json({ error: "No employee link for this account." }, { status: 404 });
 
   // Attendance moved out of the portal_state blob into attendance_month, one

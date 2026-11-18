@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=128">
-<link rel="prefetch" href="/brand/enquiries.js?v=128" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=129">
+<link rel="prefetch" href="/brand/enquiries.js?v=129" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -1273,7 +1273,14 @@ async function renderScheduleFlags(){
   if (error) { box.innerHTML = `<div class="panel" style="padding:16px">${fail(error)}</div>`; return; }
   if (!data) return;
 
-  const by = f => data.filter(r => r.schedule_flag === f);
+  // Every other figure on this Overview is scoped to the chosen year, and the
+  // header says so. This panel read v_schedule raw, so its headcounts and its
+  // rupee totals — "N past their due date · ₹X" — were sums across every
+  // academic year, sitting directly under cards that were not. The
+  // "Add schedule" list below offered children from other years too.
+  const rows = (data || []).filter(r => _ay === 'all' || uinYear(r.uin) === _ay);
+
+  const by = f => rows.filter(r => r.schedule_flag === f);
   const missing = by('NO SCHEDULE'), overdue = by('OVERDUE'), soon = by('DUE SOON');
   const rupees = rows => money(rows.reduce((s, r) => s + Number(r.true_due || 0), 0));
   if (!missing.length && !overdue.length && !soon.length) return;
@@ -2462,7 +2469,7 @@ async function tabOverview(){
       el('ay-back').onclick = () => {
         _ay = curAY();
         try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
-        paintYearPicker(); renderTab();
+        paintYearPicker(); renderApp();
       };
       return;
     }
@@ -2533,16 +2540,25 @@ async function tabOverview(){
     s.schema('eurokids').from('v_promise').select('*').in('status', ['open']).order('promised_on'),
   ]);
   if (error) return el('body').innerHTML = fail(error);
+  // roster comes from schedule(), which is year-scoped. These two were not,
+  // so "Children on the roll" (this year) sat on the same row of cards as
+  // "Promised to pay" (every year), and "Fees to follow up" listed families
+  // from years the screen was not showing. Worse, the unfiltered order seeded
+  // the ‹ › walk below, so stepping through her day wandered into other
+  // years' families.
+  const inAY = r => _ay === 'all' || uinYear(r.uin) === _ay;
+  const workRows = (work || []).filter(inAY);
+  const promiseRows = (promises || []).filter(inAY);
   // Her day is this list, in this order, so ‹ › walks it without going back
   // to the page between each family.
-  setPlanOrder(work);
+  setPlanOrder(workRows);
   const today = new Date().toISOString().slice(0, 10);
   const overdue = roster.filter(r => r.schedule_flag === 'OVERDUE');
   const dueSoon = roster.filter(r => r.schedule_flag === 'DUE SOON');
   const paidUp  = roster.filter(r => r.schedule_flag === 'SETTLED');
-  const promisedToday = (promises || []).filter(p => p.promised_on === today);
-  const promisedBroken = (promises || []).filter(p => p.promised_on < today);
-  const promisedLater = (promises || []).filter(p => p.promised_on > today);
+  const promisedToday = promiseRows.filter(p => p.promised_on === today);
+  const promisedBroken = promiseRows.filter(p => p.promised_on < today);
+  const promisedLater = promiseRows.filter(p => p.promised_on > today);
 
   const pRow = p => `<button class="linkrow" onclick="openPlanFrom('${esc(p.uin)}')" style="display:flex;justify-content:space-between;gap:12px;align-items:center;color:var(--label)">
       <span><strong>${esc(p.student_name)}</strong> <span class="hint">${esc(p.program_name || '')}</span>
@@ -2576,7 +2592,7 @@ async function tabOverview(){
         <span class="hint">Term 1 first, then the largest balances</span></div>
       <div class="tw"><table><thead><tr><th>Child</th><th>Father</th><th>Programme</th>
         <th>What is owed</th><th class="r">Amount</th><th></th></tr></thead><tbody>
-        ${(work || []).map(r => `<tr style="cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">
+        ${workRows.map(r => `<tr style="cursor:pointer" onclick="openPlanFrom('${esc(r.uin)}')">
           <td><strong>${esc(r.student_name)}</strong></td>
           <td class="hint">${esc(r.father_name || '—')}</td><td>${esc(r.program_name)}</td>
           <td><span class="chip ${r.priority === 'urgent' ? 'c-crit' : 'c-warn'}">${esc(r.action)}</span></td>
@@ -2729,7 +2745,7 @@ async function tabChildren(){
     el('ay-all').onclick = () => {
       _ay = 'all';
       try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
-      paintYearPicker(); renderTab();
+      paintYearPicker(); renderApp();
     };
     return;
   }
@@ -3036,13 +3052,23 @@ async function openReceiptPhoto(path){
    guess in the first place.                                               */
 async function payEuroKids(receiptId){
   const rec = receiptId ? _liab.recs.find(x => x.id === receiptId) : null;
-  const live = _liab.recs.filter(r => !r.voided_at && r.purpose === 'tuition'
+  // `&& r.uin` matters. The summary card above deliberately leaves out
+  // receipts with no UIN — EuroKids has not invoiced a child who is not on
+  // the roll, so there is nothing to pay and nowhere to pay it, and that
+  // money sits in "Taken before admission" instead. This list was rebuilt
+  // without the guard, so it offered those children anyway, keyed them by
+  // their NAME where the UIN should be, and sent the name to
+  // record_epms_payment as p_uin. Either the call failed in your face on a
+  // money screen, or it wrote a payment against a string that can never
+  // match a real UIN and would have haunted "paid, not yet showing in
+  // EuroKids" for ever. Link the receipt to a child first.
+  const live = _liab.recs.filter(r => !r.voided_at && r.purpose === 'tuition' && r.uin
     && Number(r.amount_rupees) - Number(r.remitted || 0) > 0.01);
 
   // Owed per child, because a family may have handed money over twice.
   const byChild = {};
   live.forEach(r => {
-    const k = r.uin || r.student_name;
+    const k = r.uin;
     if (!k) return;
     byChild[k] = byChild[k] || { uin: r.uin, name: r.student_name, open: 0 };
     byChild[k].open += Number(r.amount_rupees) - Number(r.remitted || 0);
@@ -3107,7 +3133,9 @@ async function payEuroKids(receiptId){
     const b = el('pe-save'); b.disabled = true; b.textContent = 'Recording…';
     const k = el('pe-child').value;
     const { error } = await getSb().schema('eurokids').rpc('record_epms_payment', {
-      p_uin: (byChild[k] || {}).uin || k,
+      // No `|| k` fallback: k used to be the child's name when the UIN was
+      // missing, and that name went straight into p_uin.
+      p_uin: (byChild[k] || {}).uin,
       p_amount: amt,
       p_paid_on: el('pe-on').value || null,
       p_method: el('pe-method').value,
@@ -3281,7 +3309,11 @@ async function tabLiability(){
   _liab.kids = kids || [];
   // A question about a payment belongs to the year of the child it is about.
   _liab.asks = (asks || []).filter(a => _ay === 'all' || uinYear(a.uin) === _ay);
-  _liab.pays = pays || [];
+  // The fourth one. Three of these were filtered when this was last fixed and
+  // this was the one left out, so the header said "Money taken for 26-27"
+  // while the red "₹X paid, not yet showing in EuroKids" line underneath it
+  // summed every year's payments.
+  _liab.pays = (pays || []).filter(p => _ay === 'all' || uinYear(p.uin) === _ay);
 
   // "Name — Class" keeps two children of the same name apart.
   _liab.byLabel = {};
@@ -3590,7 +3622,7 @@ async function tabLiability(){
               onchange="setDeposited(${r.id}, this.value, this)" ${r.voided_at ? 'disabled' : ''}></td>
         <td style="white-space:nowrap">
           ${r.voided_at ? `<span class="hint">voided${r.voided_by ? ' by ' + esc(r.voided_by) : ''}</span>` : `
-          ${isFee && held > 0.01 ? `<a style="cursor:pointer" onclick="payEuroKids(${r.id})">Pay EuroKids</a> · ` : ''}
+          ${isFee && held > 0.01 && r.uin ? `<a style="cursor:pointer" onclick="payEuroKids(${r.id})">Pay EuroKids</a> · ` : ''}
           ${holder ? `<a style="cursor:pointer" onclick="handOver(${r.id})">Hand over</a> · ` : ''}
           ${r.uin ? `<a style="cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
           ${r.uin ? `<a style="cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
@@ -5859,9 +5891,27 @@ function paintYearPicker(){
   sel.onchange = () => {
     _ay = sel.value;
     try { localStorage.setItem('ek-ay', _ay); } catch (_) {}
-    // The rows are already here; only the filter changed. Repaint, do not
-    // re-fetch.
-    renderTab();
+    // This called renderTab(), which does not exist and never did — there is
+    // no such function anywhere in the repo. So changing the year set _ay,
+    // wrote it to localStorage, and then threw a ReferenceError that killed
+    // the handler before anything repainted. The dropdown said 27-28, the
+    // stored preference said 27-28, and the screen in front of you was still
+    // 26-27's rows and 26-27's money, with nothing admitting it. Every
+    // partial repaint after that filtered an already-fetched list against the
+    // new year, so the screen became a mix of both. Only a manual reload made
+    // it agree with itself. This is why the year selector looked like it did
+    // nothing: the filtering underneath was right all along.
+    //
+    // The recipient picker caches the roll for whichever year was selected
+    // when Send Email was first opened, and only rebuilds it when empty, so
+    // it has to be dropped here or a letter can be addressed to a child from
+    // the year you just left.
+    if (typeof _cmp === 'object' && _cmp) _cmp.roll = [];
+    // The Enquiries app keeps its own persisted academic-year filter, so it
+    // has to be told; otherwise the sidebar says 27-28 and the enquiry list
+    // carries on showing 26-27 across reloads.
+    if (typeof enqOnYearChange === 'function') enqOnYearChange();
+    renderApp();
   };
 }
 
@@ -6838,7 +6888,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=128"></script>
+<script src="/brand/enquiries.js?v=129"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

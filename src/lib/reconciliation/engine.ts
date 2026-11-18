@@ -119,6 +119,9 @@ export type ReconcileOutput = {
 };
 
 const SATURDAY_REPORTING_MINUTES = 540; // 9:00 AM uniform
+// Only used if an employee record somehow has no reporting time of its own;
+// 8:00 AM, matching the fallback the teacher's own attendance screen uses.
+const DEFAULT_REPORTING_MINUTES = 480;
 
 const LATE_GRACE_MINUTES = 10;
 const HALF_LWP_LATE_THRESHOLD = 90;     // > 1.5 hr late = ½ day LWP
@@ -221,7 +224,15 @@ export function reconcile(input: ReconcileInput): ReconcileOutput {
     // that is the whole of what it tells us.
     const isSaturday = dow === 6;
     const isSunday = dow === 0;
-    const sched = isSaturday ? SATURDAY_REPORTING_MINUTES : emp.reporting_minutes;
+    // Coerced, with a fallback. All 42 staff currently carry
+    // reporting_minutes, so this is not reachable today — but if one were
+    // ever added without it, `inMin - undefined` is NaN, every late
+    // comparison against NaN is false, and that person would record as
+    // FullDay for ever with late_minutes stored as null: impossible to mark
+    // late, impossible to dock, and nothing on screen to say why.
+    const sched = isSaturday
+      ? SATURDAY_REPORTING_MINUTES
+      : (Number(emp.reporting_minutes) || DEFAULT_REPORTING_MINUTES);
 
     // One punch and not the other: she was here, the machine caught half of it.
     const forgotPunch = (inMin != null) !== (outMin != null);

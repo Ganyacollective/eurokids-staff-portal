@@ -241,9 +241,15 @@ export async function sendInvoice(a: Db, invoiceId: number, by: string, toOverri
     attachments: [{ filename, content: Buffer.from(pdf).toString("base64") }],
   }) : { ok: false, error: "Email is not configured on the server." };
 
+  // The number, the PDF and the token are the invoice's own facts and are kept
+  // whatever happened to the email. "sent" and sent_at are claims about
+  // delivery, and they used to be written before r.ok was ever consulted — so
+  // an SMTP rejection left the hub showing the invoice as sent, the next
+  // attempt logged as a "resend", and the family holding nothing.
   await a.from("daycare_invoice").update({
-    status: "sent", doc, pdf_sha256: await sha256(pdf), pdf_path: up.error ? null : path,
-    public_token: token, sent_at: new Date().toISOString(), email_to: to, updated_at: new Date().toISOString(),
+    doc, pdf_sha256: await sha256(pdf), pdf_path: up.error ? null : path,
+    public_token: token, updated_at: new Date().toISOString(),
+    ...(r.ok ? { status: "sent", sent_at: new Date().toISOString(), email_to: to } : {}),
   }).eq("id", invoiceId);
 
   // What went to whom, for how much. Written whether or not the send worked,

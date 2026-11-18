@@ -56,12 +56,16 @@ export async function GET(req: NextRequest) {
   // service-role key, enquiries flipped to won, and on the reminder crons a
   // list of parents' email addresses and children's names handed to whoever
   // asked. A dry run is something an authorised caller does, not a way in.
+  // The secret comes from the Authorization header. ?key= is still accepted,
+  // but only for a dry run: a long-lived secret in a query string ends up in
+  // Vercel's access logs and in whatever browser history typed it, and these
+  // crons move money reminders and run the EPMS pull with the service key.
+  const dry = req.nextUrl.searchParams.get("dry") === "1";
   const provided = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
-    || req.nextUrl.searchParams.get("key") || "";
+    || (dry ? (req.nextUrl.searchParams.get("key") || "") : "");
   if (!CRON_SECRET || provided !== CRON_SECRET) {
     return NextResponse.json({ ok: false, error: "Unauthorised" }, { status: 401 });
   }
-  const dry = req.nextUrl.searchParams.get("dry") === "1";
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
   const epms = admin.schema("epms");
