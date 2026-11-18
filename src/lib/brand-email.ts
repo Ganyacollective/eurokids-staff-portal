@@ -6,8 +6,8 @@
 export const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://admin.eurokidsjmdenclave.org";
 export const SIGNATURE_IMG = `${SITE}/brand/email-signature.png`;
 export const SCHOOL_NAME = "EuroKids JMD Enclave";
-/* The school has two lines and both reach it: +91 20 6962 2686 and
-   +91 22 6962 2686. Written down here because they do not look like they
+/* The school has two lines and both reach it: 020 696 22 686 and
+   022 696 22 686. Written down here because they do not look like they
    should both be right, and I have already once "corrected" the second into
    the first on the assumption that 22 was a Mumbai typo. It is not.
 
@@ -15,9 +15,12 @@ export const SCHOOL_NAME = "EuroKids JMD Enclave";
    phone dials, so the two must stay the same number as each other — that
    was the actual fault in the reminder emails, which showed one and dialled
    the other. Which of the two lines we publish is a choice, not a bug. */
-export const SCHOOL_PHONE_1 = "020 6962 2686";
+/* Grouped 696 22 686, which is how the school writes and says them. An
+   earlier pass here used 6962 2686 because that was already in the code;
+   that was the wrong thing to defer to. */
+export const SCHOOL_PHONE_1 = "020 696 22 686";
 export const SCHOOL_PHONE_1_TEL = "+912069622686";
-export const SCHOOL_PHONE_2 = "022 6962 2686";
+export const SCHOOL_PHONE_2 = "022 696 22 686";
 export const SCHOOL_PHONE_2_TEL = "+912269622686";
 
 /* Both lines, wherever a parent is told how to reach us. SCHOOL_PHONE keeps
@@ -27,8 +30,8 @@ export const SCHOOL_PHONE = `${SCHOOL_PHONE_1} or ${SCHOOL_PHONE_2}`;
 /* Kept for anything that needs a single dialable number on its own. */
 export const SCHOOL_PHONE_TEL = SCHOOL_PHONE_1_TEL;
 
-/* The same pair as tappable links. A phone cannot dial "020 6962 2686 or
-   022 6962 2686", so anywhere the number sits inside an <a> it has to be
+/* The same pair as tappable links. A phone cannot dial "020 696 22 686 or
+   022 696 22 686", so anywhere the number sits inside an <a> it has to be
    two anchors rather than one wrapped around the whole string — which is
    the shape the reminder emails had, and why they displayed one number and
    dialled another. */
