@@ -6,38 +6,26 @@
 export const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://admin.eurokidsjmdenclave.org";
 export const SIGNATURE_IMG = `${SITE}/brand/email-signature.png`;
 export const SCHOOL_NAME = "EuroKids JMD Enclave";
-/* The school has two lines and both reach it: 020 696 22 686 and
-   022 696 22 686. Written down here because they do not look like they
-   should both be right, and I have already once "corrected" the second into
-   the first on the assumption that 22 was a Mumbai typo. It is not.
+/* The school's number. One line: 022 696 22 686.
+   ────────────────────────────────────────────────────────────────────────
+   Worth the comment, because this file got it wrong three times in a row.
 
-   SCHOOL_PHONE is what a parent reads and SCHOOL_PHONE_TEL is what their
-   phone dials, so the two must stay the same number as each other — that
-   was the actual fault in the reminder emails, which showed one and dialled
-   the other. Which of the two lines we publish is a choice, not a bug. */
-/* Grouped 696 22 686, which is how the school writes and says them. An
-   earlier pass here used 6962 2686 because that was already in the code;
-   that was the wrong thing to defer to. */
-export const SCHOOL_PHONE_1 = "020 696 22 686";
-export const SCHOOL_PHONE_1_TEL = "+912069622686";
-export const SCHOOL_PHONE_2 = "022 696 22 686";
-export const SCHOOL_PHONE_2_TEL = "+912269622686";
+   It was +912069622686 here while two cron emails hardcoded
+   tel:+912269622686. I decided the 22 was a Mumbai typo and "fixed" the
+   emails to match this constant — so I took the one correct number in the
+   codebase and replaced it with the wrong one. Then, told the 22 number was
+   also valid, I published both. It is 022, and only 022.
 
-/* Both lines, wherever a parent is told how to reach us. SCHOOL_PHONE keeps
-   its name because a dozen templates already say "call us on
-   ${SCHOOL_PHONE}" and that sentence still reads correctly. */
-export const SCHOOL_PHONE = `${SCHOOL_PHONE_1} or ${SCHOOL_PHONE_2}`;
-/* Kept for anything that needs a single dialable number on its own. */
-export const SCHOOL_PHONE_TEL = SCHOOL_PHONE_1_TEL;
+   The rule that survives all of that: SCHOOL_PHONE is what a parent reads
+   and SCHOOL_PHONE_TEL is what their phone dials, and they must be the same
+   number. Change one, change the other, and they are both derived from the
+   same constant now so that is hard to get wrong. */
+export const SCHOOL_PHONE = "022 696 22 686";
+export const SCHOOL_PHONE_TEL = "+91" + SCHOOL_PHONE.replace(/\D/g, "").replace(/^0/, "");
 
-/* The same pair as tappable links. A phone cannot dial "020 696 22 686 or
-   022 696 22 686", so anywhere the number sits inside an <a> it has to be
-   two anchors rather than one wrapped around the whole string — which is
-   the shape the reminder emails had, and why they displayed one number and
-   dialled another. */
+/* The number as a tappable link, for the emails and pages that want one. */
 export const phoneLinks = (style = "font-weight:700;text-decoration:none") =>
-  `<a href="tel:${SCHOOL_PHONE_1_TEL}" style="${style}">${SCHOOL_PHONE_1}</a>`
-  + ` or <a href="tel:${SCHOOL_PHONE_2_TEL}" style="${style}">${SCHOOL_PHONE_2}</a>`;
+  `<a href="tel:${SCHOOL_PHONE_TEL}" style="${style}">${SCHOOL_PHONE}</a>`;
 export const SCHOOL_EMAIL = "admin@eurokidsjmdenclave.org";
 // Staff mail — appointment letters, leave, payroll — is answered by HR, not
 // by the shared office inbox.
