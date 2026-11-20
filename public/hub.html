@@ -54,6 +54,15 @@ const _DFY = new Intl.DateTimeFormat('en-IN', { day:'2-digit', month:'short', ye
 // Takes a date ('2026-09-23') or a full timestamp; a bare date is read as UTC
 // so it never slips a day. Passing a timestamp to the date-only version used
 // to render "Invalid Date".
+/* A timestamp with the clock on it. shortDate drops the time, which is the
+   wrong thing when the question is "did this actually go out, and when". */
+const fmtWhenShort = d => {
+  if (!d) return '';
+  const t = new Date(String(d));
+  return isNaN(t) ? String(d)
+    : t.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric',
+                                  hour: '2-digit', minute: '2-digit' });
+};
 const shortDate = d => {
   if (!d) return '—';
   const s = String(d);
@@ -3857,7 +3866,9 @@ async function tabLiability(){
       return `<tr style="${r.voided_at ? 'opacity:.45' : ''}">
         <td><strong style="${r.voided_at ? 'text-decoration:line-through' : ''}">${esc(r.student_name || '—')}</strong>${r.uin ? '' : ' <span class="chip c-mute">not on roll</span>'}
           ${r.void_reason ? `<br><span class="hint" style="font-size:10.5px">${esc(r.void_reason)}</span>` : ''}
-          ${r.receipt_sent_at ? '<br><span class="hint" style="font-size:10.5px">receipt emailed</span>' : ''}</td>
+          ${r.receipt_sent_at ? `<br><span class="hint" style="font-size:10.5px"
+              title="Sent ${esc(fmtWhenShort(r.receipt_sent_at))}${r.payer_email ? ' to ' + esc(r.payer_email) : ''}">receipt emailed${
+              r.payer_email ? ' &middot; ' + esc(r.payer_email) : ''}</span>` : ''}</td>
         <td>${isFee ? '<span class="chip c-good">Fees</span>'
                     : `<span class="chip c-mute">${esc(r.purpose_note || 'Other')}</span>`}</td>
         <td><span class="chip ${r.mode === 'Cash' ? 'c-warn' : 'c-mute'}">${esc(r.mode)}</span>
@@ -3882,7 +3893,10 @@ async function tabLiability(){
           ${isFee && held > 0.01 && r.uin ? `<a style="cursor:pointer" onclick="payEuroKids(${r.id})">Pay EuroKids</a> · ` : ''}
           ${holder ? `<a style="cursor:pointer" onclick="handOver(${r.id})">Hand over</a> · ` : ''}
           ${r.uin ? `<a style="cursor:pointer" onclick="openStatement('${esc(r.uin)}')">Statement</a> · ` : ''}
-          ${r.uin ? `<a style="cursor:pointer" onclick="sendReceipt(${r.id}, this)">Receipt</a> · ` : ''}
+          ${(r.uin || r.payer_email) ? `<a style="cursor:pointer" onclick="sendReceipt(${r.id}, this)"
+              title="${r.receipt_sent_at ? 'Already sent ' + esc(fmtWhenShort(r.receipt_sent_at)) + ' — this sends it again' : 'Email the receipt'}"
+              >Receipt${r.receipt_sent_at ? ' again' : ''}</a> · ` : ''}
+          ${(r.uin || r.payer_email) ? `<a style="cursor:pointer" onclick="previewReceipt(${r.id})">See it</a> · ` : ''}
           <a style="color:var(--crit);cursor:pointer" onclick="voidReceipt(${r.id})">Void</a>`}</td>
       </tr>`;
     }).join('') || `<tr><td colspan="9" style="padding:24px;text-align:center;color:var(--muted)">Nothing matches.</td></tr>`;
@@ -4004,6 +4018,39 @@ async function tabLiability(){
       closeDrawer(); tabLiability();
     }
   }
+}
+
+/* What the parent actually received.
+   ──────────────────────────────────────────────────────────────────────────
+   The route has always been able to render the receipt without sending it,
+   and nothing in the hub ever asked. So "did the receipt go, and what did it
+   say" was a question the office could not answer from the screen that
+   records the money — the only evidence was the parent's own inbox. */
+async function previewReceipt(id){
+  const rec = _liab.recs.find(x => x.id === id);
+  const r = await feesApi('/api/fees/payment-receipt', { receipt_id: id, preview: true });
+  if (!r.ok) return alert(r.error || 'Could not build the receipt.');
+  const sentLine = rec?.receipt_sent_at
+    ? `Emailed ${esc(fmtWhenShort(rec.receipt_sent_at))} to <strong>${esc((r.to || []).join(', ') || '—')}</strong>`
+    : `<span style="color:var(--crit)">Not emailed yet.</span> It would go to <strong>${esc((r.to || []).join(', ') || 'nobody — no address on this receipt')}</strong>`;
+  openDrawer('Receipt', rec?.student_name || '');
+  el('drawer-body').innerHTML =
+    `<div class="hint" style="padding:0 0 12px">${sentLine}</div>
+     <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff">
+       <iframe style="width:100%;height:68vh;border:0" sandbox=""
+               srcdoc="${esc(r.preview_html || '')}"></iframe>
+     </div>`;
+  el('drawer-foot').innerHTML =
+    `<button class="btn" id="rc-send">${rec?.receipt_sent_at ? 'Send it again' : 'Send it'}</button>
+     <button class="btn line" id="rc-close">Close</button>`;
+  el('rc-close').onclick = closeDrawer;
+  el('rc-send').onclick = async () => {
+    const b = el('rc-send'); b.disabled = true; b.textContent = 'Sending…';
+    const out = await feesApi('/api/fees/payment-receipt', { receipt_id: id, resend: true });
+    b.disabled = false;
+    b.textContent = out.ok ? `Sent to ${(out.sent_to || []).join(', ')}` : (out.error || 'It did not go');
+    if (out.ok && rec) { rec.receipt_sent_at = new Date().toISOString(); tabLiability(); }
+  };
 }
 
 async function sendReceipt(id, a){
