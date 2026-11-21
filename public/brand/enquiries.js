@@ -407,6 +407,44 @@ function eqEval(r, c){
   const v = String(raw ?? '').toLowerCase(), a = String(c.value ?? '').toLowerCase();
   return c.op === 'contains' ? v.includes(a) : c.op === 'startswith' ? v.startsWith(a) : c.op === '=' ? v === a : v !== a;
 }
+/* How several conditions combine.
+
+   Every condition used to be ANDed with every other, which is right across
+   different fields and nonsense within one: "Status is In progress AND
+   Status is Form taken" can never be true of a single enquiry, so asking
+   for both lists returned nothing. That is what anyone adding a second
+   Status filter means by it, and it is how every filter panel people have
+   used elsewhere behaves.
+
+   So: positive conditions on the SAME field are alternatives (or), and
+   everything else narrows (and). "is not" stays an AND even on the same
+   field — "not lost and not won" has to mean both.
+
+   A condition whose value has not been picked yet is not a condition. It
+   used to match nothing, so the list went blank the moment a filter was
+   added and before anything had been chosen. */
+const EQ_EITHER = ['=', 'has', 'contains', 'startswith'];
+const eqUnset  = c => !['empty', 'notempty', 'today'].includes(c.op) && (c.value === '' || c.value === null || c.value === undefined);
+const eqEither = c => EQ_EITHER.includes(c.op);
+function eqPass(r, conds){
+  const live = conds.filter(c => !eqUnset(c));
+  const alts = {};
+  for (const c of live) {
+    if (eqEither(c)) (alts[c.field] = alts[c.field] || []).push(c);
+    else if (!eqEval(r, c)) return false;
+  }
+  return Object.values(alts).every(group => group.some(c => eqEval(r, c)));
+}
+// The sentence under the search box, saying the same thing the logic does.
+function eqDescribeAll(conds){
+  const live = conds.filter(c => !eqUnset(c)), seen = new Set(), parts = [];
+  for (const c of live) {
+    if (!eqEither(c)) { parts.push(eqDescribe(c)); continue; }
+    if (seen.has(c.field)) continue; seen.add(c.field);
+    parts.push(live.filter(x => x.field === c.field && eqEither(x)).map(eqDescribe).join(' or '));
+  }
+  return parts.length ? 'Where ' + parts.join(', and ') : '';
+}
 const eqDescribe = c => {
   const f = EQ_FIELDS.find(x => x.k === c.field); if (!f) return '';
   const op = (EQ_OPS[f.t] || []).find(o => o[0] === c.op)?.[1] || c.op;
@@ -473,7 +511,7 @@ async function tabEnqList(){
 
 function eqRun(){
   const rows = _eq.rows, q = (_eq.q || '').trim().toLowerCase();
-  let list = rows.filter(r => _eq.conds.every(c => eqEval(r, c)) &&
+  let list = rows.filter(r => eqPass(r, _eq.conds) &&
     (!q || [r.child_name, r.father_name, r.mother_name, r.father_phone, r.mother_phone, r.father_email, r.address, r.latest_note].some(v => (v || '').toLowerCase().includes(q))));
   const { field, dir } = _eq.sort, f = EQ_FIELDS.find(x => x.k === field);
   list.sort((a, z) => { let x = a[field], y = z[field];
@@ -490,7 +528,7 @@ function eqRun(){
     const withEmail = new Set(list.map(r => r.father_email || r.mother_email).filter(Boolean)).size;
     mailBtn.textContent = `Email these families (${withEmail})`;
   }
-  el('eq-fdesc').textContent = _eq.conds.length ? 'Where ' + _eq.conds.map(eqDescribe).join(', and ') : '';
+  el('eq-fdesc').textContent = eqDescribeAll(_eq.conds);
   el('eq-sortmenu').innerHTML = EQ_FIELDS.map(x => `<button data-k="${x.k}"><span class="chk">${_eq.sort.field === x.k ? '✓' : ''}</span>${x.l}${_eq.sort.field === x.k ? `<span class="sub">${_eq.sort.dir === 'asc' ? '↑' : '↓'}</span>` : ''}</button>`).join('');
   el('eq-sortmenu').querySelectorAll('button').forEach(x => x.onclick = () => {
     if (_eq.sort.field === x.dataset.k) _eq.sort.dir = _eq.sort.dir === 'asc' ? 'desc' : 'asc';
@@ -619,7 +657,9 @@ function openEnqFilter(){
           ? `<select class="in fval" data-i="${i}"><option value="">Select…</option>${opts.map(o => `<option value="${esc(o)}" ${String(c.value) === String(o) ? 'selected' : ''}>${esc(f.label ? f.label(o) : o)}</option>`).join('')}</select>`
           : `<input class="in fval" data-i="${i}" type="${f.t === 'num' ? 'number' : f.t === 'date' ? 'date' : 'text'}" value="${esc(c.value ?? '')}" placeholder="Value">`;
       }
-      return `${i ? '<div class="fand">And</div>' : ''}<div class="fcard"><div class="fhead"><div><div class="fname">${esc(f.l)}</div>
+      const prev = _eq.conds[i - 1];
+      const or = prev && prev.field === c.field && eqEither(prev) && eqEither(c);
+      return `${i ? `<div class="fand">${or ? 'Or' : 'And'}</div>` : ''}<div class="fcard"><div class="fhead"><div><div class="fname">${esc(f.l)}</div>
           <select class="fop fopsel" data-i="${i}">${ops.map(o => `<option value="${o[0]}" ${o[0] === c.op ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div>
         <button class="fdel" data-i="${i}" title="Remove">🗑</button></div>${ctl}</div>`;
     }).join('') || '<div class="hint" style="margin-top:12px">No filters — showing everything.</div>';
@@ -637,7 +677,10 @@ function openEnqFilter(){
       draw(''); el('fsearch').oninput = () => draw(el('fsearch').value.trim().toLowerCase());
       el('flistbox').onclick = ev => { const b2 = ev.target.closest('button'); if (!b2) return;
         const f = EQ_FIELDS.find(x => x.k === b2.dataset.k);
-        _eq.conds.push({ field: f.k, op: EQ_OPS[f.t][0][0], value: '' }); sync(); };
+        const fresh = { field: f.k, op: EQ_OPS[f.t][0][0], value: '' };
+        let at = -1; _eq.conds.forEach((c, i) => { if (c.field === f.k) at = i; });
+        if (at >= 0) _eq.conds.splice(at + 1, 0, fresh); else _eq.conds.push(fresh);
+        sync(); };
     };
   };
   paint();
