@@ -128,14 +128,32 @@ const enqYear = () => {
   return acadYear();
 };
 
+/* The years an enquiry screen should be looking at.
+
+   From October to March the desk is taking enquiries for two years at once
+   — a place now, or a place in April — and a screen showing only "this
+   year" hides exactly the families who are about to matter most. So while
+   the sidebar is on the current year, in that season, next year's enquiries
+   are shown alongside. Pick any other year and you get that year alone. */
+const enqNextYear = y => { const a = 2000 + Number(String(y).slice(0, 2)); return `${String(a + 1).slice(2)}-${String(a + 2).slice(2)}`; };
+const enqSeason = (d = new Date()) => { const m = d.getMonth() + 1; return m >= 10 || m <= 3; };
+const enqYears = () => { const y = enqYear(); return y === acadYear() && enqSeason() ? [y, enqNextYear(y)] : [y]; };
+// What an enquiry is filed under when nobody has said: next year from
+// January, as the database does.
+const enqDefaultYear = (d = new Date()) => (d.getMonth() + 1 <= 3 ? enqNextYear(acadYear(d)) : acadYear(d));
+
 /* Called by the hub when the year selector changes. The active filter is
    persisted in localStorage, so without this the stale academic_year clause
    outlived the switch and survived a reload. */
 function enqOnYearChange(){
   try {
     if (_eq && Array.isArray(_eq.conds)) {
-      const c = _eq.conds.find(x => x.field === 'academic_year' && x.op === '=');
-      if (c) { c.value = enqYear(); eqSaveConds(); }
+      const at = _eq.conds.findIndex(x => x.field === 'academic_year' && x.op === '=');
+      if (at >= 0) {
+        _eq.conds = _eq.conds.filter(x => !(x.field === 'academic_year' && x.op === '='));
+        _eq.conds.splice(at, 0, ...enqYears().map(y => ({ field: 'academic_year', op: '=', value: y })));
+        eqSaveConds();
+      }
     }
     invalidate('enq:rows');
   } catch (_) {}
@@ -270,8 +288,8 @@ async function tabEnqToday(){
   // computed over every enquiry ever recorded. The Today numbers therefore
   // disagreed with the Enquiries list's numbers, and neither matched the
   // year in the sidebar.
-  const _y = enqYear();
-  if (typeof _ay !== 'string' || _ay !== 'all') rows = rows.filter(r => r.academic_year === _y);
+  const _ys = enqYears();
+  if (typeof _ay !== 'string' || _ay !== 'all') rows = rows.filter(r => _ys.includes(r.academic_year));
   const today = new Date().toISOString().slice(0, 10), monthStart = today.slice(0, 7) + '-01';
   const open = rows.filter(r => !r.closed);
   const due = open.filter(r => r.follow_up_on && r.follow_up_on <= today).sort((a, z) => (a.follow_up_on || '').localeCompare(z.follow_up_on || ''));
@@ -384,11 +402,24 @@ const EQ_OPS = {
 };
 // The school's own default: this academic year, still in play.
 const EQ_DEFAULT = [
-  { field: 'academic_year', op: '=', value: enqYear() },
+  ...enqYears().map(y => ({ field: 'academic_year', op: '=', value: y })),
   { field: 'status', op: '!=', value: 'lost' },
 ];
 let _eq = { conds: null, q: '', sort: { field: 'created_at', dir: 'desc' }, rows: [], last: [] };
-const eqLoadConds = () => { if (_eq.conds) return; try { _eq.conds = JSON.parse(localStorage.getItem('ek-enq-filter')) || JSON.parse(JSON.stringify(EQ_DEFAULT)); } catch { _eq.conds = JSON.parse(JSON.stringify(EQ_DEFAULT)); } };
+const eqLoadConds = () => { if (_eq.conds) return; try { _eq.conds = JSON.parse(localStorage.getItem('ek-enq-filter')) || JSON.parse(JSON.stringify(EQ_DEFAULT)); } catch { _eq.conds = JSON.parse(JSON.stringify(EQ_DEFAULT)); }
+  // Once: a filter saved before next year's enquiries were shown alongside
+  // still says "this year only", and would go on hiding them for ever.
+  try {
+    if (!localStorage.getItem('ek-enq-season-1')) {
+      localStorage.setItem('ek-enq-season-1', '1');
+      const ys = enqYears(), mine = _eq.conds.filter(x => x.field === 'academic_year' && x.op === '=');
+      if (ys.length === 2 && mine.length === 1 && mine[0].value === ys[0]) {
+        _eq.conds.splice(_eq.conds.indexOf(mine[0]) + 1, 0, { field: 'academic_year', op: '=', value: ys[1] });
+        eqSaveConds();
+      }
+    }
+  } catch (_) {}
+};
 const eqSaveConds = () => { try { localStorage.setItem('ek-enq-filter', JSON.stringify(_eq.conds)); } catch (_) {} };
 
 function eqEval(r, c){
@@ -1235,7 +1266,7 @@ async function openEnquiry(id, opts = {}){
       ${cell('Visit scheduled', inp('en-visit', toInputDT(e.visit_at), '', 'datetime-local'), e.visit_reminder_sent_at ? 'Reminder sent ' + dtLocal(e.visit_reminder_sent_at) : 'They are reminded the morning before')}
       ${cell('First visit', inp('en-visited', toInputDT(e.first_visit_at), '', 'datetime-local'))}
       ${cell('Handled by', inp('en-by', e.updated_by, who()))}
-      ${cell('Academic year', `<select class="in" id="en-ay">${[enqYear(), '25-26', '26-27', '27-28'].filter((v, i, a2) => a2.indexOf(v) === i).map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
+      ${cell('Academic year', `<select class="in" id="en-ay">${[...new Set([e.academic_year, enqYear(), acadYear(), enqNextYear(acadYear()), '25-26'].filter(Boolean))].sort().map(y => `<option ${e.academic_year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`)}
     `)}
 
     ${sec('child', 'The child', `
@@ -1666,6 +1697,7 @@ function openNewEnquiry(preset = {}){
   body.innerHTML = `
     <div class="grp"><div class="box">
       ${row('How did they reach us', `<div class="seg" id="nq-source">${['Call', 'Walk In', 'WhatsApp', 'Referral', 'Instagram'].map(x => `<button data-v="${x}" class="${(preset.source || 'Call') === x ? 'on' : ''}">${x}</button>`).join('')}</div>`)}
+      ${row('Admission for', `<div class="seg" id="nq-year">${[acadYear(), enqNextYear(acadYear())].map((y, i) => `<button data-v="${y}" class="${enqDefaultYear() === y ? 'on' : ''}">${i ? 'Next year' : 'This year'} · ${y}</button>`).join('')}</div>`, 'Ask them. It decides which fee card and which list they are on.')}
     </div></div>
     <div class="grp"><h3>Parent</h3><div class="box">
       ${row('Mobile', `<input class="in wide" id="nq-phone" type="tel" inputmode="numeric" placeholder="10-digit mobile" value="${esc(preset.phone || '')}">`, 'Type the number first — if we know them, their card opens.')}
@@ -1685,6 +1717,7 @@ function openNewEnquiry(preset = {}){
   el('drawer-foot').innerHTML = `<div id="pf-msg"></div><button class="btn line" id="nq-cancel">Cancel</button><button class="btn" id="nq-save">Save Enquiry</button>`;
   el('nq-cancel').onclick = closeDrawer;
   const box = el('nq-source'); box.querySelectorAll('button').forEach(b2 => b2.onclick = () => { box.querySelectorAll('button').forEach(x => x.classList.remove('on')); b2.classList.add('on'); });
+  const ybox = el('nq-year'); ybox.querySelectorAll('button').forEach(b2 => b2.onclick = () => { ybox.querySelectorAll('button').forEach(x => x.classList.remove('on')); b2.classList.add('on'); });
   const pbox = el('nq-progs'); pbox.querySelectorAll('.chip').forEach(c => c.onclick = () => c.classList.toggle('on'));
 
   el('nq-phone').oninput = debounce(async () => {
@@ -1703,6 +1736,7 @@ function openNewEnquiry(preset = {}){
     const j = await enqApi('/api/enquiry/capture', { action: 'capture', input: {
       source: box.querySelector('.on')?.dataset.v || 'Call', father_phone: phone, father_name: el('nq-parent').value, father_email: el('nq-email').value,
       child_name: el('nq-child').value, programs: [...pbox.querySelectorAll('.chip.on')].map(c => c.dataset.v),
+      academic_year: ybox.querySelector('.on')?.dataset.v,
       address: el('nq-addr').value, message: el('nq-msg').value, sendWelcome: el('nq-welcome').checked, actor: who(),
     } });
     if (!j.ok) { btn.disabled = false; btn.textContent = 'Save Enquiry'; el('pf-msg').innerHTML = `<div class="err">${esc(j.error)}</div>`; return; }

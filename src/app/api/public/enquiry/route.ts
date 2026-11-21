@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
       child_name: str(b.child_name), dob: str(b.dob), sex: b.sex === "Boy" || b.sex === "Girl" ? b.sex : null, programs,
       father_name: parent, father_phone: phone, father_email: str(b.email),
       mother_name: str(b.mother_name), mother_phone: str(b.mother_phone), mother_email: str(b.mother_email), address: str(b.address),
+      academic_year: str(b.academic_year),
       message: str(b.message), sendWelcome: false, notifySchool: false,
       detail: { page: str(b.page) || req.headers.get("referer") || null, ua: req.headers.get("user-agent")?.slice(0, 160) || null, ip },
     });

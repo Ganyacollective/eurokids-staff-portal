@@ -27,6 +27,9 @@ export type CaptureInput = {
   // Which parent the number belongs to, when somebody actually asked. Null
   // means it is parked, not claimed, and the family may move it themselves.
   phone_owner?: "mother" | "father" | null;
+  // Which admission year this is for, when somebody was asked. Left out, the
+  // database decides (this year until December, next year from January).
+  academic_year?: string | null;
   message?: string | null;
   actor?: string | null;
   at?: string | null;
@@ -39,6 +42,15 @@ export type CaptureInput = {
   // twice, in less detail.
   logArrival?: boolean;
 };
+
+// Only this year or next is a believable answer; anything else is a typo or
+// somebody poking at a public endpoint, and falls back to the default.
+export function statedYear(v?: string | null, now = new Date()): string | null {
+  const y = now.getFullYear(), start = now.getMonth() + 1 >= 4 ? y : y - 1;
+  const ay = (a: number) => `${String(a).slice(2)}-${String(a + 1).slice(2)}`;
+  const s = String(v || "").trim();
+  return s === ay(start) || s === ay(start + 1) ? s : null;
+}
 
 export const phoneKey = (p?: string | null) => {
   const d = String(p || "").replace(/\D/g, "");
@@ -161,6 +173,11 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
     const st = STAGE_FOR[input.source];
     patch.stages = uniq([...(existing.stages || []), st || null]);
     if (input.source === "Walk In" && !existing.first_visit_at) patch.first_visit_at = at;
+    // The year is a statement about intent, not a spelling to argue over: a
+    // family who rang in October about "sometime" and now says April means
+    // April. Whoever was asked most recently is right.
+    const yr = statedYear(input.academic_year);
+    if (yr && yr !== (existing as { academic_year?: string }).academic_year) patch.academic_year = yr;
     if (clashes.length) patch.needs_check = true;
     const { data } = await tbl.from("enquiry").update(patch).eq("id", existing.id).select("*").maybeSingle();
     row = (data as EnquiryRow) || existing;
@@ -177,6 +194,7 @@ export async function captureEnquiry(admin: SupabaseClient, input: CaptureInput)
         ?? (fromFamilySource(input.source) ? (clean(input.mother_phone, 30) && !clean(input.father_phone, 30) ? "mother" : clean(input.father_phone, 30) ? "father" : null) : null),
       first_contact_at: at, first_visit_at: input.source === "Walk In" ? at : null,
       updated_by: actor,
+      ...(statedYear(input.academic_year) ? { academic_year: statedYear(input.academic_year) } : {}),
     }).select("*").maybeSingle();
     if (error || !data) throw new Error(error?.message || "Could not save the enquiry");
     row = data as EnquiryRow; created = true;

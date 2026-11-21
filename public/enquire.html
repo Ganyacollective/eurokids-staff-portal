@@ -115,9 +115,22 @@ const PROGRAMS = ['Playgroup', 'Nursery', 'Junior KG', 'Senior KG', 'Daycare', '
 const PROG_DB = { 'Playgroup': 'P.G.', 'Nursery': 'Nursery', 'Junior KG': 'Euro Junior', 'Senior KG': 'Euro Senior', 'Daycare': 'Daycare', 'Summer / Evening Club': 'Summercamp' };
 const a = {};   // answers
 const now = new Date();
+// Which year they mean, asked only while the answer is genuinely open.
+//
+// From October the school is taking enquiries for two years at once: a
+// family may want a place next week or next April, and until now every one
+// of them was filed under the current year without being asked. April to
+// September there is only one sensible answer, so the question is not put.
+const _m = now.getMonth() + 1, _s = _m >= 4 ? now.getFullYear() : now.getFullYear() - 1;
+const _ay = a => `${String(a).slice(2)}-${String(a + 1).slice(2)}`;
+const WHEN = (_m >= 10 || _m <= 3) ? {
+  ['Right away']: _ay(_s),
+  [`From April ${_s + 1}`]: _ay(_s + 1),
+} : null;
 const Q = [
   { id: 'child_name', title: "What is your child's name?", sub: 'First name and surname.', type: 'text', ph: 'e.g. Aarav Sharma', ac: 'off', required: true },
   { id: 'program', title: 'Which programme are you looking at?', sub: 'Pick one — we can talk about the others when we meet.', type: 'choice', options: PROGRAMS, required: true },
+  ...(WHEN ? [{ id: 'when', title: 'When would your child start?', sub: `Right away is the ${_s}–${String(_s + 1).slice(2)} school year. From April is the new one.`, type: 'choice', options: Object.keys(WHEN), row: true, required: true }] : []),
   { id: 'sex', title: 'Is your child a…', type: 'choice', options: ['Boy', 'Girl'], row: true, required: true },
   { id: 'dob', title: "When was your child born?", sub: 'Slide to set the day, month and year.', type: 'dob', required: true },
   { id: 'parent_name', title: "Father's name", type: 'text', ph: 'Full name', ac: 'name', required: true },
@@ -224,6 +237,7 @@ async function submit(){
     child_name: a.child_name, programs: [PROG_DB[a.program] || a.program], sex: a.sex, dob: a.dob,
     parent_name: a.parent_name, phone: a.phone, email: a.email || '', mother_name: a.mother_name || '', mother_phone: a.mother_phone || '',
     address: a.address || '', company: el('hp').value,
+    academic_year: WHEN && a.when ? WHEN[a.when] : undefined,
     source: KIOSK ? 'Walk In' : (q.get('src') === 'walkin' ? 'Website' : 'Website'), kiosk_key: q.get('k') || undefined, page: document.referrer || location.href,
   };
   try {
