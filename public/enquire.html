@@ -121,16 +121,24 @@ const now = new Date();
 // family may want a place next week or next April, and until now every one
 // of them was filed under the current year without being asked. April to
 // September there is only one sensible answer, so the question is not put.
-const _m = now.getMonth() + 1, _s = _m >= 4 ? now.getFullYear() : now.getFullYear() - 1;
-const _ay = a => `${String(a).slice(2)}-${String(a + 1).slice(2)}`;
-const WHEN = (_m >= 10 || _m <= 3) ? {
-  ['Right away']: _ay(_s),
-  [`From April ${_s + 1}`]: _ay(_s + 1),
-} : null;
+// Nothing here names a year. Both are worked out from today's date, so on
+// 1 October 2027 this starts offering 2027-28 and 2028-29 by itself, and the
+// same again every October after that, with nobody having to remember.
+function yearChoices(d){
+  const m = d.getMonth() + 1, s = m >= 4 ? d.getFullYear() : d.getFullYear() - 1;
+  if (!(m >= 10 || m <= 3)) return null;                 // April to September: one answer, not asked
+  const code = a => `${String(a).slice(2)}-${String(a + 1).slice(2)}`;
+  const long = a => `${a}\u2013${String(a + 1).slice(2)}`;
+  return {
+    [`${long(s)} \u00b7 current year`]: code(s),
+    [`${long(s + 1)} \u00b7 next year, from April ${s + 1}`]: code(s + 1),
+  };
+}
+const WHEN = yearChoices(now);
 const Q = [
   { id: 'child_name', title: "What is your child's name?", sub: 'First name and surname.', type: 'text', ph: 'e.g. Aarav Sharma', ac: 'off', required: true },
   { id: 'program', title: 'Which programme are you looking at?', sub: 'Pick one — we can talk about the others when we meet.', type: 'choice', options: PROGRAMS, required: true },
-  ...(WHEN ? [{ id: 'when', title: 'When would your child start?', sub: `Right away is the ${_s}–${String(_s + 1).slice(2)} school year. From April is the new one.`, type: 'choice', options: Object.keys(WHEN), row: true, required: true }] : []),
+  ...(WHEN ? [{ id: 'when', title: 'Which academic year is the admission for?', type: 'choice', options: Object.keys(WHEN), required: true }] : []),
   { id: 'sex', title: 'Is your child a…', type: 'choice', options: ['Boy', 'Girl'], row: true, required: true },
   { id: 'dob', title: "When was your child born?", sub: 'Slide to set the day, month and year.', type: 'dob', required: true },
   { id: 'parent_name', title: "Father's name", type: 'text', ph: 'Full name', ac: 'name', required: true },
