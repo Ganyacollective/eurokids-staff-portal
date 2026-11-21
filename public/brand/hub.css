@@ -1047,3 +1047,35 @@ details.fold[open]>summary{border-bottom:1px solid var(--sep)}
   background-repeat:no-repeat;background-position:right 11px center}
 .ay-ask select:focus{outline:none;box-shadow:var(--focus)}
 .ay-ask .hint{font-size:var(--fs-co)}
+
+/* ── Next year ──────────────────────────────────────────────────────────
+   One strip of numbers, not five boxes. Five tiles in a three-column grid
+   wrapped 3 + 2 with a hole in the corner, and each spent a card's worth of
+   chrome on a single figure. */
+.ny-stats{display:grid;grid-template-columns:repeat(5,1fr);padding:0;overflow:hidden}
+.ny-stat{padding:14px 18px 13px;border-left:1px solid var(--sep);min-width:0}
+.ny-stat:first-child{border-left:0}
+.ny-n{font-size:26px;line-height:1.05;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ny-l{font-size:var(--fs-co);color:var(--label-2);margin-top:3px}
+.ny-s{font-size:11.5px;color:var(--label-3);margin-top:1px}
+.ny-card>summary{font-size:var(--fs-body)}
+.ny-card>summary strong{white-space:nowrap}
+.ny-bar .seg button{white-space:nowrap;flex:none}
+.ny-card>summary .hint{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ny-bar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  padding:12px 16px;border-bottom:1px solid var(--sep)}
+.ny-bar #ny-q{flex:1 1 260px;max-width:380px}
+.ny-bar .seg{flex:none;max-width:100%;overflow-x:auto}
+.ny-c{color:var(--label-3);font-weight:400;font-variant-numeric:tabular-nums;margin-left:2px}
+.ny-t td{vertical-align:middle}
+@media (max-width:760px){
+  .ny-stats{grid-template-columns:1fr 1fr}
+  .ny-stat{border-left:0;border-top:1px solid var(--sep)}
+  .ny-stat:nth-child(-n+2){border-top:0}
+  .ny-stat:nth-child(even){border-left:1px solid var(--sep)}
+  .ny-stat:last-child:nth-child(odd){grid-column:1 / -1}
+  .ny-bar #ny-q{max-width:none}
+  .ny-card>summary .hint{display:none}
+  .ny-card>summary strong{white-space:normal}
+  .ny-bar .seg{width:100%}
+}

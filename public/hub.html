@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=133">
-<link rel="prefetch" href="/brand/enquiries.js?v=133" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=134">
+<link rel="prefetch" href="/brand/enquiries.js?v=134" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -760,6 +760,12 @@ function renderApp(){
   // _ayAll is only known after the first roster read, so the options are
   // refreshed on every tab change rather than once at startup.
   paintYearPicker();
+  // Next year is always this year's children moving into the next one. The
+  // picker changes nothing there, so it is switched off rather than left
+  // looking as if it might.
+  { const ay = el('tb-ay'); if (ay) { const off = tab === 'nextyear';
+      ay.disabled = off; ay.style.opacity = off ? '.45' : '';
+      ay.title = off ? 'Next year always shows 26-27 children moving into 27-28' : 'Which academic year you are working in'; } }
   ({ overview: tabOverview, children: tabChildren, views: tabViews, discounts: tabDiscounts, plans: tabPlans, liability: tabLiability,
      compose: tabCompose, reminders: tabReminders, kits: tabKits, fees: tabFees, users: renderUsers,
      templates: tabTemplates, letters: tabLetters, docs: tabDocs,
@@ -7137,7 +7143,7 @@ async function openPlan(uin){
    Nothing here needs the child to exist next year. An agreement is written
    against child_id, which does not change when the year does, and attaches
    itself to next year's UIN whenever EPMS catches up.                    */
-const NY = { rows: [], card: [], q: '', show: 'todo' };
+const NY = { rows: [], card: [], stray: [], q: '', show: 'todo' };
 const NY_YEAR = '27-28';
 
 async function tabNextYear(){
@@ -7145,40 +7151,50 @@ async function tabNextYear(){
   el('body').innerHTML = `<div class="vhead"><h2>Next year &mdash; ${NY_YEAR}</h2></div><div class="loading">Loading…</div>`;
   try {
     const s = getSb().schema('eurokids');
-    const [{ data: rows, error }, { data: card }] = await Promise.all([
+    const [{ data: rows, error }, { data: card }, { data: stray }] = await Promise.all([
       s.from('v_next_year').select('*').order('child_name').limit(500),
       s.from('v_fee_card').select('*').eq('academic_year', NY_YEAR).order('epms_program_id'),
+      s.from('v_next_year_unmatched').select('*').order('child_name').limit(200),
     ]);
     if (error) throw error;
-    NY.rows = rows || []; NY.card = card || [];
+    NY.rows = rows || []; NY.card = card || []; NY.stray = stray || [];
   } catch (e) { return el('body').innerHTML = fail(e); }
   paintNextYear();
 }
 
 const nyCardFor = pid => NY.card.find(c => c.epms_program_id === pid) || null;
 
-function paintNextYear(){
+function nyGroups(){
   const moving = NY.rows.filter(r => !r.leaving);
-  const leaving = NY.rows.filter(r => r.leaving);
-  const done = moving.filter(r => r.agreement_id);
-  const todo = moving.filter(r => !r.agreement_id);
-  const told = done.filter(r => r.parent_confirmed_at);
-  // An agreed fee is a promise, not an admission. Only EPMS graduating the
-  // child makes them next year's student, so the two are counted apart.
-  const grad = moving.filter(r => r.graduated);
-  const look = moving.filter(r => r.fee_check === 'to_apply' || r.fee_check === 'epms_lower');
+  return {
+    moving,
+    leaving: NY.rows.filter(r => r.leaving),
+    done: moving.filter(r => r.agreement_id),
+    todo: moving.filter(r => !r.agreement_id),
+    // An agreed fee is a promise, not an admission. Only EPMS graduating the
+    // child makes them next year's student, so the two are counted apart.
+    grad: moving.filter(r => r.graduated),
+    look: moving.filter(r => r.fee_check === 'to_apply' || r.fee_check === 'epms_lower'),
+  };
+}
 
-  const q = NY.q.trim().toLowerCase();
-  let list = NY.show === 'todo' ? todo : NY.show === 'done' ? done
-           : NY.show === 'look' ? look
-           : NY.show === 'leaving' ? leaving : NY.rows;
-  if (q) list = list.filter(r => (r.child_name || '').toLowerCase().includes(q)
-                              || (r.father_name || '').toLowerCase().includes(q));
+/* The frame is painted once. Searching and switching view repaint only the
+   list underneath it.
+
+   It used to rebuild the whole screen on every keystroke, search box
+   included. The box was destroyed and recreated mid-word, so the cursor
+   jumped back to the start and the next letter went in front of the last
+   one — type "aarush" and the box held "hsuraa", which matches nobody. */
+function paintNextYear(){
+  const g = nyGroups();
+  const told = g.done.filter(r => r.parent_confirmed_at).length;
+  const stat = (n, label, sub, crit) => `<div class="ny-stat"><div class="ny-n"${crit ? ' style="color:var(--crit)"' : ''}>${n}</div>
+      <div class="ny-l">${label}</div>${sub ? `<div class="ny-s">${sub}</div>` : ''}</div>`;
 
   const card = NY.card.length ? `
-    <div class="panel" style="padding:16px;margin-bottom:14px">
-      <div class="ptop" style="padding:0 0 10px"><h2 style="font-size:15px">The ${NY_YEAR} fee card</h2>
-        <div class="hint">April 2027 &middot; what a full year costs before any concession</div></div>
+    <details class="fold ny-card">
+      <summary><strong>${NY_YEAR} fee card</strong>
+        <span class="hint">${NY.card.map(c => `${esc(c.program_name)} ${money(c.total)}`).join(' &nbsp;&middot;&nbsp; ')}</span></summary>
       <div class="tw"><table><thead><tr><th>Class</th><th class="r">Full fee</th>
         <th class="r">Corporate / Defence</th><th class="r">Sibling</th><th class="r">Staff</th></tr></thead><tbody>
         ${NY.card.map(c => `<tr><td>${esc(c.program_name)}</td>
@@ -7187,78 +7203,94 @@ function paintNextYear(){
           <td class="r num hint">${money(c.fee_sibling)}</td>
           <td class="r num hint">${money(c.fee_staff)}</td></tr>`).join('')}
       </tbody></table></div>
-      <div class="hint" style="margin-top:8px;font-size:12px">The scheme columns are worked out from the
-        components — 10% of tuition, or 10% and 20% of the term fee — not pulled from EPMS, which has no
-        ${NY_YEAR} rates yet.</div>
-    </div>` : `
-    <div class="panel" style="padding:16px;margin-bottom:14px">
-      <div class="hint">No ${NY_YEAR} fee card loaded yet, so there is no full fee to start from. You can still
-        record an agreed figure.</div></div>`;
+      <div class="hint" style="padding:8px 16px 12px;font-size:12px">The scheme columns are estimates: this year's
+        rule (10% of tuition, or 10% and 20% of the term fee) applied to next year's card. EPMS has no
+        ${NY_YEAR} scheme rates yet.</div>
+    </details>` : `<div class="hint" style="margin:10px 2px">No ${NY_YEAR} fee card loaded, so there is no full
+      fee to start from. You can still record an agreed figure.</div>`;
+
+  const stray = NY.stray.length ? `
+    <details class="fold ny-card">
+      <summary><strong>${NY.stray.length} in EPMS for ${NY_YEAR}, not on this year's roll</strong>
+        <span class="hint">new admissions &mdash; or a name spelled differently when graduated</span></summary>
+      <div class="hint" style="padding:0 16px 10px;font-size:12px">If one of these is a child you agreed a fee with,
+        their name or father's name in EPMS does not match this year's record, and the agreement has not
+        attached. Correct the spelling in EPMS and it will on the next sync.</div>
+      <div class="tw"><table><tbody>${NY.stray.map(x => `<tr><td><strong>${esc(x.child_name)}</strong></td>
+        <td class="hint">${esc(x.father_name || '')}</td><td class="hint">${esc(x.uin)}</td></tr>`).join('')}</tbody></table></div>
+    </details>` : '';
 
   el('body').innerHTML = `
-    <div class="vhead"><h2>Next year &mdash; ${NY_YEAR}</h2>
-      <div class="hint">This is not next year's roll. It is this year's children, and what has been agreed
-        with each family. A child is only on the ${NY_YEAR} roll once you graduate them in EPMS &mdash; until
-        then every row says so.</div></div>
+    <div class="vhead"><div><h2>Next year &mdash; ${NY_YEAR}</h2>
+      <div class="meta">This year's children and the fee agreed with each family. Nobody is on the ${NY_YEAR} roll
+        until you graduate them in EPMS.</div></div></div>
 
-    <div class="snap-tiles" style="margin-bottom:14px">
-      <div class="panel" style="padding:16px"><div class="hint">Moving up</div>
-        <div style="font-size:30px;font-weight:800;letter-spacing:-.02em">${moving.length}</div></div>
-      <div class="panel" style="padding:16px"><div class="hint">Fee agreed</div>
-        <div style="font-size:30px;font-weight:800;letter-spacing:-.02em">${done.length}</div>
-        <div class="hint" style="font-size:12px">${told.length} told the parent in writing</div></div>
-      <div class="panel" style="padding:16px"><div class="hint">Still to agree</div>
-        <div style="font-size:30px;font-weight:800;letter-spacing:-.02em;${todo.length ? 'color:var(--crit)' : ''}">${todo.length}</div></div>
-      <div class="panel" style="padding:16px"><div class="hint">Graduated in EPMS</div>
-        <div style="font-size:30px;font-weight:800;letter-spacing:-.02em">${grad.length}</div>
-        <div class="hint" style="font-size:12px">${moving.length - grad.length} not graduated yet${look.length
-          ? ` &middot; <span style="color:var(--crit);font-weight:700">${look.length} to check</span>` : ''}</div></div>
-      <div class="panel" style="padding:16px"><div class="hint">Finishing Euro Senior</div>
-        <div style="font-size:30px;font-weight:800;letter-spacing:-.02em">${leaving.length}</div></div>
+    <div class="panel ny-stats">
+      ${stat(g.moving.length, 'Moving up')}
+      ${stat(g.done.length, 'Fee agreed', `${told} told in writing`)}
+      ${stat(g.todo.length, 'Still to agree', '', g.todo.length > 0)}
+      ${stat(g.grad.length, 'Graduated in EPMS', g.look.length ? `<span style="color:var(--crit);font-weight:600">${g.look.length} to check</span>` : `${g.moving.length - g.grad.length} not yet`)}
+      ${stat(g.leaving.length, 'Finishing Euro Senior')}
     </div>
 
-    ${card}
+    ${card}${stray}
 
-    <div class="panel">
-      <div class="ptop"><h2 style="font-size:15px">Children</h2>
-        <input class="in" id="ny-q" placeholder="Search a name" value="${esc(NY.q)}" style="max-width:240px">
+    <div class="panel" style="margin-top:12px">
+      <div class="ny-bar">
+        <input class="in" id="ny-q" type="search" placeholder="Search child or father" value="${esc(NY.q)}" autocomplete="off">
+        <div class="seg" id="ny-seg"></div>
       </div>
-      <div style="padding:0 16px 12px;display:flex;gap:6px;flex-wrap:wrap">
-        ${[['todo','Still to agree',todo.length],['done','Agreed',done.length],
-           ...(look.length ? [['look','EPMS differs',look.length]] : []),
-           ['leaving','Finishing',leaving.length],['all','Everyone',NY.rows.length]]
-          .map(([k,label,n]) => `<button class="btn-s ${NY.show===k?'on':''}" onclick="nyShow('${k}')">${label} · ${n}</button>`).join('')}
-      </div>
-      ${list.length === 0 ? `<div style="padding:28px 16px;text-align:center" class="hint">Nothing in this view.</div>`
-      : `<div class="tw"><table><thead><tr><th>Child</th><th>Now</th><th>From April</th>
-          <th class="r">This year</th><th class="r">Agreed for ${NY_YEAR}</th><th>Parent told</th><th>In EPMS</th><th></th></tr></thead><tbody>
-        ${list.map(nyRow).join('')}
-      </tbody></table></div>`}
+      <div id="ny-list"></div>
     </div>`;
 
-  const box = el('ny-q');
-  if (box) box.oninput = e => { NY.q = e.target.value; paintNextYear(); el('ny-q').focus(); };
+  el('ny-q').oninput = e => { NY.q = e.target.value; nyList(); };
+  nyList();
+}
+
+function nyList(){
+  const g = nyGroups();
+  const q = NY.q.trim().toLowerCase();
+  const hit = r => !q || (r.child_name || '').toLowerCase().includes(q) || (r.father_name || '').toLowerCase().includes(q);
+  // A search looks at everybody. Looking for a child and being told
+  // "nothing in this view" because they happen to sit under another tab is
+  // the same as the search not working.
+  const views = [['todo','To agree',g.todo],['done','Agreed',g.done],
+                 ...(g.look.length ? [['look','EPMS differs',g.look]] : []),
+                 ['leaving','Finishing',g.leaving],['all','Everyone',NY.rows]];
+  if (!views.some(v => v[0] === NY.show)) NY.show = 'todo';
+  const list = (q ? NY.rows : views.find(v => v[0] === NY.show)[2]).filter(hit);
+
+  el('ny-seg').innerHTML = views.map(([k, label, rows]) =>
+    `<button class="${!q && NY.show === k ? 'on' : ''}" onclick="nyShow('${k}')">${label} <span class="ny-c">${rows.length}</span></button>`).join('');
+
+  el('ny-list').innerHTML = list.length === 0
+    ? `<div style="padding:32px 16px;text-align:center" class="hint">${q ? `Nobody called &ldquo;${esc(NY.q.trim())}&rdquo; on this year's roll.` : 'Nothing in this view.'}</div>`
+    : `${q ? `<div class="hint" style="padding:8px 16px 0;font-size:12px">${list.length} of ${NY.rows.length} children, across every view</div>` : ''}
+       <div class="tw"><table class="ny-t"><thead><tr><th>Child</th><th>Class</th>
+          <th class="r">This year</th><th class="r">Agreed ${NY_YEAR}</th><th>Parent</th><th>EPMS</th><th></th></tr></thead><tbody>
+        ${list.map(nyRow).join('')}
+      </tbody></table></div>`;
 }
 
 function nyRow(r){
   const full = nyCardFor(r.next_program_id);
   return `<tr>
-    <td><strong>${esc(r.child_name)}</strong>${r.father_name ? `<br><span class="hint" style="font-size:10.5px">${esc(r.father_name)}</span>` : ''}</td>
-    <td class="hint">${esc(r.this_year_program || '—')}</td>
-    <td>${r.leaving ? '<span class="hint">finishing</span>' : esc(r.next_program_name || '—')}</td>
+    <td><strong>${esc(r.child_name)}</strong>${r.father_name ? `<div class="hint" style="font-size:11px">${esc(r.father_name)}</div>` : ''}</td>
+    <td>${r.leaving ? `<span class="hint">${esc(r.this_year_program || '')} &middot; finishing</span>`
+        : `<span class="hint">${esc(r.this_year_program || '—')} &rarr;</span> ${esc(r.next_program_name || '—')}`}</td>
     <td class="r num hint">${r.this_year_fee != null ? money(r.this_year_fee) : '—'}</td>
     <td class="r num">${r.agreed_fee != null
         ? `<strong>${money(r.agreed_fee)}</strong>${full && Number(r.agreed_fee) < Number(full.total)
-             ? `<br><span class="hint" style="font-size:10.5px">${money(Number(full.total) - Number(r.agreed_fee))} off</span>` : ''}`
+             ? `<div class="hint" style="font-size:11px">${money(Number(full.total) - Number(r.agreed_fee))} off</div>` : ''}`
         : '<span class="hint">—</span>'}</td>
     <td>${r.parent_confirmed_at
-        ? `<span class="chip c-good" title="${esc(fmtWhenShort(r.parent_confirmed_at))}">sent</span>`
+        ? `<span class="chip c-good" title="${esc(fmtWhenShort(r.parent_confirmed_at))}">told</span>`
         : r.agreement_id ? '<span class="chip c-warn">not told</span>' : ''}</td>
     <td>${r.leaving ? '' : nyEpms(r)}</td>
-    <td style="white-space:nowrap">${r.leaving ? ''
-      : `<a style="cursor:pointer" onclick="nyAgree('${esc(r.child_id)}')">${r.agreement_id ? 'Change' : 'Agree a fee'}</a>`
-        + (r.fee_check === 'to_apply'
-            ? ` &middot; <a style="cursor:pointer;font-weight:700" onclick="nyApply('${esc(r.agreement_id)}')">Apply</a>` : '')}</td>
+    <td class="r" style="white-space:nowrap">${r.leaving ? ''
+      : (r.fee_check === 'to_apply'
+            ? `<button class="btn sm" onclick="nyApply('${esc(r.agreement_id)}')">Apply</button> ` : '')
+        + `<button class="btn line sm" onclick="nyAgree('${esc(r.child_id)}')">${r.agreement_id ? 'Change' : 'Agree a fee'}</button>`}</td>
   </tr>`;
 }
 
@@ -7295,7 +7327,7 @@ async function nyApply(agreementId){
   await tabNextYear();
 }
 
-function nyShow(k){ NY.show = k; paintNextYear(); }
+function nyShow(k){ NY.show = k; if (NY.q) { NY.q = ''; el('ny-q').value = ''; } nyList(); }
 
 /* The drawer. Opens with the full fee already filled in from the card and
    the concession box empty, because the concession is the only number
@@ -7512,7 +7544,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=133"></script>
+<script src="/brand/enquiries.js?v=134"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.
