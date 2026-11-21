@@ -14,8 +14,8 @@
 <link rel="icon" href="/brand/icons/icon.svg" type="image/svg+xml">
 <title>Eurokids JMD — Hub</title>
 <link rel="preconnect" href="https://saqefzgnvznuurupqpsw.supabase.co" crossorigin>
-<link rel="stylesheet" href="/brand/hub.css?v=131">
-<link rel="prefetch" href="/brand/enquiries.js?v=131" as="script">
+<link rel="stylesheet" href="/brand/hub.css?v=132">
+<link rel="prefetch" href="/brand/enquiries.js?v=132" as="script">
 </head>
 <body>
 <div id="stage"><div class="page"><div class="loading">Loading…</div></div></div>
@@ -7163,9 +7163,14 @@ function paintNextYear(){
   const done = moving.filter(r => r.agreement_id);
   const todo = moving.filter(r => !r.agreement_id);
   const told = done.filter(r => r.parent_confirmed_at);
+  // An agreed fee is a promise, not an admission. Only EPMS graduating the
+  // child makes them next year's student, so the two are counted apart.
+  const grad = moving.filter(r => r.graduated);
+  const look = moving.filter(r => r.fee_check === 'to_apply' || r.fee_check === 'epms_lower');
 
   const q = NY.q.trim().toLowerCase();
   let list = NY.show === 'todo' ? todo : NY.show === 'done' ? done
+           : NY.show === 'look' ? look
            : NY.show === 'leaving' ? leaving : NY.rows;
   if (q) list = list.filter(r => (r.child_name || '').toLowerCase().includes(q)
                               || (r.father_name || '').toLowerCase().includes(q));
@@ -7192,8 +7197,9 @@ function paintNextYear(){
 
   el('body').innerHTML = `
     <div class="vhead"><h2>Next year &mdash; ${NY_YEAR}</h2>
-      <div class="hint">Agree a fee now and it is on the record. The child does not have to be graduated in
-        EPMS first &mdash; it attaches itself when they are.</div></div>
+      <div class="hint">This is not next year's roll. It is this year's children, and what has been agreed
+        with each family. A child is only on the ${NY_YEAR} roll once you graduate them in EPMS &mdash; until
+        then every row says so.</div></div>
 
     <div class="snap-tiles" style="margin-bottom:14px">
       <div class="panel" style="padding:16px"><div class="hint">Moving up</div>
@@ -7203,6 +7209,10 @@ function paintNextYear(){
         <div class="hint" style="font-size:12px">${told.length} told the parent in writing</div></div>
       <div class="panel" style="padding:16px"><div class="hint">Still to agree</div>
         <div style="font-size:30px;font-weight:800;letter-spacing:-.02em;${todo.length ? 'color:var(--crit)' : ''}">${todo.length}</div></div>
+      <div class="panel" style="padding:16px"><div class="hint">Graduated in EPMS</div>
+        <div style="font-size:30px;font-weight:800;letter-spacing:-.02em">${grad.length}</div>
+        <div class="hint" style="font-size:12px">${moving.length - grad.length} not graduated yet${look.length
+          ? ` &middot; <span style="color:var(--crit);font-weight:700">${look.length} to check</span>` : ''}</div></div>
       <div class="panel" style="padding:16px"><div class="hint">Finishing Euro Senior</div>
         <div style="font-size:30px;font-weight:800;letter-spacing:-.02em">${leaving.length}</div></div>
     </div>
@@ -7215,12 +7225,13 @@ function paintNextYear(){
       </div>
       <div style="padding:0 16px 12px;display:flex;gap:6px;flex-wrap:wrap">
         ${[['todo','Still to agree',todo.length],['done','Agreed',done.length],
+           ...(look.length ? [['look','EPMS differs',look.length]] : []),
            ['leaving','Finishing',leaving.length],['all','Everyone',NY.rows.length]]
           .map(([k,label,n]) => `<button class="btn-s ${NY.show===k?'on':''}" onclick="nyShow('${k}')">${label} · ${n}</button>`).join('')}
       </div>
       ${list.length === 0 ? `<div style="padding:28px 16px;text-align:center" class="hint">Nothing in this view.</div>`
       : `<div class="tw"><table><thead><tr><th>Child</th><th>Now</th><th>From April</th>
-          <th class="r">This year</th><th class="r">Agreed for ${NY_YEAR}</th><th>Parent told</th><th></th></tr></thead><tbody>
+          <th class="r">This year</th><th class="r">Agreed for ${NY_YEAR}</th><th>Parent told</th><th>In EPMS</th><th></th></tr></thead><tbody>
         ${list.map(nyRow).join('')}
       </tbody></table></div>`}
     </div>`;
@@ -7243,9 +7254,45 @@ function nyRow(r){
     <td>${r.parent_confirmed_at
         ? `<span class="chip c-good" title="${esc(fmtWhenShort(r.parent_confirmed_at))}">sent</span>`
         : r.agreement_id ? '<span class="chip c-warn">not told</span>' : ''}</td>
+    <td>${r.leaving ? '' : nyEpms(r)}</td>
     <td style="white-space:nowrap">${r.leaving ? ''
-      : `<a style="cursor:pointer" onclick="nyAgree('${esc(r.child_id)}')">${r.agreement_id ? 'Change' : 'Agree a fee'}</a>`}</td>
+      : `<a style="cursor:pointer" onclick="nyAgree('${esc(r.child_id)}')">${r.agreement_id ? 'Change' : 'Agree a fee'}</a>`
+        + (r.fee_check === 'to_apply'
+            ? ` &middot; <a style="cursor:pointer;font-weight:700" onclick="nyApply('${esc(r.agreement_id)}')">Apply</a>` : '')}</td>
   </tr>`;
+}
+
+/* Where the child stands in EPMS, and — once they are there — whether what
+   EPMS bills squares with what the parent was told.
+
+   EPMS's invoice is already net of its own scheme, so the comparison is one
+   subtraction: billed − agreed is the concession we have to carry. If that
+   is already on the new UIN, it squares. If EPMS bills LESS than agreed, no
+   concession can fix it and somebody has to decide which number is right. */
+function nyEpms(r){
+  if (!r.graduated) return '<span class="chip c-mute">not graduated yet</span>';
+  const g = '<span class="chip c-good">graduated</span>';
+  const sub = t => `<br><span class="hint" style="font-size:10.5px">${t}</span>`;
+  if (!r.agreement_id) return g + sub('no fee agreed here');
+  if (r.fee_check === 'not_billed') return g + sub('EPMS has not billed yet');
+  if (r.fee_check === 'ok') return g + sub(`bills ${money(r.next_year_billed)} &middot; squares`);
+  if (r.fee_check === 'to_apply') return g + ` <span class="chip c-warn">concession not on yet</span>`
+    + sub(`bills ${money(r.next_year_billed)} &middot; ${money(r.concession_needed)} is ours to carry`);
+  if (r.fee_check === 'epms_lower') return g + ` <span class="chip c-crit">EPMS bills less</span>`
+    + sub(`bills ${money(r.next_year_billed)}, ${money(-Number(r.concession_needed))} under the agreed fee`);
+  return g;
+}
+
+async function nyApply(agreementId){
+  const r = NY.rows.find(x => x.agreement_id === agreementId);
+  if (!r) return;
+  if (!confirm(`${r.child_name}\n\nEPMS bills ${money(r.next_year_billed)}`
+      + `${r.next_year_scheme && !/no discount/i.test(r.next_year_scheme) ? ' (' + r.next_year_scheme + ')' : ''}.\n`
+      + `Agreed with the parent: ${money(r.agreed_fee)}.\n\n`
+      + `Record ${money(r.concession_needed)} as our concession on ${r.next_year_uin}?`)) return;
+  const res = await feesApi('/api/fees/agreement', { action: 'apply', agreement_id: agreementId });
+  if (!res.ok) return alert(res.error || 'Could not apply it.');
+  await tabNextYear();
 }
 
 function nyShow(k){ NY.show = k; paintNextYear(); }
@@ -7260,17 +7307,31 @@ function nyAgree(childId){
   const gross = r.agreed_gross != null ? Number(r.agreed_gross) : (card ? Number(card.total) : '');
   const conc  = r.agreed_concession != null ? Number(r.agreed_concession) : 0;
   const agreed = r.agreed_fee != null ? Number(r.agreed_fee) : (gross === '' ? '' : gross - conc);
+  const scheme0 = r.agreed_scheme || 'none';
+  // What a EuroKids scheme takes off, from the card. EPMS decides the real
+  // figure when the child is graduated; this is so the split can be seen
+  // across the desk before anyone commits to it.
+  const schemeOff = code => {
+    const col = { corporate:'fee_corporate', defence:'fee_defence', sibling:'fee_sibling',
+                  staff:'fee_staff', inaugral:'fee_inaugral' }[code];
+    return card && col && card[col] != null ? Math.max(0, Number(card.total) - Number(card[col])) : 0;
+  };
 
   openDrawer(r.child_name, `${r.this_year_program || ''} → ${r.next_program_name || ''} · ${NY_YEAR}`);
   el('drawer-body').innerHTML = `
+    <div class="hint" style="padding:0 0 12px;line-height:1.5">${r.graduated
+      ? `<span class="chip c-good">graduated in EPMS</span> ${esc(r.next_year_uin)}`
+        + (Number(r.next_year_billed) > 0 ? ` &middot; EPMS bills <strong>${money(r.next_year_billed)}</strong>` : ' &middot; not billed yet')
+      : `<span class="chip c-mute">not graduated yet</span> Recording a fee here does not admit the child for
+         ${NY_YEAR}. It is a note of what was said, and it can be changed or withdrawn.`}</div>
     <div class="row"><div class="l">Full fee for the year<span class="sub">${card
       ? 'From the ' + NY_YEAR + ' fee card' : 'No fee card for this class — type it if you know it'}</span></div>
       <input class="in num" id="ny-gross" type="number" step="any" value="${gross}"></div>
-    <div class="row"><div class="l">EuroKids scheme<span class="sub">Corporate, defence, sibling, staff — borne by EuroKids</span></div>
+    <div class="row"><div class="l">EuroKids scheme<span class="sub">Borne by EuroKids, and only real once EPMS accepts it</span></div>
       <select class="in" id="ny-scheme">
         ${[['none','No scheme'],['corporate','Corporate'],['defence','Defence'],
            ['sibling','Sibling'],['staff','Staff'],['inaugral','Inaugural']]
-          .map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}
+          .map(([v,l]) => `<option value="${v}" ${v === scheme0 ? 'selected' : ''}>${l}${schemeOff(v) ? ' — ' + money(schemeOff(v)) + ' off' : ''}</option>`).join('')}
       </select></div>
     <div class="row"><div class="l">Our concession<span class="sub">Off our own margin. EPMS never sees this.</span></div>
       <input class="in num" id="ny-conc" type="number" step="any" value="${conc}"></div>
@@ -7282,18 +7343,36 @@ function nyAgree(childId){
       <textarea class="in wide" id="ny-note" rows="2" placeholder="Anything worth remembering about how you got here">${esc(r.agreed_note || '')}</textarea></div>
     <div class="hint" id="ny-sum" style="padding:8px 0"></div>`;
 
-  const sync = () => {
-    const g = Number(el('ny-gross').value) || 0;
-    const c = Number(el('ny-conc').value) || 0;
-    // The concession drives the agreed fee, until somebody types over it.
-    if (document.activeElement !== el('ny-agreed')) el('ny-agreed').value = Math.max(0, g - c);
+  // Three numbers, one equation: full − scheme − ours = agreed.
+  //
+  // Typing the concession moves the agreed fee. Typing the agreed fee, or
+  // changing the scheme, moves the concession instead — because once a
+  // figure has been said to a parent it is the fixed point, and trying a
+  // corporate scheme on for size must not quietly change what they owe.
+  const sync = (from) => {
+    const g  = Number(el('ny-gross').value) || 0;
+    const ek = schemeOff(el('ny-scheme').value);
+    if (from === 'conc' || from === 'gross') {
+      el('ny-agreed').value = Math.max(0, g - ek - (Number(el('ny-conc').value) || 0));
+    } else if (g) {
+      el('ny-conc').value = Math.max(0, g - ek - (Number(el('ny-agreed').value) || 0));
+    }
     const a2 = Number(el('ny-agreed').value) || 0;
-    el('ny-sum').innerHTML = g
-      ? `${money(g)} less ${money(Math.max(0, g - a2))} &rarr; <strong>${money(a2)}</strong> for the year`
-      : `<strong>${money(a2)}</strong> for the year`;
+    const c  = Number(el('ny-conc').value) || 0;
+    const under = g ? a2 - (g - ek) : 0;   // agreed above what EPMS would bill
+    el('ny-sum').innerHTML = !g ? `<strong>${money(a2)}</strong> for the year`
+      : `${money(g)}${ek ? ` &minus; ${money(ek)} scheme` : ''}${c ? ` &minus; ${money(c)} ours` : ''}
+           &rarr; <strong>${money(a2)}</strong> for the year`
+        + (ek ? `<br>EPMS would bill ${money(g - ek)} on this scheme.` : '')
+        + (under > 0.5 ? `<br><span style="color:var(--crit);font-weight:700">That is ${money(under)} less than the
+             agreed fee &mdash; the parent would be billed under what you told them.</span>` : '');
   };
-  ['ny-gross','ny-conc','ny-agreed'].forEach(id => { el(id).oninput = sync; });
-  sync();
+  el('ny-gross').oninput  = () => sync('gross');
+  el('ny-conc').oninput   = () => sync('conc');
+  el('ny-agreed').oninput = () => sync('agreed');
+  el('ny-scheme').onchange = () => sync('scheme');
+  NY._ek = () => schemeOff(el('ny-scheme').value);
+  sync(r.agreement_id ? 'agreed' : 'conc');
 
   el('drawer-foot').innerHTML = `
     <button class="btn" id="ny-save">Save</button>
@@ -7312,6 +7391,7 @@ async function nySave(childId, alsoSend){
       action: 'save', child_id: childId,
       gross_fee: Number(el('ny-gross').value) || null,
       discount_code: el('ny-scheme').value,
+      eurokids_discount: NY._ek ? NY._ek() : 0,
       franchisee_discount: Number(el('ny-conc').value) || 0,
       agreed_fee: Number(el('ny-agreed').value) || 0,
       instalments: el('ny-inst').value,
@@ -7432,7 +7512,7 @@ async function tabFees(){
 
 boot();
 </script>
-<script src="/brand/enquiries.js?v=131"></script>
+<script src="/brand/enquiries.js?v=132"></script>
 <script>
   // Installable: registers the service worker that caches the app shell so the
   // hub opens instantly from a phone or desktop home screen.

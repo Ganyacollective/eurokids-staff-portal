@@ -223,6 +223,61 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, sent_to: to });
   }
 
+  // ── square it with EPMS, once the child has been graduated ──────────────
+  //
+  // An agreement is a promise about what the parent pays. How that is made
+  // up — a EuroKids scheme, our own concession, or both — is not settled
+  // until somebody graduates the child in EPMS and picks a scheme there,
+  // and it is allowed to differ from what was pencilled in at the desk.
+  //
+  // EPMS's invoice is already net of its own scheme. So whatever is left
+  // between that and the agreed figure is ours to carry, and this writes
+  // exactly that against next year's UIN. The parent's number never moves.
+  if (action === "apply") {
+    const id = clean(b.agreement_id, 64);
+    if (!id) return NextResponse.json({ ok: false, error: "Which agreement?" }, { status: 400 });
+
+    const { data: row } = await a.from("v_next_year").select("*").eq("agreement_id", id).maybeSingle();
+    if (!row) return NextResponse.json({ ok: false, error: "No such agreement." }, { status: 404 });
+    if (!row.graduated || !row.next_year_uin) {
+      return NextResponse.json({ ok: false,
+        error: "This child has not been graduated in EPMS yet, so there is nothing to attach it to." }, { status: 409 });
+    }
+    const billed = Number(row.next_year_billed) || 0;
+    const agreed = Number(row.agreed_fee) || 0;
+    if (billed <= 0) {
+      return NextResponse.json({ ok: false,
+        error: "EPMS has not raised next year's invoice for this child yet." }, { status: 409 });
+    }
+    if (billed < agreed) {
+      // Not something a concession can fix, and not ours to paper over:
+      // either the scheme in EPMS is more generous than intended, or the
+      // parent is owed a lower figure than they were told.
+      return NextResponse.json({ ok: false,
+        error: `EPMS bills ${money(billed)}, which is less than the ${money(agreed)} agreed. `
+             + "Change the scheme in EPMS or amend the agreement — a concession cannot close this gap." }, { status: 409 });
+    }
+    const ours = Math.round((billed - agreed) * 100) / 100;
+
+    const { error: dErr } = await a.from("child_discount").upsert({
+      uin: row.next_year_uin, amount_rupees: ours,
+      reason: `Agreed fee for ${NEXT_YEAR}: ${money(agreed)}`,
+      agreed_by: who.name, agreed_on: row.agreed_on, updated_at: new Date().toISOString(),
+    }, { onConflict: "uin" });
+    if (dErr) return NextResponse.json({ ok: false, error: dErr.message }, { status: 500 });
+
+    const gross = row.agreed_gross != null ? Number(row.agreed_gross) : null;
+    const { error: aErr } = await a.from("fee_agreement").update({
+      status: "applied", applied_uin: row.next_year_uin, applied_at: new Date().toISOString(),
+      franchisee_discount: ours,
+      // What EuroKids actually bore, now that EPMS has said.
+      ...(gross !== null && gross >= billed ? { eurokids_discount: Math.round((gross - billed) * 100) / 100 } : {}),
+    }).eq("agreement_id", id);
+    if (aErr) return NextResponse.json({ ok: false, error: aErr.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true, uin: row.next_year_uin, billed, agreed, our_concession: ours });
+  }
+
   if (action === "withdraw") {
     const id = clean(b.agreement_id, 64);
     const { error } = await a.from("fee_agreement")
